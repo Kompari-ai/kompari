@@ -5,6 +5,7 @@ import { db } from "@/lib/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 import { BottomNav } from "@/components/BottomNav";
 import { TopBar } from "@/components/TopBar";
+import { VoteButtons } from "@/components/VoteButtons";
 
 type Prediction = {
   ai: string;
@@ -282,7 +283,7 @@ export default function RaceDetailPage({
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-gray-50 p-4">
+                <div className="rounded-2xl bg-gray-50 p-4 mb-4">
                   <div className="text-xs font-bold text-gray-600 mb-2">
                     データ根拠
                   </div>
@@ -292,6 +293,8 @@ export default function RaceDetailPage({
                       "データ根拠は未入力です。"}
                   </p>
                 </div>
+
+                <VoteButtons ai={prediction.ai} />
               </div>
             ))}
           </div>
