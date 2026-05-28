@@ -1,303 +1,157 @@
 "use client";
 
 import { use, useEffect, useMemo, useState } from "react";
+import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { doc, onSnapshot } from "firebase/firestore";
 import { BottomNav } from "@/components/BottomNav";
 import { TopBar } from "@/components/TopBar";
-import { VoteButtons } from "@/components/VoteButtons";
 
-type Prediction = {
-  ai: string;
-  main: string;
-  second?: string;
-  third?: string;
-  confidence?: string;
-  reason?: string;
-  evidence?: string;
+type Vote = {
+  ai?: string;
+  type?: "good" | "bad";
 };
 
-type Race = {
-  title?: string;
-  venue?: string;
-  startsIn?: string;
-  predictions?: Prediction[];
+const aiData: Record<string, { name: string; description: string; color: string }> = {
+  deepseek: {
+    name: "DeepSeek",
+    description: "競馬・競艇など数値予測系に強いAI。",
+    color: "from-blue-700 to-cyan-700",
+  },
+  chatgpt: {
+    name: "ChatGPT",
+    description: "総合分析能力が高く、多分野対応型AI。",
+    color: "from-green-600 to-emerald-700",
+  },
+  claude: {
+    name: "Claude",
+    description: "展開予測・文章分析が得意なAI。",
+    color: "from-orange-500 to-red-500",
+  },
+  gemini: {
+    name: "Gemini",
+    description: "Google系データ分析に強いAI。",
+    color: "from-purple-600 to-pink-600",
+  },
 };
 
-export default function RaceDetailPage({
+function logoFor(ai: string) {
+  if (ai === "ChatGPT") return "/logos/chatgpt.svg";
+  if (ai === "Claude") return "/logos/claude.png";
+  if (ai === "Gemini") return "/logos/Gemini.png";
+  return "/logos/deepseek.png";
+}
+
+export default function AiProfilePage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = use(params);
+  const ai = aiData[slug] || aiData.chatgpt;
 
-  const [race, setRace] = useState<Race | null>(null);
+  const [votes, setVotes] = useState<Vote[]>([]);
 
   useEffect(() => {
-    const ref = doc(db, "races", slug);
-
-    const unsubscribe = onSnapshot(ref, (snapshot) => {
-      if (snapshot.exists()) {
-        setRace(snapshot.data() as Race);
-      }
+    const unsubscribe = onSnapshot(collection(db, "votes"), (snapshot) => {
+      const list = snapshot.docs.map((doc) => doc.data()) as Vote[];
+      setVotes(list);
     });
 
     return () => unsubscribe();
-  }, [slug]);
+  }, []);
 
-  const predictions = race?.predictions || [];
+  const stats = useMemo(() => {
+    const aiVotes = votes.filter((vote) => vote.ai === ai.name);
+    const good = aiVotes.filter((vote) => vote.type === "good").length;
+    const bad = aiVotes.filter((vote) => vote.type === "bad").length;
+    const total = good + bad;
+    const goodRate = total === 0 ? 0 : Math.round((good / total) * 100);
 
-  const mainSupport = useMemo(() => {
-    const counts: Record<string, number> = {};
-
-    predictions.forEach((prediction) => {
-      if (!prediction.main) return;
-
-      counts[prediction.main] =
-        (counts[prediction.main] || 0) + 1;
-    });
-
-    return Object.entries(counts)
-      .map(([name, count]) => ({
-        name,
-        count,
-      }))
-      .sort((a, b) => b.count - a.count);
-  }, [predictions]);
-
-  const topHorse = mainSupport[0];
-
-  if (!race) {
-    return (
-      <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
-        <TopBar />
-
-        <div className="max-w-[430px] mx-auto px-4 py-10 text-center text-gray-500">
-          読み込み中...
-        </div>
-
-        <BottomNav />
-      </main>
-    );
-  }
+    return { good, bad, total, goodRate };
+  }, [votes, ai.name]);
 
   return (
     <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
       <TopBar />
 
       <div className="max-w-[430px] mx-auto px-4 py-4 pb-24">
-        <section className="rounded-3xl bg-gradient-to-br from-blue-700 to-blue-950 p-5 text-white shadow-xl mb-5">
-          <div className="text-xs opacity-70 mb-2">
-            AI RACE ANALYSIS
-          </div>
+        <section
+          className={`rounded-3xl bg-gradient-to-br ${ai.color} p-5 text-white shadow-lg mb-5`}
+        >
+          <div className="flex items-center gap-4 mb-4">
+            <img
+              src={logoFor(ai.name)}
+              alt={ai.name}
+              className="w-14 h-14 rounded-2xl bg-white p-2 object-contain"
+            />
 
-          <h1 className="text-3xl font-extrabold mb-2">
-            {race.title}
-          </h1>
-
-          <div className="flex gap-2 text-xs opacity-80 mb-4">
-            <span>{race.venue}</span>
-            <span>発走まで {race.startsIn}</span>
-          </div>
-
-          {topHorse && (
-            <div className="rounded-2xl bg-white/10 p-4 backdrop-blur">
-              <div className="text-xs opacity-70 mb-1">
-                AIコンセンサス
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-2xl font-extrabold">
-                    {topHorse.name}
-                  </div>
-
-                  <div className="text-sm opacity-80">
-                    本命支持 {topHorse.count} / {predictions.length} AI
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-3xl font-extrabold text-yellow-300">
-                    ◎
-                  </div>
-
-                  <div className="text-xs opacity-70">
-                    最多支持
-                  </div>
-                </div>
-              </div>
+            <div>
+              <div className="text-xs opacity-80 mb-1">AI PROFILE</div>
+              <h1 className="text-3xl font-extrabold">{ai.name}</h1>
             </div>
-          )}
-        </section>
-
-        <section className="bg-white rounded-3xl shadow-sm p-4 mb-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold">
-              本命支持数の分布
-            </h2>
-
-            <span className="text-xs text-gray-500">
-              {predictions.length} AI中
-            </span>
           </div>
 
-          <div className="space-y-3">
-            {mainSupport.map((item) => (
-              <div key={item.name}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="font-semibold">
-                    {item.name}
-                  </span>
+          <p className="text-sm opacity-80 leading-6">{ai.description}</p>
 
-                  <span className="font-bold text-blue-700">
-                    {item.count}/{predictions.length}
-                  </span>
-                </div>
-
-                <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                  <div
-                    className="h-2 rounded-full bg-blue-700"
-                    style={{
-                      width: `${
-                        (item.count / predictions.length) * 100
-                      }%`,
-                    }}
-                  />
-                </div>
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            <div className="rounded-2xl bg-white/10 p-3 text-center">
+              <div className="text-2xl font-extrabold text-yellow-300">
+                {stats.goodRate}%
               </div>
-            ))}
+              <div className="text-[10px] opacity-70">Good率</div>
+            </div>
+
+            <div className="rounded-2xl bg-white/10 p-3 text-center">
+              <div className="text-2xl font-extrabold">{stats.good}</div>
+              <div className="text-[10px] opacity-70">Good</div>
+            </div>
+
+            <div className="rounded-2xl bg-white/10 p-3 text-center">
+              <div className="text-2xl font-extrabold">{stats.bad}</div>
+              <div className="text-[10px] opacity-70">Bad</div>
+            </div>
           </div>
         </section>
 
         <section className="bg-white rounded-3xl shadow-sm p-4 mb-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold">各AIの予測</h2>
+          <h2 className="font-bold mb-4">ユーザー評価</h2>
 
-            <span className="text-xs text-gray-500">
-              {predictions.length} AI
-            </span>
+          <div className="mb-2 flex justify-between text-sm">
+            <span>Good率</span>
+            <span className="font-bold text-blue-700">{stats.goodRate}%</span>
           </div>
 
-          <div className="space-y-4">
-            {predictions.map((prediction) => (
-              <div
-                key={prediction.ai}
-                className="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={
-                        prediction.ai === "ChatGPT"
-                          ? "/logos/chatgpt.svg"
-                          : prediction.ai === "Claude"
-                          ? "/logos/claude.png"
-                          : prediction.ai === "Gemini"
-                          ? "/logos/Gemini.png"
-                          : "/logos/deepseek.png"
-                      }
-                      alt={prediction.ai}
-                      className="w-10 h-10 rounded-full bg-white object-contain p-1 border border-gray-100"
-                    />
-
-                    <div>
-                      <div className="font-extrabold text-blue-700">
-                        {prediction.ai}
-                      </div>
-
-                      <div className="text-xs text-gray-500">
-                        AI予測
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-700">
-                    ◎ {prediction.main}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  <div className="rounded-2xl bg-yellow-50 p-3 text-center">
-                    <div className="text-xs text-gray-500 mb-1">
-                      ◎ 本命
-                    </div>
-
-                    <div className="font-bold text-sm">
-                      {prediction.main || "-"}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-gray-50 p-3 text-center">
-                    <div className="text-xs text-gray-500 mb-1">
-                      ○ 対抗
-                    </div>
-
-                    <div className="font-bold text-sm">
-                      {prediction.second || "-"}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-orange-50 p-3 text-center">
-                    <div className="text-xs text-gray-500 mb-1">
-                      ▲ 穴
-                    </div>
-
-                    <div className="font-bold text-sm">
-                      {prediction.third || "-"}
-                    </div>
-                  </div>
-                </div>
-
-                {prediction.confidence && (
-                  <div className="mb-4">
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="font-semibold">
-                        AI信頼度
-                      </span>
-
-                      <span className="font-bold text-blue-700">
-                        {prediction.confidence}%
-                      </span>
-                    </div>
-
-                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <div
-                        className="h-2 rounded-full bg-blue-700"
-                        style={{
-                          width: `${prediction.confidence}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="rounded-2xl bg-blue-50 p-4 mb-3">
-                  <div className="text-xs font-bold text-blue-700 mb-2">
-                    AI予測理由
-                  </div>
-
-                  <p className="text-sm leading-7 text-gray-700">
-                    {prediction.reason ||
-                      "予測理由は未入力です。"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-gray-50 p-4 mb-4">
-                  <div className="text-xs font-bold text-gray-600 mb-2">
-                    データ根拠
-                  </div>
-
-                  <p className="text-sm leading-7 text-gray-700">
-                    {prediction.evidence ||
-                      "データ根拠は未入力です。"}
-                  </p>
-                </div>
-
-                <VoteButtons ai={prediction.ai} />
-              </div>
-            ))}
+          <div className="h-3 rounded-full bg-gray-100 overflow-hidden mb-4">
+            <div
+              className="h-3 rounded-full bg-blue-700"
+              style={{ width: `${stats.goodRate}%` }}
+            />
           </div>
+
+          <div className="grid grid-cols-3 gap-2 text-center text-sm">
+            <div className="rounded-2xl bg-blue-50 p-3">
+              <div className="font-extrabold text-blue-700">{stats.total}</div>
+              <div className="text-xs text-gray-500">総投票</div>
+            </div>
+
+            <div className="rounded-2xl bg-green-50 p-3">
+              <div className="font-extrabold text-green-700">{stats.good}</div>
+              <div className="text-xs text-gray-500">Good</div>
+            </div>
+
+            <div className="rounded-2xl bg-red-50 p-3">
+              <div className="font-extrabold text-red-700">{stats.bad}</div>
+              <div className="text-xs text-gray-500">Bad</div>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-3xl shadow-sm p-4">
+          <h2 className="font-bold mb-3">今後追加予定</h2>
+
+          <p className="text-sm leading-7 text-gray-700">
+            正式版では、ユーザー評価だけでなく、実際の的中率・分野別成績・レースごとの予測履歴も表示します。
+          </p>
         </section>
       </div>
 
