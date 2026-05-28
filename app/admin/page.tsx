@@ -5,20 +5,56 @@ import { db } from "@/lib/firebase";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { TopBar } from "@/components/TopBar";
 
+const aiNames = ["ChatGPT", "Claude", "Gemini", "DeepSeek"];
+
+type PredictionInput = {
+  ai: string;
+  main: string;
+  second: string;
+  third: string;
+  reason: string;
+};
+
 export default function AdminPage() {
   const [title, setTitle] = useState("");
   const [venue, setVenue] = useState("");
   const [startsIn, setStartsIn] = useState("");
-  const [aiName, setAiName] = useState("ChatGPT");
-  const [main, setMain] = useState("");
-  const [second, setSecond] = useState("");
-  const [third, setThird] = useState("");
-  const [reason, setReason] = useState("");
+
+  const [predictions, setPredictions] = useState<PredictionInput[]>(
+    aiNames.map((ai) => ({
+      ai,
+      main: "",
+      second: "",
+      third: "",
+      reason: "",
+    }))
+  );
+
   const [saving, setSaving] = useState(false);
 
+  const updatePrediction = (
+    index: number,
+    key: keyof PredictionInput,
+    value: string
+  ) => {
+    const next = [...predictions];
+    next[index] = {
+      ...next[index],
+      [key]: value,
+    };
+    setPredictions(next);
+  };
+
   const saveRace = async () => {
-    if (!title || !main) {
-      alert("レース名と本命は必須です");
+    if (!title) {
+      alert("レース名は必須です");
+      return;
+    }
+
+    const validPredictions = predictions.filter((p) => p.main);
+
+    if (validPredictions.length === 0) {
+      alert("最低1つのAI予測を入力してください");
       return;
     }
 
@@ -29,15 +65,7 @@ export default function AdminPage() {
         title,
         venue,
         startsIn,
-        predictions: [
-          {
-            ai: aiName,
-            main,
-            second,
-            third,
-            reason,
-          },
-        ],
+        predictions: validPredictions,
         createdAt: serverTimestamp(),
       });
 
@@ -46,10 +74,15 @@ export default function AdminPage() {
       setTitle("");
       setVenue("");
       setStartsIn("");
-      setMain("");
-      setSecond("");
-      setThird("");
-      setReason("");
+      setPredictions(
+        aiNames.map((ai) => ({
+          ai,
+          main: "",
+          second: "",
+          third: "",
+          reason: "",
+        }))
+      );
     } catch (error) {
       console.error(error);
       alert("保存に失敗しました");
@@ -67,11 +100,11 @@ export default function AdminPage() {
           <div className="text-xs opacity-80 mb-2">ADMIN</div>
           <h1 className="text-2xl font-extrabold">レース登録</h1>
           <p className="text-sm opacity-80 mt-2">
-            まずは手入力でレースとAI予測を登録します。
+            4つのAI予測をまとめて登録できます。
           </p>
         </section>
 
-        <section className="bg-white rounded-3xl p-4 shadow-sm space-y-4">
+        <section className="bg-white rounded-3xl p-4 shadow-sm space-y-4 mb-5">
           <div>
             <label className="text-xs font-bold text-gray-500">レース名</label>
             <input
@@ -101,69 +134,64 @@ export default function AdminPage() {
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-3"
             />
           </div>
-
-          <div>
-            <label className="text-xs font-bold text-gray-500">AI名</label>
-            <select
-              value={aiName}
-              onChange={(e) => setAiName(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-3"
-            >
-              <option>ChatGPT</option>
-              <option>Claude</option>
-              <option>Gemini</option>
-              <option>DeepSeek</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-gray-500">◎ 本命</label>
-            <input
-              value={main}
-              onChange={(e) => setMain(e.target.value)}
-              placeholder="イクイノックス"
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-3"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-gray-500">○ 対抗</label>
-            <input
-              value={second}
-              onChange={(e) => setSecond(e.target.value)}
-              placeholder="ドウデュース"
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-3"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-gray-500">▲ 穴</label>
-            <input
-              value={third}
-              onChange={(e) => setThird(e.target.value)}
-              placeholder="サトノクラウン"
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-3"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-gray-500">予測理由</label>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="東京2400mの適性と直近成績から..."
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-3 min-h-28"
-            />
-          </div>
-
-          <button
-            onClick={saveRace}
-            disabled={saving}
-            className="w-full rounded-2xl bg-blue-700 text-white py-4 font-bold disabled:opacity-50"
-          >
-            {saving ? "保存中..." : "Firestoreに保存"}
-          </button>
         </section>
+
+        <div className="space-y-4">
+          {predictions.map((prediction, index) => (
+            <section
+              key={prediction.ai}
+              className="bg-white rounded-3xl p-4 shadow-sm"
+            >
+              <div className="font-extrabold text-blue-700 mb-3">
+                {prediction.ai}
+              </div>
+
+              <input
+                value={prediction.main}
+                onChange={(e) =>
+                  updatePrediction(index, "main", e.target.value)
+                }
+                placeholder="◎ 本命"
+                className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
+              />
+
+              <input
+                value={prediction.second}
+                onChange={(e) =>
+                  updatePrediction(index, "second", e.target.value)
+                }
+                placeholder="○ 対抗"
+                className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
+              />
+
+              <input
+                value={prediction.third}
+                onChange={(e) =>
+                  updatePrediction(index, "third", e.target.value)
+                }
+                placeholder="▲ 穴"
+                className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
+              />
+
+              <textarea
+                value={prediction.reason}
+                onChange={(e) =>
+                  updatePrediction(index, "reason", e.target.value)
+                }
+                placeholder="予測理由"
+                className="w-full rounded-xl border border-gray-200 px-3 py-3 min-h-24"
+              />
+            </section>
+          ))}
+        </div>
+
+        <button
+          onClick={saveRace}
+          disabled={saving}
+          className="mt-5 mb-10 w-full rounded-2xl bg-blue-700 text-white py-4 font-bold disabled:opacity-50"
+        >
+          {saving ? "保存中..." : "Firestoreに保存"}
+        </button>
       </div>
     </main>
   );

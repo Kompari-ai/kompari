@@ -53,7 +53,8 @@ export default function RaceDetailPage({
     );
   }
 
-  const prediction = race.predictions?.[0];
+  const predictions = race.predictions || [];
+  const topPrediction = predictions[0];
 
   return (
     <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
@@ -70,17 +71,19 @@ export default function RaceDetailPage({
             <span>{race.startsIn}</span>
           </div>
 
-          {prediction && (
+          {topPrediction && (
             <div className="rounded-2xl bg-white/10 p-4 backdrop-blur">
               <div className="text-xs opacity-70 mb-1">AI総合本命</div>
 
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-2xl font-extrabold">
-                    {prediction.main}
+                    {topPrediction.main}
                   </div>
 
-                  <div className="text-sm opacity-80">{prediction.ai} 推奨</div>
+                  <div className="text-sm opacity-80">
+                    {topPrediction.ai} 推奨
+                  </div>
                 </div>
 
                 <div className="text-right">
@@ -95,42 +98,63 @@ export default function RaceDetailPage({
           )}
         </section>
 
-        {prediction && (
-          <section className="bg-white rounded-3xl shadow-sm p-4 mb-5">
-            <h2 className="font-bold mb-4">AI予測</h2>
+        <section className="bg-white rounded-3xl shadow-sm p-4 mb-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold">各AIの予測</h2>
+            <span className="text-xs text-gray-500">
+              {predictions.length} AI
+            </span>
+          </div>
 
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              <div className="rounded-2xl bg-yellow-50 p-3 text-center">
-                <div className="text-xs text-gray-500 mb-1">◎ 本命</div>
-                <div className="font-bold text-sm">{prediction.main}</div>
-              </div>
+          <div className="space-y-4">
+            {predictions.map((prediction) => (
+              <div
+                key={prediction.ai}
+                className="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="font-extrabold text-blue-700">
+                      {prediction.ai}
+                    </div>
+                    <div className="text-xs text-gray-500">AI予測</div>
+                  </div>
 
-              <div className="rounded-2xl bg-gray-50 p-3 text-center">
-                <div className="text-xs text-gray-500 mb-1">○ 対抗</div>
-                <div className="font-bold text-sm">
-                  {prediction.second || "-"}
+                  <div className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-700">
+                    ◎ {prediction.main}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  <div className="rounded-2xl bg-yellow-50 p-3 text-center">
+                    <div className="text-xs text-gray-500 mb-1">◎ 本命</div>
+                    <div className="font-bold text-sm">{prediction.main}</div>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-3 text-center">
+                    <div className="text-xs text-gray-500 mb-1">○ 対抗</div>
+                    <div className="font-bold text-sm">
+                      {prediction.second || "-"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-orange-50 p-3 text-center">
+                    <div className="text-xs text-gray-500 mb-1">▲ 穴</div>
+                    <div className="font-bold text-sm">
+                      {prediction.third || "-"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl bg-blue-50 p-4">
+                  <p className="text-sm leading-7 text-gray-700">
+                    {prediction.reason || "予測理由は未入力です。"}
+                  </p>
                 </div>
               </div>
-
-              <div className="rounded-2xl bg-orange-50 p-3 text-center">
-                <div className="text-xs text-gray-500 mb-1">▲ 穴</div>
-                <div className="font-bold text-sm">
-                  {prediction.third || "-"}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-blue-50 p-4">
-              <div className="text-sm font-bold mb-2 text-blue-700">
-                {prediction.ai}
-              </div>
-
-              <p className="text-sm leading-7 text-gray-700">
-                {prediction.reason || "予測理由は未入力です。"}
-              </p>
-            </div>
-          </section>
-        )}
+            ))}
+          </div>
+        </section>
       </div>
 
       <BottomNav />
