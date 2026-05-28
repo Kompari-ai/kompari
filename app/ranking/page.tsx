@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BottomNav } from "@/components/BottomNav";
 import { TopBar } from "@/components/TopBar";
 
@@ -16,7 +17,8 @@ const rankings = [
     rate: 71,
     record: "52戦37的中",
     strength: "総合力が高い",
-    logo: "https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg",
+    logo:
+      "https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg",
   },
   {
     rank: 3,
@@ -32,7 +34,8 @@ const rankings = [
     rate: 66,
     record: "47戦31的中",
     strength: "データ傾向に強い",
-    logo: "https://upload.wikimedia.org/wikipedia/commons/8/8f/Google-gemini-icon.svg",
+    logo:
+      "https://upload.wikimedia.org/wikipedia/commons/8/8f/Google-gemini-icon.svg",
   },
 ];
 
@@ -43,23 +46,34 @@ export default function RankingPage() {
 
       <div className="max-w-[430px] mx-auto px-4 py-4 pb-24">
         <section className="bg-gradient-to-br from-blue-700 to-blue-950 rounded-3xl p-5 text-white mb-5 shadow-lg">
-          <div className="text-xs opacity-80 mb-2">AI PREDICTION ARENA</div>
-          <h1 className="text-2xl font-extrabold mb-2">AI的中率ランキング</h1>
+          <div className="text-xs opacity-80 mb-2">
+            AI PREDICTION ARENA
+          </div>
+
+          <h1 className="text-2xl font-extrabold mb-2">
+            AI的中率ランキング
+          </h1>
+
           <p className="text-sm opacity-80 leading-6">
-            各AIの予測成績を比較し、どのAIがどの分野に強いかを可視化します。
+            各AIの予測成績を比較し、
+            どのAIがどの分野に強いかを可視化します。
           </p>
         </section>
 
         <section className="bg-white rounded-2xl p-4 shadow-sm mb-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold">総合ランキング</h2>
-            <span className="text-xs text-gray-500">シーズン累計</span>
+
+            <span className="text-xs text-gray-500">
+              シーズン累計
+            </span>
           </div>
 
           <div className="space-y-3">
             {rankings.map((ai) => (
-              <div
+              <Link
                 key={ai.name}
+                href={`/ai/${ai.name.toLowerCase()}`}
                 className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm"
               >
                 <div
@@ -83,8 +97,14 @@ export default function RankingPage() {
                 />
 
                 <div className="flex-1">
-                  <div className="font-bold">{ai.name}</div>
-                  <div className="text-xs text-gray-500">{ai.record}</div>
+                  <div className="font-bold">
+                    {ai.name}
+                  </div>
+
+                  <div className="text-xs text-gray-500">
+                    {ai.record}
+                  </div>
+
                   <div className="text-xs text-blue-700 font-semibold mt-1">
                     {ai.strength}
                   </div>
@@ -94,22 +114,31 @@ export default function RankingPage() {
                   <div className="text-xl font-extrabold text-blue-700">
                     {ai.rate}%
                   </div>
-                  <div className="text-[10px] text-gray-500">的中率</div>
+
+                  <div className="text-[10px] text-gray-500">
+                    的中率
+                  </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </section>
 
         <section className="bg-white rounded-2xl p-4 shadow-sm">
-          <h2 className="font-bold mb-3">分野別の得意分野</h2>
+          <h2 className="font-bold mb-3">
+            分野別の得意分野
+          </h2>
 
           <div className="space-y-3 text-sm">
             <div>
               <div className="flex justify-between mb-1">
                 <span>競馬</span>
-                <span className="font-bold text-blue-700">DeepSeek 78%</span>
+
+                <span className="font-bold text-blue-700">
+                  DeepSeek 78%
+                </span>
               </div>
+
               <div className="h-2 bg-gray-100 rounded-full">
                 <div className="h-2 bg-blue-700 rounded-full w-[78%]" />
               </div>
@@ -118,8 +147,12 @@ export default function RankingPage() {
             <div>
               <div className="flex justify-between mb-1">
                 <span>サッカー</span>
-                <span className="font-bold text-blue-700">ChatGPT 73%</span>
+
+                <span className="font-bold text-blue-700">
+                  ChatGPT 73%
+                </span>
               </div>
+
               <div className="h-2 bg-gray-100 rounded-full">
                 <div className="h-2 bg-blue-700 rounded-full w-[73%]" />
               </div>
@@ -128,8 +161,12 @@ export default function RankingPage() {
             <div>
               <div className="flex justify-between mb-1">
                 <span>展開予測</span>
-                <span className="font-bold text-blue-700">Claude 71%</span>
+
+                <span className="font-bold text-blue-700">
+                  Claude 71%
+                </span>
               </div>
+
               <div className="h-2 bg-gray-100 rounded-full">
                 <div className="h-2 bg-blue-700 rounded-full w-[71%]" />
               </div>
