@@ -15,8 +15,17 @@ export function VoteButtons({ ai }: { ai: string }) {
   const [loading, setLoading] = useState(false);
   const [goodCount, setGoodCount] = useState(0);
   const [badCount, setBadCount] = useState(0);
+  const [myVote, setMyVote] = useState<"good" | "bad" | null>(null);
+
+  const storageKey = `kompari-vote-${ai}`;
 
   useEffect(() => {
+    const savedVote = localStorage.getItem(storageKey);
+
+    if (savedVote === "good" || savedVote === "bad") {
+      setMyVote(savedVote);
+    }
+
     const q = query(collection(db, "votes"), where("ai", "==", ai));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -35,9 +44,14 @@ export function VoteButtons({ ai }: { ai: string }) {
     });
 
     return () => unsubscribe();
-  }, [ai]);
+  }, [ai, storageKey]);
 
   const vote = async (type: "good" | "bad") => {
+    if (myVote) {
+      alert("このAIにはすでに投票済みです");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -46,6 +60,9 @@ export function VoteButtons({ ai }: { ai: string }) {
         type,
         createdAt: serverTimestamp(),
       });
+
+      localStorage.setItem(storageKey, type);
+      setMyVote(type);
     } catch (error) {
       console.error(error);
       alert("保存に失敗しました");
@@ -55,22 +72,38 @@ export function VoteButtons({ ai }: { ai: string }) {
   };
 
   return (
-    <div className="flex gap-2 mt-4">
-      <button
-        onClick={() => vote("good")}
-        disabled={loading}
-        className="flex-1 rounded-2xl bg-blue-700 text-white py-3 font-bold disabled:opacity-50"
-      >
-        👍 Good {goodCount}
-      </button>
+    <div className="mt-4">
+      <div className="flex gap-2">
+        <button
+          onClick={() => vote("good")}
+          disabled={loading || !!myVote}
+          className={`flex-1 rounded-2xl py-3 font-bold disabled:opacity-60 ${
+            myVote === "good"
+              ? "bg-blue-700 text-white"
+              : "bg-blue-50 text-blue-700"
+          }`}
+        >
+          👍 Good {goodCount}
+        </button>
 
-      <button
-        onClick={() => vote("bad")}
-        disabled={loading}
-        className="flex-1 rounded-2xl bg-gray-200 py-3 font-bold disabled:opacity-50"
-      >
-        👎 Bad {badCount}
-      </button>
+        <button
+          onClick={() => vote("bad")}
+          disabled={loading || !!myVote}
+          className={`flex-1 rounded-2xl py-3 font-bold disabled:opacity-60 ${
+            myVote === "bad"
+              ? "bg-gray-800 text-white"
+              : "bg-gray-200 text-gray-700"
+          }`}
+        >
+          👎 Bad {badCount}
+        </button>
+      </div>
+
+      {myVote && (
+        <p className="mt-2 text-center text-xs text-gray-500">
+          投票済み：{myVote === "good" ? "Good" : "Bad"}
+        </p>
+      )}
     </div>
   );
 }
