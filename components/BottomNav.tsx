@@ -9,10 +9,13 @@ export function BottomNav() {
           <span className="text-[10px] font-bold">ホーム</span>
         </Link>
 
-        <a className="flex flex-col items-center gap-1 text-gray-400">
-          <span className="text-xl">🐎</span>
-          <span className="text-[10px] font-bold">レース</span>
-        </a>
+<Link
+  href="/race/japan-cup-2026"
+  className="flex flex-col items-center gap-1 text-gray-400"
+>
+  <span className="text-xl">🐎</span>
+  <span className="text-[10px] font-bold">レース</span>
+</Link>
 
         <Link
           href="/ranking"
