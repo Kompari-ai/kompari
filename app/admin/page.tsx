@@ -18,6 +18,9 @@ type PredictionInput = {
 };
 
 export default function AdminPage() {
+  const [password, setPassword] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
+
   const [title, setTitle] = useState("");
   const [venue, setVenue] = useState("");
   const [startsIn, setStartsIn] = useState("");
@@ -99,6 +102,41 @@ export default function AdminPage() {
 
     setSaving(false);
   };
+
+  if (!unlocked) {
+    return (
+      <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
+        <div className="max-w-[430px] mx-auto px-4 py-20">
+          <section className="bg-white rounded-3xl p-5 shadow-sm">
+            <h1 className="text-2xl font-extrabold mb-3">
+              管理画面ログイン
+            </h1>
+
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type="password"
+              placeholder="管理パスワード"
+              className="w-full rounded-xl border border-gray-200 px-3 py-3 mb-4"
+            />
+
+            <button
+              onClick={() => {
+                if (password === "kompari-admin") {
+                  setUnlocked(true);
+                } else {
+                  alert("パスワードが違います");
+                }
+              }}
+              className="w-full rounded-2xl bg-blue-700 text-white py-4 font-bold"
+            >
+              ログイン
+            </button>
+          </section>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
