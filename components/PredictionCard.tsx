@@ -1,72 +1,45 @@
-type Prediction = {
-  ai: string;
-  logo: string;
-  record: string;
-  confidence: number;
-  main: string;
-  second: string;
-  third: string;
-  reason: string;
-  evidence: string;
-};
+"use client";
 
-export function PredictionCard({ prediction }: { prediction: Prediction }) {
+import { VoteButtons } from "./VoteButtons";
+
+export function PredictionCard({
+  prediction,
+}: {
+  prediction: {
+    ai: string;
+    prediction: string;
+    confidence: number;
+  };
+}) {
   return (
-    <section className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-      <div className="flex items-center gap-3 mb-4">
-        <img
-          src={prediction.logo}
-          alt={prediction.ai}
-          className="w-10 h-10 rounded-full bg-gray-50 p-2 object-contain"
-        />
+    <div className="bg-white rounded-3xl p-4 shadow-sm mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-lg font-bold">
+            {prediction.ai}
+          </div>
 
-        <div className="flex-1">
-          <div className="font-bold">{prediction.ai}</div>
-          <div className="text-xs text-gray-500">{prediction.record}</div>
+          <div className="text-xs text-gray-500">
+            AI予測
+          </div>
         </div>
 
         <div className="text-right">
-          <div className="text-lg font-extrabold text-blue-700">
+          <div className="text-2xl font-extrabold text-blue-700">
             {prediction.confidence}%
           </div>
-          <div className="text-[10px] text-gray-500">信頼度</div>
+
+          <div className="text-[10px] text-gray-500">
+            信頼度
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-yellow-50 rounded-xl p-3 text-center border border-yellow-100">
-          <div className="text-xs text-gray-500 mb-1">◎ 本命</div>
-          <div className="font-extrabold text-sm">{prediction.main}</div>
-        </div>
-
-        <div className="bg-gray-100 rounded-xl p-3 text-center">
-          <div className="text-xs text-gray-500 mb-1">○ 対抗</div>
-          <div className="font-bold text-sm">{prediction.second}</div>
-        </div>
-
-        <div className="bg-orange-50 rounded-xl p-3 text-center border border-orange-100">
-          <div className="text-xs text-gray-500 mb-1">▲ 穴</div>
-          <div className="font-bold text-sm">{prediction.third}</div>
-        </div>
+      <div className="rounded-2xl bg-gray-50 p-4 text-sm leading-7 text-gray-700">
+        {prediction.prediction}
       </div>
 
-      <div className="text-sm leading-7 text-gray-700 mb-4">
-        {prediction.reason}
-      </div>
-
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 mb-4">
-        📊 根拠データ：{prediction.evidence}
-      </div>
-
-      <div className="flex gap-2">
-        <button className="flex-1 bg-green-50 border border-green-200 text-green-700 rounded-xl py-2 font-semibold">
-          👍 Good
-        </button>
-
-        <button className="flex-1 bg-red-50 border border-red-200 text-red-700 rounded-xl py-2 font-semibold">
-          👎 Bad
-        </button>
-      </div>
-    </section>
+      <VoteButtons ai={prediction.ai} />
+    </div>
   );
 }

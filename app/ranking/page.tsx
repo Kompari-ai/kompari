@@ -9,7 +9,7 @@ const rankings = [
     rate: 74,
     record: "50戦37的中",
     strength: "競馬・競艇に強い",
-    logo: "/deepseek.png",
+    logo: "/logos/deepseek.png",
   },
   {
     rank: 2,
@@ -17,8 +17,7 @@ const rankings = [
     rate: 71,
     record: "52戦37的中",
     strength: "総合力が高い",
-    logo:
-      "https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg",
+    logo: "/logos/chatgpt.svg",
   },
   {
     rank: 3,
@@ -26,7 +25,7 @@ const rankings = [
     rate: 69,
     record: "48戦33的中",
     strength: "展開読みが得意",
-    logo: "/claude.png",
+    logo: "/logos/claude.png",
   },
   {
     rank: 4,
@@ -34,8 +33,7 @@ const rankings = [
     rate: 66,
     record: "47戦31的中",
     strength: "データ傾向に強い",
-    logo:
-      "https://upload.wikimedia.org/wikipedia/commons/8/8f/Google-gemini-icon.svg",
+    logo: "/logos/gemini.png",
   },
 ];
 

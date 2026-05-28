@@ -24,7 +24,7 @@ export const event = {
   predictions: [
     {
       ai: "ChatGPT",
-      logo: "https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg",
+      logo: "/logos/chatgpt.svg",
       record: "G1予想 6戦4的中",
       confidence: 78,
       main: "イクイノックス",
@@ -36,7 +36,7 @@ export const event = {
     },
     {
       ai: "Claude",
-      logo: "/claude.png",
+      logo: "/logos/claude.png",
       record: "G1予想 6戦3的中",
       confidence: 72,
       main: "ドウデュース",
@@ -48,7 +48,7 @@ export const event = {
     },
     {
       ai: "Gemini",
-      logo: "https://upload.wikimedia.org/wikipedia/commons/8/8f/Google-gemini-icon.svg",
+      logo: "/logos/gemini.png",
       record: "G1予想 5戦3的中",
       confidence: 69,
       main: "イクイノックス",
@@ -60,7 +60,7 @@ export const event = {
     },
     {
       ai: "DeepSeek",
-      logo: "/deepseek.png",
+      logo: "/logos/deepseek.png",
       record: "G1予想 5連続的中中",
       confidence: 81,
       main: "イクイノックス",
