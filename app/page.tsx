@@ -1,4 +1,4 @@
-import { event } from "@/data/events";
+import { BottomNav } from "@/components/BottomNav";
 import { Hero } from "@/components/Hero";
 import { PredictionCard } from "@/components/PredictionCard";
 import { TopBar } from "@/components/TopBar";
@@ -10,7 +10,7 @@ export default function Home() {
     <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
       <TopBar />
 
-      <div className="max-w-[430px] mx-auto px-4 py-4">
+      <div className="max-w-[430px] mx-auto px-4 py-4 pb-24">
         <Hero
           title={event.title}
           venue={event.venue}
@@ -34,6 +34,7 @@ export default function Home() {
           <PredictionCard key={prediction.ai} prediction={prediction} />
         ))}
       </div>
+      <BottomNav />
     </main>
   );
 }
