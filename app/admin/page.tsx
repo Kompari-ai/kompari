@@ -12,7 +12,9 @@ type PredictionInput = {
   main: string;
   second: string;
   third: string;
+  confidence: string;
   reason: string;
+  evidence: string;
 };
 
 export default function AdminPage() {
@@ -26,7 +28,9 @@ export default function AdminPage() {
       main: "",
       second: "",
       third: "",
+      confidence: "",
       reason: "",
+      evidence: "",
     }))
   );
 
@@ -38,10 +42,12 @@ export default function AdminPage() {
     value: string
   ) => {
     const next = [...predictions];
+
     next[index] = {
       ...next[index],
       [key]: value,
     };
+
     setPredictions(next);
   };
 
@@ -74,13 +80,16 @@ export default function AdminPage() {
       setTitle("");
       setVenue("");
       setStartsIn("");
+
       setPredictions(
         aiNames.map((ai) => ({
           ai,
           main: "",
           second: "",
           third: "",
+          confidence: "",
           reason: "",
+          evidence: "",
         }))
       );
     } catch (error) {
@@ -98,7 +107,11 @@ export default function AdminPage() {
       <div className="max-w-[430px] mx-auto px-4 py-4">
         <section className="rounded-3xl bg-blue-700 p-5 text-white mb-5">
           <div className="text-xs opacity-80 mb-2">ADMIN</div>
-          <h1 className="text-2xl font-extrabold">レース登録</h1>
+
+          <h1 className="text-2xl font-extrabold">
+            レース登録
+          </h1>
+
           <p className="text-sm opacity-80 mt-2">
             4つのAI予測をまとめて登録できます。
           </p>
@@ -106,7 +119,10 @@ export default function AdminPage() {
 
         <section className="bg-white rounded-3xl p-4 shadow-sm space-y-4 mb-5">
           <div>
-            <label className="text-xs font-bold text-gray-500">レース名</label>
+            <label className="text-xs font-bold text-gray-500">
+              レース名
+            </label>
+
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -116,7 +132,10 @@ export default function AdminPage() {
           </div>
 
           <div>
-            <label className="text-xs font-bold text-gray-500">開催場所</label>
+            <label className="text-xs font-bold text-gray-500">
+              開催場所
+            </label>
+
             <input
               value={venue}
               onChange={(e) => setVenue(e.target.value)}
@@ -126,7 +145,10 @@ export default function AdminPage() {
           </div>
 
           <div>
-            <label className="text-xs font-bold text-gray-500">発走まで</label>
+            <label className="text-xs font-bold text-gray-500">
+              発走まで
+            </label>
+
             <input
               value={startsIn}
               onChange={(e) => setStartsIn(e.target.value)}
@@ -173,12 +195,30 @@ export default function AdminPage() {
                 className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
               />
 
+              <input
+                value={prediction.confidence}
+                onChange={(e) =>
+                  updatePrediction(index, "confidence", e.target.value)
+                }
+                placeholder="信頼度 例：72"
+                className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
+              />
+
               <textarea
                 value={prediction.reason}
                 onChange={(e) =>
                   updatePrediction(index, "reason", e.target.value)
                 }
                 placeholder="予測理由"
+                className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3 min-h-24"
+              />
+
+              <textarea
+                value={prediction.evidence}
+                onChange={(e) =>
+                  updatePrediction(index, "evidence", e.target.value)
+                }
+                placeholder="データ根拠 例：上がり3F最速 / 東京2400m適性◎"
                 className="w-full rounded-xl border border-gray-200 px-3 py-3 min-h-24"
               />
             </section>
