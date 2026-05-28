@@ -10,7 +10,7 @@ export function BottomNav() {
         </Link>
 
 <Link
-  href="/race/japan-cup-2026"
+  href="/races"
   className="flex flex-col items-center gap-1 text-gray-400"
 >
   <span className="text-xl">🐎</span>
