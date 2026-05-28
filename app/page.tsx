@@ -33,6 +33,13 @@ function getConsensus(predictions: Prediction[] = []) {
     .sort((a, b) => b.count - a.count)[0];
 }
 
+function logoFor(ai: string) {
+  if (ai === "ChatGPT") return "/logos/chatgpt.svg";
+  if (ai === "Claude") return "/logos/claude.png";
+  if (ai === "Gemini") return "/logos/Gemini.png";
+  return "/logos/deepseek.png";
+}
+
 export default function Home() {
   const [races, setRaces] = useState<Race[]>([]);
 
@@ -63,20 +70,45 @@ export default function Home() {
       <TopBar />
 
       <div className="max-w-[430px] mx-auto px-4 py-4 pb-24">
-        <section className="rounded-3xl bg-gradient-to-br from-blue-700 to-blue-950 p-5 text-white shadow-xl mb-5">
-          <div className="text-xs opacity-80 mb-2">
-            KOMPARI AI PREDICTION
+        <section className="rounded-3xl bg-gradient-to-br from-blue-700 via-blue-800 to-blue-950 p-5 text-white shadow-xl mb-5">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <div className="text-xs opacity-80 font-bold tracking-wide">
+                KOMPARI ARENA
+              </div>
+              <h1 className="text-3xl font-extrabold leading-tight mt-1">
+                AIが予測で競う
+                <br />
+                レースアリーナ
+              </h1>
+            </div>
+
+            <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center text-2xl">
+              🏇
+            </div>
           </div>
 
-          <h1 className="text-3xl font-extrabold mb-2">
-            AIが予測で競う
-            <br />
-            新しいレースアリーナ
-          </h1>
-
-          <p className="text-sm opacity-80 leading-6">
-            複数AIの予測を比較し、どのAIが当たるのかを可視化します。
+          <p className="text-sm opacity-80 leading-6 mb-4">
+            ChatGPT、Claude、Gemini、DeepSeekの予測を比較し、
+            どのAIが当たるのかを可視化します。
           </p>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-2xl bg-white/10 p-3 text-center">
+              <div className="text-xl font-extrabold">{races.length}</div>
+              <div className="text-[10px] opacity-70">登録レース</div>
+            </div>
+
+            <div className="rounded-2xl bg-white/10 p-3 text-center">
+              <div className="text-xl font-extrabold">4</div>
+              <div className="text-[10px] opacity-70">参加AI</div>
+            </div>
+
+            <div className="rounded-2xl bg-white/10 p-3 text-center">
+              <div className="text-xl font-extrabold">LIVE</div>
+              <div className="text-[10px] opacity-70">投票反映</div>
+            </div>
+          </div>
         </section>
 
         {featuredRace ? (
@@ -91,7 +123,7 @@ export default function Home() {
                 </div>
 
                 <h2 className="text-xl font-extrabold">
-                  {featuredRace.title}
+                  {featuredRace.title || "無題のレース"}
                 </h2>
               </div>
 
@@ -101,18 +133,18 @@ export default function Home() {
             </div>
 
             <div className="text-xs text-gray-500 mb-4">
-              {featuredRace.venue}
+              {featuredRace.venue || "開催場所未入力"}
             </div>
 
             {featuredConsensus && (
-              <div className="rounded-2xl bg-blue-50 p-3">
+              <div className="rounded-2xl bg-blue-50 p-3 mb-4">
                 <div className="text-xs font-bold text-blue-700 mb-1">
                   AIコンセンサス
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div className="font-extrabold">
-                    {featuredConsensus.name}
+                    ◎ {featuredConsensus.name}
                   </div>
 
                   <div className="text-sm font-bold text-blue-700">
@@ -120,8 +152,38 @@ export default function Home() {
                     {featuredRace.predictions?.length || 0} AI
                   </div>
                 </div>
+
+                <div className="mt-2 h-2 rounded-full bg-white overflow-hidden">
+                  <div
+                    className="h-2 rounded-full bg-blue-700"
+                    style={{
+                      width: `${
+                        (featuredConsensus.count /
+                          (featuredRace.predictions?.length || 1)) *
+                        100
+                      }%`,
+                    }}
+                  />
+                </div>
               </div>
             )}
+
+            <div className="flex items-center justify-between">
+              <div className="flex -space-x-2">
+                {(featuredRace.predictions || []).map((prediction) => (
+                  <img
+                    key={prediction.ai}
+                    src={logoFor(prediction.ai)}
+                    alt={prediction.ai}
+                    className="w-8 h-8 rounded-full bg-white border border-gray-200 p-1 object-contain"
+                  />
+                ))}
+              </div>
+
+              <div className="text-xs font-bold text-gray-500">
+                詳細を見る →
+              </div>
+            </div>
           </Link>
         ) : (
           <div className="bg-white rounded-3xl p-5 text-center text-sm text-gray-500 mb-5">
@@ -170,7 +232,7 @@ export default function Home() {
           })}
         </div>
 
-        <section className="rounded-3xl bg-white p-4 shadow-sm">
+        <section className="rounded-3xl bg-white p-4 shadow-sm mb-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-bold">AIランキング</h2>
 
@@ -180,22 +242,41 @@ export default function Home() {
           </div>
 
           <div className="space-y-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span>1位 DeepSeek</span>
-              <span className="font-bold text-blue-700">74%</span>
-            </div>
+            {[
+              ["DeepSeek", "74%"],
+              ["ChatGPT", "71%"],
+              ["Claude", "69%"],
+            ].map(([name, rate], index) => (
+              <div
+                key={name}
+                className="flex items-center justify-between rounded-2xl bg-gray-50 p-3"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full bg-blue-700 text-white flex items-center justify-center text-xs font-bold">
+                    {index + 1}
+                  </div>
 
-            <div className="flex items-center justify-between">
-              <span>2位 ChatGPT</span>
-              <span className="font-bold text-blue-700">71%</span>
-            </div>
+                  <img
+                    src={logoFor(name)}
+                    alt={name}
+                    className="w-8 h-8 rounded-full bg-white p-1 object-contain border border-gray-100"
+                  />
 
-            <div className="flex items-center justify-between">
-              <span>3位 Claude</span>
-              <span className="font-bold text-blue-700">69%</span>
-            </div>
+                  <span className="font-bold">{name}</span>
+                </div>
+
+                <span className="font-extrabold text-blue-700">{rate}</span>
+              </div>
+            ))}
           </div>
         </section>
+
+        <Link
+          href="/admin"
+          className="block rounded-3xl border border-dashed border-gray-300 bg-white p-4 text-center text-sm font-bold text-gray-500"
+        >
+          管理画面でレースを追加 →
+        </Link>
       </div>
 
       <BottomNav />
