@@ -1,3 +1,4 @@
+import { event } from "@/data/events";
 import { BottomNav } from "@/components/BottomNav";
 import { Hero } from "@/components/Hero";
 import { PredictionCard } from "@/components/PredictionCard";
