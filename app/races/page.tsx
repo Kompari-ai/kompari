@@ -22,6 +22,7 @@ type Race = {
   title?: string;
   venue?: string;
   startsIn?: string;
+  resultWinner?: string;
   predictions?: Prediction[];
 };
 
@@ -36,6 +37,13 @@ function getConsensus(predictions: Prediction[] = []) {
   return Object.entries(counts)
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count)[0];
+}
+
+function logoFor(ai: string) {
+  if (ai === "ChatGPT") return "/logos/chatgpt.svg";
+  if (ai === "Claude") return "/logos/claude.png";
+  if (ai === "Gemini") return "/logos/Gemini.png";
+  return "/logos/deepseek.png";
 }
 
 export default function RacesPage() {
@@ -86,10 +94,9 @@ export default function RacesPage() {
             const consensus = getConsensus(predictions);
 
             return (
-              <Link
+              <div
                 key={race.id}
-                href={`/race/${race.id}`}
-                className="block rounded-3xl bg-white p-4 shadow-sm border border-gray-100"
+                className="rounded-3xl bg-white p-4 shadow-sm border border-gray-100"
               >
                 <div className="flex items-center justify-between mb-3">
                   <div>
@@ -111,6 +118,17 @@ export default function RacesPage() {
                   {race.venue || "開催場所未入力"}
                 </div>
 
+                {race.resultWinner && (
+                  <div className="rounded-2xl bg-yellow-50 p-3 mb-3">
+                    <div className="text-xs font-bold text-yellow-700 mb-1">
+                      レース結果
+                    </div>
+                    <div className="font-extrabold">
+                      1着：{race.resultWinner}
+                    </div>
+                  </div>
+                )}
+
                 {consensus && (
                   <div className="rounded-2xl bg-blue-50 p-3 mb-3">
                     <div className="text-xs font-bold text-blue-700 mb-1">
@@ -129,27 +147,21 @@ export default function RacesPage() {
                       <div
                         className="h-2 rounded-full bg-blue-700"
                         style={{
-                          width: `${(consensus.count / predictions.length) * 100}%`,
+                          width: `${
+                            (consensus.count / predictions.length) * 100
+                          }%`,
                         }}
                       />
                     </div>
                   </div>
                 )}
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex -space-x-2">
                     {predictions.map((prediction) => (
                       <img
                         key={prediction.ai}
-                        src={
-                          prediction.ai === "ChatGPT"
-                            ? "/logos/chatgpt.svg"
-                            : prediction.ai === "Claude"
-                            ? "/logos/claude.png"
-                            : prediction.ai === "Gemini"
-                            ? "/logos/Gemini.png"
-                            : "/logos/deepseek.png"
-                        }
+                        src={logoFor(prediction.ai)}
                         alt={prediction.ai}
                         className="w-8 h-8 rounded-full bg-white border border-gray-200 p-1 object-contain"
                       />
@@ -157,10 +169,26 @@ export default function RacesPage() {
                   </div>
 
                   <div className="text-xs font-bold text-gray-500">
-                    詳細を見る →
+                    {predictions.length} AI予測
                   </div>
                 </div>
-              </Link>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Link
+                    href={`/race/${race.id}`}
+                    className="rounded-2xl bg-blue-700 text-white text-center py-3 text-sm font-bold"
+                  >
+                    詳細を見る
+                  </Link>
+
+                  <Link
+                    href={`/admin/edit/${race.id}`}
+                    className="rounded-2xl bg-gray-100 text-gray-700 text-center py-3 text-sm font-bold"
+                  >
+                    編集
+                  </Link>
+                </div>
+              </div>
             );
           })}
 
