@@ -23,6 +23,7 @@ export default function AdminPage() {
   const [title, setTitle] = useState("");
   const [venue, setVenue] = useState("");
   const [startsIn, setStartsIn] = useState("");
+  const [resultWinner, setResultWinner] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [predictions, setPredictions] = useState<PredictionInput[]>(
@@ -101,6 +102,7 @@ export default function AdminPage() {
         title,
         venue,
         startsIn,
+        resultWinner,
         predictions: validPredictions,
         createdAt: serverTimestamp(),
       });
@@ -110,6 +112,7 @@ export default function AdminPage() {
       setTitle("");
       setVenue("");
       setStartsIn("");
+      setResultWinner("");
       setPredictions(
         aiNames.map((ai) => ({
           ai,
@@ -171,7 +174,7 @@ export default function AdminPage() {
           <div className="text-xs opacity-80 mb-2">ADMIN</div>
           <h1 className="text-2xl font-extrabold">レース登録</h1>
           <p className="text-sm opacity-80 mt-2">
-            OpenAI APIでAI予測を自動生成できます。
+            AI予測を自動生成して、結果も登録できます。
           </p>
         </section>
 
@@ -196,6 +199,13 @@ export default function AdminPage() {
             placeholder="発走まで"
             className="w-full rounded-xl border border-gray-200 px-3 py-3"
           />
+
+          <input
+            value={resultWinner}
+            onChange={(e) => setResultWinner(e.target.value)}
+            placeholder="結果：1着馬名（後から入力でもOK）"
+            className="w-full rounded-xl border border-gray-200 px-3 py-3"
+          />
         </section>
 
         <button
@@ -208,28 +218,37 @@ export default function AdminPage() {
 
         <div className="space-y-4">
           {predictions.map((prediction, index) => (
-            <section key={prediction.ai} className="bg-white rounded-3xl p-4 shadow-sm">
+            <section
+              key={prediction.ai}
+              className="bg-white rounded-3xl p-4 shadow-sm"
+            >
               <div className="font-extrabold text-blue-700 mb-3">
                 {prediction.ai}
               </div>
 
               <input
                 value={prediction.main}
-                onChange={(e) => updatePrediction(index, "main", e.target.value)}
+                onChange={(e) =>
+                  updatePrediction(index, "main", e.target.value)
+                }
                 placeholder="◎ 本命"
                 className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
               />
 
               <input
                 value={prediction.second}
-                onChange={(e) => updatePrediction(index, "second", e.target.value)}
+                onChange={(e) =>
+                  updatePrediction(index, "second", e.target.value)
+                }
                 placeholder="○ 対抗"
                 className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
               />
 
               <input
                 value={prediction.third}
-                onChange={(e) => updatePrediction(index, "third", e.target.value)}
+                onChange={(e) =>
+                  updatePrediction(index, "third", e.target.value)
+                }
                 placeholder="▲ 穴"
                 className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
               />
@@ -245,7 +264,9 @@ export default function AdminPage() {
 
               <textarea
                 value={prediction.reason}
-                onChange={(e) => updatePrediction(index, "reason", e.target.value)}
+                onChange={(e) =>
+                  updatePrediction(index, "reason", e.target.value)
+                }
                 placeholder="予測理由"
                 className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3 min-h-24"
               />
