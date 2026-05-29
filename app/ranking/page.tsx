@@ -7,9 +7,14 @@ import { db } from "@/lib/firebase";
 import { BottomNav } from "@/components/BottomNav";
 import { TopBar } from "@/components/TopBar";
 
-type Vote = {
-  ai?: string;
-  type?: "good" | "bad";
+type Prediction = {
+  ai: string;
+  main: string;
+};
+
+type Race = {
+  resultWinner?: string;
+  predictions?: Prediction[];
 };
 
 const aiList = ["ChatGPT", "Claude", "Gemini", "DeepSeek"];
@@ -22,12 +27,12 @@ function logoFor(ai: string) {
 }
 
 export default function RankingPage() {
-  const [votes, setVotes] = useState<Vote[]>([]);
+  const [races, setRaces] = useState<Race[]>([]);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "votes"), (snapshot) => {
-      const list = snapshot.docs.map((doc) => doc.data()) as Vote[];
-      setVotes(list);
+    const unsubscribe = onSnapshot(collection(db, "races"), (snapshot) => {
+      const list = snapshot.docs.map((doc) => doc.data()) as Race[];
+      setRaces(list);
     });
 
     return () => unsubscribe();
@@ -36,22 +41,28 @@ export default function RankingPage() {
   const rankings = useMemo(() => {
     return aiList
       .map((ai) => {
-        const aiVotes = votes.filter((vote) => vote.ai === ai);
-        const good = aiVotes.filter((vote) => vote.type === "good").length;
-        const bad = aiVotes.filter((vote) => vote.type === "bad").length;
-        const total = good + bad;
-        const rate = total === 0 ? 0 : Math.round((good / total) * 100);
+        let total = 0;
+        let hits = 0;
 
-        return {
-          ai,
-          good,
-          bad,
-          total,
-          rate,
-        };
+        races.forEach((race) => {
+          if (!race.resultWinner) return;
+
+          const prediction = race.predictions?.find((p) => p.ai === ai);
+          if (!prediction?.main) return;
+
+          total += 1;
+
+          if (prediction.main === race.resultWinner) {
+            hits += 1;
+          }
+        });
+
+        const rate = total === 0 ? 0 : Math.round((hits / total) * 100);
+
+        return { ai, total, hits, rate };
       })
-      .sort((a, b) => b.rate - a.rate || b.total - a.total);
-  }, [votes]);
+      .sort((a, b) => b.rate - a.rate || b.hits - a.hits);
+  }, [races]);
 
   return (
     <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
@@ -64,17 +75,17 @@ export default function RankingPage() {
           </div>
 
           <h1 className="text-2xl font-extrabold mb-2">
-            AI評価ランキング
+            AI的中率ランキング
           </h1>
 
           <p className="text-sm opacity-80 leading-6">
-            ユーザーのGood / Bad投票をもとに、各AIの評価をリアルタイム集計します。
+            レース結果が登録されたデータから、各AIの本命的中率を自動集計します。
           </p>
         </section>
 
         <section className="bg-white rounded-2xl p-4 shadow-sm mb-4">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold">ユーザー評価ランキング</h2>
+            <h2 className="font-bold">本命的中率</h2>
             <span className="text-xs text-gray-500">Firestore連動</span>
           </div>
 
@@ -108,7 +119,7 @@ export default function RankingPage() {
                 <div className="flex-1">
                   <div className="font-bold">{item.ai}</div>
                   <div className="text-xs text-gray-500">
-                    Good {item.good} / Bad {item.bad}
+                    的中 {item.hits} / 予想 {item.total}
                   </div>
                 </div>
 
@@ -116,9 +127,7 @@ export default function RankingPage() {
                   <div className="text-xl font-extrabold text-blue-700">
                     {item.rate}%
                   </div>
-                  <div className="text-[10px] text-gray-500">
-                    Good率
-                  </div>
+                  <div className="text-[10px] text-gray-500">的中率</div>
                 </div>
               </Link>
             ))}
@@ -126,11 +135,10 @@ export default function RankingPage() {
         </section>
 
         <section className="bg-white rounded-2xl p-4 shadow-sm">
-          <h2 className="font-bold mb-3">評価の見方</h2>
+          <h2 className="font-bold mb-3">集計ルール</h2>
 
           <p className="text-sm leading-7 text-gray-700">
-            このランキングは的中率ではなく、ユーザーが「良い予想」と評価した割合です。
-            正式版では、実際の的中結果を反映したランキングも追加予定です。
+            結果が登録されたレースだけを対象に、各AIの本命馬が1着馬と一致した場合を「的中」として集計します。
           </p>
         </section>
       </div>
