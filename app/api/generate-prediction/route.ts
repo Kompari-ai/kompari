@@ -2,11 +2,21 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const aiStyles: Record<string, string> = {
-  ChatGPT: "総合的にバランスよく判断",
-  Claude: "慎重に展開や文脈を重視",
-  Gemini: "データや比較材料を広く確認",
-  DeepSeek: "人気に寄りすぎず逆張り要素も考慮",
+type PredictionRequest = {
+  title?: string;
+  category?: string;
+  aiName?: string;
+  candidates?: unknown;
+  aiStyle?: string;
+  aiDescription?: string;
+  strengthCategory?: string;
+};
+
+const officialAiStyles: Record<string, string> = {
+  ChatGPT: "総合的にバランスよく判断する",
+  Claude: "慎重に展開やリスクを読む",
+  Gemini: "データや比較材料を広く確認する",
+  DeepSeek: "人気に寄りすぎず、意外性も見る",
 };
 
 function getDefaultCandidates(category: string) {
@@ -38,7 +48,7 @@ function getDefaultCandidates(category: string) {
     return ["チームA勝利", "チームB勝利", "フルセット決着"];
   }
 
-  return ["1番人気馬", "先行馬", "差し馬"];
+  return ["1番人気候補", "先行候補", "差し候補"];
 }
 
 function normalizeCandidates(input: unknown, category: string) {
@@ -55,118 +65,201 @@ function normalizeCandidates(input: unknown, category: string) {
   return getDefaultCandidates(category);
 }
 
-function rotate<T>(items: T[], aiName: string) {
-  if (items.length === 0) return items;
+function hashText(value: string) {
+  let hash = 0;
 
-  const offset =
-    aiName === "ChatGPT"
-      ? 0
-      : aiName === "Claude"
-      ? 1
-      : aiName === "Gemini"
-      ? 2
-      : 3;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+
+  return Math.abs(hash);
+}
+
+function getOfficialOffset(aiName: string) {
+  if (aiName === "ChatGPT") return 0;
+  if (aiName === "Claude") return 1;
+  if (aiName === "Gemini") return 2;
+  if (aiName === "DeepSeek") return 3;
+
+  return null;
+}
+
+function getStyleOffset(style: string, candidatesLength: number) {
+  if (candidatesLength === 0) return 0;
+
+  if (
+    style.includes("堅実") ||
+    style.includes("本命") ||
+    style.includes("安全")
+  ) {
+    return 0;
+  }
+
+  if (
+    style.includes("穴") ||
+    style.includes("逆張り") ||
+    style.includes("意外")
+  ) {
+    return Math.min(1, candidatesLength - 1);
+  }
+
+  if (
+    style.includes("データ") ||
+    style.includes("分析") ||
+    style.includes("理論")
+  ) {
+    return Math.min(2, candidatesLength - 1);
+  }
+
+  return 0;
+}
+
+function rotate<T>(items: T[], offset: number) {
+  if (items.length === 0) return items;
 
   const safeOffset = offset % items.length;
 
   return [...items.slice(safeOffset), ...items.slice(0, safeOffset)];
 }
 
-function pickTopThree(candidates: string[], aiName: string) {
-  const rotated = rotate(candidates, aiName);
+function pickTopThree({
+  candidates,
+  aiName,
+  title,
+  category,
+  aiStyle,
+  aiDescription,
+}: {
+  candidates: string[];
+  aiName: string;
+  title: string;
+  category: string;
+  aiStyle: string;
+  aiDescription: string;
+}) {
+  const officialOffset = getOfficialOffset(aiName);
 
-  const main = rotated[0] || candidates[0] || "未定";
-  const second = rotated[1] || rotated[0] || candidates[0] || "未定";
-  const third = rotated[2] || rotated[1] || rotated[0] || candidates[0] || "未定";
+  const offset =
+    officialOffset !== null
+      ? officialOffset
+      : getStyleOffset(aiStyle, candidates.length) +
+        (hashText(`${aiName}-${title}-${category}-${aiDescription}`) %
+          candidates.length);
+
+  const rotated = rotate(candidates, offset);
 
   return {
-    main,
-    second,
-    third,
+    main: rotated[0] || candidates[0] || "未定",
+    second: rotated[1] || rotated[0] || candidates[0] || "未定",
+    third: rotated[2] || rotated[1] || rotated[0] || candidates[0] || "未定",
   };
 }
 
-function categoryReason(
-  category: string,
-  aiName: string,
-  title: string,
-  main: string,
-  candidates: string[]
-) {
-  const style = aiStyles[aiName] || aiStyles.ChatGPT;
-  const candidateText = candidates.slice(0, 6).join("、");
+function getConfidence(aiName: string, aiStyle: string, aiDescription: string) {
+  if (aiName === "ChatGPT") return "72";
+  if (aiName === "Claude") return "68";
+  if (aiName === "Gemini") return "70";
+  if (aiName === "DeepSeek") return "64";
 
-  if (category === "nba") {
-    return `${aiName}は、候補（${candidateText}）の中から、直近成績、主力選手の状態、試合展開を踏まえ、${style}して「${main}」を本命にしました。${title}では終盤の得点力と守備の安定感が重要になると見ています。`;
-  }
-
-  if (category === "soccer") {
-    return `${aiName}は、候補（${candidateText}）の中から、戦術相性、直近の得点力、守備の安定感を踏まえ、${style}して「${main}」を本命にしました。${title}では先制点の有無が大きな分岐点になると見ています。`;
-  }
-
-  if (category === "mlb") {
-    return `${aiName}は、候補（${candidateText}）の中から、先発投手、打線の状態、ブルペンの安定感を踏まえ、${style}して「${main}」を本命にしました。${title}では序盤の失点を抑えられるかが重要です。`;
-  }
-
-  if (category === "crypto") {
-    return `${aiName}は、候補（${candidateText}）の中から、需給、金利環境、ETF資金流入、投資家心理を踏まえ、${style}して「${main}」を本命にしました。${title}では短期材料よりも中期的な資金の流れを重視しています。`;
-  }
-
-  if (category === "stocks") {
-    return `${aiName}は、候補（${candidateText}）の中から、業績、金利、バリュエーション、テーマ性を踏まえ、${style}して「${main}」を本命にしました。${title}では成長期待と利益率の持続性が焦点になります。`;
-  }
-
-  if (category === "election") {
-    return `${aiName}は、候補（${candidateText}）の中から、支持率、地域差、争点、投票率を踏まえ、${style}して「${main}」を本命にしました。${title}では無党派層の動きが結果を左右すると見ています。`;
-  }
-
-  if (category === "esports") {
-    return `${aiName}は、候補（${candidateText}）の中から、チーム相性、直近成績、マップ適性、個人技を踏まえ、${style}して「${main}」を本命にしました。${title}では序盤の主導権が重要です。`;
-  }
-
-  return `${aiName}は、候補（${candidateText}）の中から、近走成績、展開、馬場、騎手、人気を踏まえ、${style}して「${main}」を本命にしました。${title}ではペースと位置取りが結果を左右すると見ています。`;
+  const seed = hashText(`${aiName}-${aiStyle}-${aiDescription}`);
+  return String(61 + (seed % 18));
 }
 
-function categoryEvidence(category: string) {
+function getCategoryFocus(category: string) {
   if (category === "nba") {
-    return "主力選手の出場状況、直近5試合の得点効率、リバウンド差を重視しています。";
+    return "直近成績、主力選手の状態、ホーム・アウェイの差を重視しました。";
   }
 
   if (category === "soccer") {
-    return "直近の得点期待値、失点傾向、ホーム・アウェイ成績を重視しています。";
+    return "直近の得点力、失点傾向、試合展開の安定感を重視しました。";
   }
 
   if (category === "mlb") {
-    return "先発投手の安定感、打線の長打力、救援陣の消耗度を重視しています。";
+    return "先発投手、打線の状態、ブルペンの安定感を重視しました。";
   }
 
   if (category === "crypto") {
-    return "資金流入、マクロ環境、ボラティリティ、ニュース材料を重視しています。";
+    return "価格の流れ、材料の強さ、市場心理を重視しました。";
   }
 
   if (category === "stocks") {
-    return "決算内容、金利環境、需給、セクター全体の流れを重視しています。";
+    return "業績期待、金利環境、セクター全体の流れを重視しました。";
   }
 
   if (category === "election") {
-    return "世論調査、地域別支持、投票率、直近の報道材料を重視しています。";
+    return "支持率、地域差、直近の報道材料を重視しました。";
   }
 
   if (category === "esports") {
-    return "直近成績、マップ勝率、選手コンディション、対戦相性を重視しています。";
+    return "直近成績、チーム相性、選手コンディションを重視しました。";
   }
 
-  return "過去成績、脚質、馬場適性、展開予想を重視しています。";
+  return "過去傾向、展開、候補同士の比較を重視しました。";
+}
+
+function buildReason({
+  category,
+  aiName,
+  title,
+  main,
+  candidates,
+  aiStyle,
+  aiDescription,
+  strengthCategory,
+}: {
+  category: string;
+  aiName: string;
+  title: string;
+  main: string;
+  candidates: string[];
+  aiStyle: string;
+  aiDescription: string;
+  strengthCategory: string;
+}) {
+  const candidateText = candidates.slice(0, 6).join("、");
+  const focus = getCategoryFocus(category);
+  const isStrongCategory = strengthCategory === category;
+
+  return `${aiName}は「${candidateText}」の中から「${main}」を本命にしました。${focus}予測スタイルは「${aiStyle}」です。${
+    aiDescription ? `このAIの特徴は「${aiDescription}」です。` : ""
+  }${
+    isStrongCategory
+      ? "このカテゴリはこのAIの得意カテゴリでもあるため、判断材料をやや強めに評価しています。"
+      : ""
+  }対象イベント「${title}」では、最も勝ち筋が見えやすい候補として本命にしています。`;
+}
+
+function buildEvidence({
+  category,
+  candidates,
+  aiStyle,
+}: {
+  category: string;
+  candidates: string[];
+  aiStyle: string;
+}) {
+  const candidateText = candidates.slice(0, 6).join("、");
+
+  return `カテゴリ「${category}」の特性、候補「${candidateText}」の比較、AIの予測スタイル「${aiStyle}」をもとにした予測です。`;
 }
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = (await req.json()) as PredictionRequest;
 
-    const title = body.title || "";
-    const category = body.category || "horse_racing";
-    const aiName = body.aiName || "ChatGPT";
+    const title = String(body.title || "").trim();
+    const category = String(body.category || "horse_racing").trim();
+    const aiName = String(body.aiName || "ChatGPT").trim();
     const candidates = normalizeCandidates(body.candidates, category);
+
+    const aiStyle =
+      String(body.aiStyle || "").trim() ||
+      officialAiStyles[aiName] ||
+      "バランス型";
+
+    const aiDescription = String(body.aiDescription || "").trim();
+    const strengthCategory = String(body.strengthCategory || "").trim();
 
     if (!title) {
       return NextResponse.json(
@@ -175,16 +268,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const topThree = pickTopThree(candidates, aiName);
+    const topThree = pickTopThree({
+      candidates,
+      aiName,
+      title,
+      category,
+      aiStyle,
+      aiDescription,
+    });
 
-    const confidence =
-      aiName === "ChatGPT"
-        ? "72"
-        : aiName === "Claude"
-        ? "68"
-        : aiName === "Gemini"
-        ? "70"
-        : "64";
+    const confidence = getConfidence(aiName, aiStyle, aiDescription);
 
     return NextResponse.json({
       ai: aiName,
@@ -192,14 +285,21 @@ export async function POST(req: Request) {
       second: topThree.second,
       third: topThree.third,
       confidence,
-      reason: categoryReason(
+      reason: buildReason({
         category,
         aiName,
         title,
-        topThree.main,
-        candidates
-      ),
-      evidence: categoryEvidence(category),
+        main: topThree.main,
+        candidates,
+        aiStyle,
+        aiDescription,
+        strengthCategory,
+      }),
+      evidence: buildEvidence({
+        category,
+        candidates,
+        aiStyle,
+      }),
     });
   } catch (error) {
     console.error(error);

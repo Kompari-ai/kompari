@@ -30,7 +30,7 @@ function getResultWinner(event: KompariEvent) {
 }
 
 function getStatusLabel(event: KompariEvent) {
-  return getResultWinner(event) ? "結果済み" : "予測中";
+  return getResultWinner(event) ? "結果入力済み" : "予測中";
 }
 
 function getCandidateList(event: KompariEvent) {
@@ -89,7 +89,7 @@ function getPredictionResult(
   }
 
   return {
-    label: "不的中",
+    label: "外れ",
     className: "bg-red-50 text-red-700",
   };
 }
@@ -259,6 +259,13 @@ function PredictionCard({
         <div className="mt-3 rounded-2xl bg-gray-50 p-3">
           <div className="text-xs font-bold text-gray-400">3番手</div>
           <div className="mt-1 font-extrabold">{prediction.third}</div>
+        </div>
+      )}
+
+      {resultWinner && (
+        <div className="mt-3 rounded-2xl bg-gray-50 p-3">
+          <div className="text-xs font-bold text-gray-400">結果</div>
+          <div className="mt-1 font-extrabold">{resultWinner}</div>
         </div>
       )}
 
@@ -475,6 +482,9 @@ export default function RaceDetailPage({
           title: event.title,
           category: event.category,
           aiName: selectedMyAi.name,
+          aiStyle: selectedMyAi.style,
+          aiDescription: selectedMyAi.description,
+          strengthCategory: selectedMyAi.strengthCategory,
           candidates,
         }),
       });
