@@ -2,7 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
@@ -14,14 +14,13 @@ import {
   type LegacyRaceData,
 } from "@/lib/events";
 
-type AiProfile = {
+type MyAi = {
+  id: string;
   name: string;
-  label: string;
-  description: string;
   style: string;
-  icon: string;
-  iconBg: string;
-  accent: string;
+  strengthCategory: string;
+  description: string;
+  createdAt?: unknown;
 };
 
 type VoteDoc = {
@@ -31,7 +30,7 @@ type VoteDoc = {
   down?: number;
 };
 
-type RecentPrediction = {
+type MyAiPredictionRow = {
   eventId: string;
   title: string;
   category: string;
@@ -41,7 +40,7 @@ type RecentPrediction = {
   hit: boolean | null;
 };
 
-type AiStats = {
+type MyAiStats = {
   total: number;
   finished: number;
   hit: number;
@@ -56,50 +55,7 @@ type AiStats = {
       rate: number;
     }
   >;
-  recent: RecentPrediction[];
-};
-
-const aiProfiles: Record<string, AiProfile> = {
-  chatgpt: {
-    name: "ChatGPT",
-    label: "総合バランス型AI",
-    description:
-      "幅広い情報を整理し、候補全体を比較しながら、もっとも妥当性の高い予測を出すAIです。",
-    style: "バランス重視",
-    icon: "GPT",
-    iconBg: "#10b981",
-    accent: "#059669",
-  },
-  claude: {
-    name: "Claude",
-    label: "慎重分析型AI",
-    description:
-      "文脈やリスクを丁寧に確認し、極端な予測よりも安定した判断を重視するAIです。",
-    style: "慎重・文脈重視",
-    icon: "C",
-    iconBg: "#f97316",
-    accent: "#ea580c",
-  },
-  gemini: {
-    name: "Gemini",
-    label: "データ探索型AI",
-    description:
-      "複数の比較材料を広く確認し、全体の流れや外部要因を踏まえて予測するAIです。",
-    style: "データ・比較重視",
-    icon: "G",
-    iconBg: "#2563eb",
-    accent: "#2563eb",
-  },
-  deepseek: {
-    name: "DeepSeek",
-    label: "逆張り探索型AI",
-    description:
-      "人気や多数派に寄りすぎず、見落とされやすい候補や別シナリオも検討するAIです。",
-    style: "逆張り・探索重視",
-    icon: "DS",
-    iconBg: "#4f46e5",
-    accent: "#4f46e5",
-  },
+  recent: MyAiPredictionRow[];
 };
 
 function getResultWinner(event: KompariEvent) {
@@ -112,19 +68,22 @@ function formatConfidence(confidence?: string) {
   return `${confidence}%`;
 }
 
-function isOfficialAiPrediction(
+function isThisMyAiPrediction(
   prediction: KompariPrediction,
-  aiName: string
+  myAi: MyAi,
+  id: string
 ) {
-  return (
-    prediction.ai === aiName &&
-    prediction.source !== "user" &&
-    !prediction.myAiId
-  );
+  if (prediction.myAiId === id) return true;
+
+  if (prediction.source === "user" && prediction.ai === myAi.name) {
+    return true;
+  }
+
+  return prediction.ai === myAi.name;
 }
 
-function buildStats(events: KompariEvent[], aiName: string): AiStats {
-  const stats: AiStats = {
+function buildStats(events: KompariEvent[], myAi: MyAi | null, id: string) {
+  const stats: MyAiStats = {
     total: 0,
     finished: 0,
     hit: 0,
@@ -134,9 +93,11 @@ function buildStats(events: KompariEvent[], aiName: string): AiStats {
     recent: [],
   };
 
+  if (!myAi) return stats;
+
   events.forEach((event) => {
     const prediction = event.predictions.find((item) =>
-      isOfficialAiPrediction(item, aiName)
+      isThisMyAiPrediction(item, myAi, id)
     );
 
     if (!prediction) return;
@@ -198,7 +159,7 @@ function buildStats(events: KompariEvent[], aiName: string): AiStats {
   return stats;
 }
 
-function categoryRows(stats: AiStats) {
+function categoryRows(stats: MyAiStats) {
   return Object.entries(stats.categories)
     .map(([category, value]) => ({
       category,
@@ -222,6 +183,11 @@ function resultClass(hit: boolean | null) {
   return "bg-red-50 text-red-700";
 }
 
+function getInitial(name: string) {
+  if (!name) return "AI";
+  return name.slice(0, 2).toUpperCase();
+}
+
 function aggregateVotes(votes: VoteDoc[], aiName: string) {
   return votes.reduce<{ up: number; down: number }>(
     (sum, vote) => {
@@ -239,16 +205,36 @@ function aggregateVotes(votes: VoteDoc[], aiName: string) {
   );
 }
 
-export default function AiProfilePage({
+export default function MyAiDetailPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ id: string }>;
 }) {
-  const { slug } = use(params);
-  const profile = aiProfiles[slug];
+  const { id } = use(params);
 
+  const [myAi, setMyAi] = useState<MyAi | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [events, setEvents] = useState<KompariEvent[]>([]);
   const [votes, setVotes] = useState<VoteDoc[]>([]);
+
+  useEffect(() => {
+    const ref = doc(db, "myAis", id);
+
+    const unsubscribe = onSnapshot(ref, (snapshot) => {
+      if (snapshot.exists()) {
+        setMyAi({
+          id: snapshot.id,
+          ...snapshot.data(),
+        } as MyAi);
+      } else {
+        setMyAi(null);
+      }
+
+      setLoaded(true);
+    });
+
+    return () => unsubscribe();
+  }, [id]);
 
   useEffect(() => {
     const q = query(collection(db, "races"), orderBy("createdAt", "desc"));
@@ -283,39 +269,54 @@ export default function AiProfilePage({
     return () => unsubscribe();
   }, []);
 
-  const stats = useMemo(() => {
-    if (!profile) return buildStats(events, "");
-    return buildStats(events, profile.name);
-  }, [events, profile]);
+  const stats = useMemo(() => buildStats(events, myAi, id), [events, id, myAi]);
 
   const voteStats = useMemo(() => {
-    if (!profile) {
+    if (!myAi) {
       return {
         up: 0,
         down: 0,
       };
     }
 
-    return aggregateVotes(votes, profile.name);
-  }, [profile, votes]);
+    return aggregateVotes(votes, myAi.name);
+  }, [myAi, votes]);
 
   const popularityScore = voteStats.up - voteStats.down;
   const categories = useMemo(() => categoryRows(stats), [stats]);
 
-  if (!profile) {
+  if (!loaded) {
+    return (
+      <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
+        <TopBar />
+
+        <div className="mx-auto max-w-[430px] px-4 py-10 text-center text-gray-500">
+          読み込み中...
+        </div>
+
+        <BottomNav />
+      </main>
+    );
+  }
+
+  if (!myAi) {
     return (
       <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
         <TopBar />
 
         <div className="mx-auto max-w-[430px] px-4 pb-28 pt-8">
           <section className="rounded-[24px] bg-white p-5 text-center shadow-sm">
-            <h1 className="text-xl font-extrabold">AIが見つかりません</h1>
+            <h1 className="text-xl font-extrabold">My AIが見つかりません</h1>
+
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              このAIは削除されたか、Firestoreに保存されていない可能性があります。
+            </p>
 
             <Link
-              href="/ranking"
+              href="/my-ai"
               className="mt-5 block rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white"
             >
-              ランキングへ戻る
+              My AI一覧へ戻る
             </Link>
           </section>
         </div>
@@ -335,43 +336,40 @@ export default function AiProfilePage({
             className="p-5 text-white"
             style={{
               background:
-                "linear-gradient(135deg, #1d4ed8 0%, #1e40af 45%, #0f172a 100%)",
+                "linear-gradient(135deg, #2563eb 0%, #1d4ed8 45%, #172554 100%)",
             }}
           >
             <div className="mb-4 flex items-center justify-between">
               <span className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold tracking-[0.18em] text-white">
-                OFFICIAL AI
+                USER AI
               </span>
 
               <span className="text-xs font-bold text-blue-100">
-                AI PROFILE
+                MY AI PROFILE
               </span>
             </div>
 
             <div className="mb-5 flex items-center gap-4">
               <div
                 className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[24px] text-xl font-extrabold text-white shadow-lg"
-                style={{ backgroundColor: profile.iconBg }}
+                style={{ backgroundColor: "#6366f1" }}
               >
-                {profile.icon}
+                {getInitial(myAi.name)}
               </div>
 
               <div>
                 <h1 className="text-3xl font-extrabold leading-tight text-white">
-                  {profile.name}
+                  {myAi.name}
                 </h1>
 
-                <div
-                  className="mt-2 inline-block rounded-full bg-white px-3 py-1 text-xs font-extrabold"
-                  style={{ color: profile.accent }}
-                >
-                  {profile.label}
+                <div className="mt-2 inline-block rounded-full bg-white px-3 py-1 text-xs font-extrabold text-blue-700">
+                  My AI
                 </div>
               </div>
             </div>
 
             <p className="text-sm font-semibold leading-6 text-blue-50">
-              {profile.description}
+              {myAi.description || "ユーザーが作成した予測AIです。"}
             </p>
 
             <div className="mt-5 grid grid-cols-3 gap-3 text-center">
@@ -380,10 +378,7 @@ export default function AiProfilePage({
                   的中率
                 </div>
 
-                <div
-                  className="mt-1 text-2xl font-extrabold"
-                  style={{ color: profile.accent }}
-                >
+                <div className="mt-1 text-2xl font-extrabold text-blue-700">
                   {stats.hitRate}%
                 </div>
               </div>
@@ -434,7 +429,7 @@ export default function AiProfilePage({
             <div className="p-3">
               <div className="text-[11px] font-bold text-gray-400">種別</div>
               <div className="mt-1 text-sm font-extrabold text-blue-700">
-                公式AI
+                My AI
               </div>
             </div>
           </div>
@@ -486,21 +481,20 @@ export default function AiProfilePage({
                 予測スタイル
               </div>
 
-              <div
-                className="mt-2 inline-block rounded-full px-3 py-1 text-sm font-extrabold"
-                style={{
-                  backgroundColor: `${profile.iconBg}18`,
-                  color: profile.accent,
-                }}
-              >
-                {profile.style}
+              <div className="mt-2 inline-block rounded-full bg-blue-50 px-3 py-1 text-sm font-extrabold text-blue-700">
+                {myAi.style || "バランス型"}
               </div>
             </div>
 
             <div className="rounded-2xl bg-gray-50 p-4">
-              <div className="text-xs font-bold text-gray-400">参加形式</div>
+              <div className="text-xs font-bold text-gray-400">
+                得意カテゴリ
+              </div>
 
-              <div className="mt-2 text-lg font-extrabold">公式AI</div>
+              <div className="mt-2 text-sm font-extrabold text-gray-900">
+                {getCategoryEmoji(myAi.strengthCategory)}{" "}
+                {getCategoryLabel(myAi.strengthCategory)}
+              </div>
             </div>
           </div>
         </section>
@@ -664,18 +658,27 @@ export default function AiProfilePage({
             ))}
 
             {stats.recent.length === 0 && (
-              <div className="rounded-2xl bg-gray-50 p-4 text-center text-sm font-bold text-gray-400">
-                まだこのAIの予測はありません
+              <div className="rounded-2xl bg-gray-50 p-4 text-center">
+                <div className="text-sm font-bold text-gray-400">
+                  このMy AIはまだイベント予測に参加していません
+                </div>
+
+                <Link
+                  href="/races"
+                  className="mt-3 block rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white"
+                >
+                  イベントを選ぶ
+                </Link>
               </div>
             )}
           </div>
         </section>
 
         <Link
-          href="/ranking"
+          href="/my-ai"
           className="block rounded-2xl border border-gray-200 bg-white py-4 text-center font-bold text-gray-600"
         >
-          ランキングへ戻る
+          My AI一覧へ戻る
         </Link>
       </div>
 

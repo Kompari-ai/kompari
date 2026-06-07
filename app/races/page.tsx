@@ -2,202 +2,358 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { db } from "@/lib/firebase";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
+import {
+  eventCategories,
+  getCategoryEmoji,
+  getCategoryLabel,
+} from "@/lib/categories";
+import {
+  normalizeRaceToEvent,
+  type KompariEvent,
+  type LegacyRaceData,
+} from "@/lib/events";
 
-type Prediction = {
-  ai: string;
-  main: string;
-  second?: string;
-  third?: string;
-  confidence?: string;
-  reason?: string;
-  evidence?: string;
-};
+type StatusFilter = "all" | "open" | "finished";
 
-type Race = {
-  id: string;
-  title?: string;
-  venue?: string;
-  startsIn?: string;
-  resultWinner?: string;
-  predictions?: Prediction[];
-};
+function getResultWinner(event: KompariEvent) {
+  return event.result?.winner || event.resultWinner || "";
+}
 
-function getConsensus(predictions: Prediction[] = []) {
+function getStatus(event: KompariEvent) {
+  return getResultWinner(event) ? "finished" : "open";
+}
+
+function topPrediction(event: KompariEvent) {
   const counts: Record<string, number> = {};
 
-  predictions.forEach((prediction) => {
+  event.predictions.forEach((prediction) => {
     if (!prediction.main) return;
     counts[prediction.main] = (counts[prediction.main] || 0) + 1;
   });
 
-  return Object.entries(counts)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)[0];
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+  if (sorted.length === 0) return null;
+
+  return {
+    name: sorted[0][0],
+    count: sorted[0][1],
+  };
 }
 
-function logoFor(ai: string) {
-  if (ai === "ChatGPT") return "/logos/chatgpt.svg";
-  if (ai === "Claude") return "/logos/claude.png";
-  if (ai === "Gemini") return "/logos/Gemini.png";
-  return "/logos/deepseek.png";
+function EventCard({ event }: { event: KompariEvent }) {
+  const resultWinner = getResultWinner(event);
+  const status = getStatus(event);
+  const top = topPrediction(event);
+
+  return (
+    <Link
+      href={`/race/${event.id}`}
+      className="block rounded-[26px] border border-gray-100 bg-white p-4 shadow-sm"
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-extrabold text-blue-700">
+            {getCategoryEmoji(event.category)} {getCategoryLabel(event.category)}
+          </span>
+
+          <span
+            className={`rounded-full px-3 py-1 text-[11px] font-bold ${
+              status === "finished"
+                ? "bg-gray-100 text-gray-600"
+                : "bg-green-50 text-green-700"
+            }`}
+          >
+            {status === "finished" ? "結果済み" : "予測中"}
+          </span>
+        </div>
+
+        <span className="text-lg font-extrabold text-gray-300">›</span>
+      </div>
+
+      <h2 className="text-lg font-extrabold leading-6">{event.title}</h2>
+
+      <p className="mt-1 text-sm font-bold text-gray-500">
+        {event.venue || "開催情報未入力"}
+      </p>
+
+      {event.startsIn && (
+        <p className="mt-1 text-xs font-bold text-blue-700">
+          {event.startsIn}
+        </p>
+      )}
+
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-2xl bg-gray-50 p-3">
+          <div className="text-[11px] font-bold text-gray-400">候補</div>
+          <div className="mt-1 text-lg font-extrabold">
+            {event.candidates.length}
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-gray-50 p-3">
+          <div className="text-[11px] font-bold text-gray-400">AI予測</div>
+          <div className="mt-1 text-lg font-extrabold">
+            {event.predictions.length}
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-gray-50 p-3">
+          <div className="text-[11px] font-bold text-gray-400">結果</div>
+          <div className="mt-1 truncate text-sm font-extrabold">
+            {resultWinner || "未入力"}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-blue-50 p-3">
+        <div className="text-xs font-bold text-gray-500">
+          AIコンセンサス本命
+        </div>
+
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <div className="truncate font-extrabold text-blue-700">
+            {top?.name || "まだAI予測がありません"}
+          </div>
+
+          <div className="shrink-0 text-xs font-bold text-blue-700">
+            {top ? `${top.count}/${event.predictions.length}` : "-"}
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 export default function RacesPage() {
-  const [races, setRaces] = useState<Race[]>([]);
+  const [events, setEvents] = useState<KompariEvent[]>([]);
+  const [keyword, setKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   useEffect(() => {
     const q = query(collection(db, "races"), orderBy("createdAt", "desc"));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Race[];
+      const list = snapshot.docs.map((document) => {
+        const data = {
+          id: document.id,
+          ...document.data(),
+        } as LegacyRaceData;
 
-      setRaces(list);
+        return normalizeRaceToEvent(data);
+      });
+
+      setEvents(list);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const total = useMemo(() => races.length, [races]);
+  const filteredEvents = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLowerCase();
+
+    return events.filter((event) => {
+      const resultWinner = getResultWinner(event);
+
+      if (statusFilter !== "all" && getStatus(event) !== statusFilter) {
+        return false;
+      }
+
+      if (categoryFilter !== "all" && event.category !== categoryFilter) {
+        return false;
+      }
+
+      if (!normalizedKeyword) {
+        return true;
+      }
+
+      const targetText = [
+        event.title,
+        event.venue,
+        event.startsIn,
+        resultWinner,
+        ...event.candidates,
+        ...event.predictions.map((prediction) => prediction.ai),
+        ...event.predictions.map((prediction) => prediction.main),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return targetText.includes(normalizedKeyword);
+    });
+  }, [categoryFilter, events, keyword, statusFilter]);
+
+  const openCount = events.filter((event) => getStatus(event) === "open").length;
+  const finishedCount = events.filter(
+    (event) => getStatus(event) === "finished"
+  ).length;
 
   return (
-    <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
+    <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
       <TopBar />
 
-      <div className="max-w-[430px] mx-auto px-4 py-4 pb-24">
-        <section className="rounded-3xl bg-gradient-to-br from-blue-700 to-blue-950 p-5 text-white shadow-lg mb-5">
-          <div className="text-xs opacity-80 mb-2">RACE ARENA</div>
+      <div className="mx-auto max-w-[430px] px-4 pb-28 pt-4">
+        <section className="mb-5 overflow-hidden rounded-[30px] bg-white shadow-sm">
+          <div
+            className="p-5 text-white"
+            style={{
+              background:
+                "linear-gradient(135deg, #2563eb 0%, #1d4ed8 45%, #172554 100%)",
+            }}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <span className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold tracking-[0.18em] text-white">
+                EVENTS
+              </span>
 
-          <h1 className="text-2xl font-extrabold mb-2">
-            AI予測レース一覧
-          </h1>
+              <Link
+                href="/admin"
+                className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-blue-700"
+              >
+                作成
+              </Link>
+            </div>
 
-          <p className="text-sm opacity-80 leading-6">
-            登録されたレースをAIコンセンサス順に確認できます。
-          </p>
+            <h1 className="text-3xl font-extrabold">予測イベント</h1>
 
-          <div className="mt-4 rounded-2xl bg-white/10 p-3">
-            <div className="text-xs opacity-70">登録レース数</div>
-            <div className="text-2xl font-extrabold">{total}件</div>
+            <p className="mt-3 text-sm font-semibold leading-6 text-blue-50">
+              競馬、スポーツ、株価、暗号資産などの予測をAIごとに比較します。
+            </p>
+
+            <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-2xl bg-white p-3">
+                <div className="text-[11px] font-bold text-gray-500">総数</div>
+                <div className="mt-1 text-2xl font-extrabold text-blue-700">
+                  {events.length}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white p-3">
+                <div className="text-[11px] font-bold text-gray-500">
+                  予測中
+                </div>
+                <div className="mt-1 text-2xl font-extrabold text-gray-900">
+                  {openCount}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white p-3">
+                <div className="text-[11px] font-bold text-gray-500">
+                  結果済
+                </div>
+                <div className="mt-1 text-2xl font-extrabold text-gray-900">
+                  {finishedCount}
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
-        <div className="space-y-4">
-          {races.map((race) => {
-            const predictions = race.predictions || [];
-            const consensus = getConsensus(predictions);
+        <section className="mb-4 rounded-[24px] bg-white p-4 shadow-sm">
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold text-gray-500">
+              キーワード検索
+            </span>
 
-            return (
-              <div
-                key={race.id}
-                className="rounded-3xl bg-white p-4 shadow-sm border border-gray-100"
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="イベント名・候補・AI名で検索"
+              className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-400 focus:bg-white"
+            />
+          </label>
+
+          <div className="mt-4 grid grid-cols-3 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
+            {[
+              { value: "all", label: "すべて" },
+              { value: "open", label: "予測中" },
+              { value: "finished", label: "結果済" },
+            ].map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setStatusFilter(item.value as StatusFilter)}
+                className={`py-3 text-sm font-extrabold ${
+                  statusFilter === item.value
+                    ? "bg-blue-700 text-white"
+                    : "text-gray-600"
+                }`}
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <div className="text-xs font-bold text-blue-700 mb-1">
-                      AI RACE ANALYSIS
-                    </div>
+                {item.label}
+              </button>
+            ))}
+          </div>
 
-                    <h2 className="text-lg font-extrabold">
-                      {race.title || "無題のレース"}
-                    </h2>
-                  </div>
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => setCategoryFilter("all")}
+              className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold ${
+                categoryFilter === "all"
+                  ? "bg-blue-700 text-white"
+                  : "bg-gray-100 text-gray-600"
+              }`}
+            >
+              すべて
+            </button>
 
-                  <div className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
-                    {race.startsIn || "登録済み"}
-                  </div>
-                </div>
+            {eventCategories.map((category) => (
+              <button
+                key={category.value}
+                type="button"
+                onClick={() => setCategoryFilter(category.value)}
+                className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold ${
+                  categoryFilter === category.value
+                    ? "bg-blue-700 text-white"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {category.emoji} {category.shortLabel}
+              </button>
+            ))}
+          </div>
+        </section>
 
-                <div className="text-xs text-gray-500 mb-4">
-                  {race.venue || "開催場所未入力"}
-                </div>
+        <section className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-extrabold">イベント一覧</h2>
 
-                {race.resultWinner && (
-                  <div className="rounded-2xl bg-yellow-50 p-3 mb-3">
-                    <div className="text-xs font-bold text-yellow-700 mb-1">
-                      レース結果
-                    </div>
-                    <div className="font-extrabold">
-                      1着：{race.resultWinner}
-                    </div>
-                  </div>
-                )}
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-gray-500 shadow-sm">
+            {filteredEvents.length}件表示
+          </span>
+        </section>
 
-                {consensus && (
-                  <div className="rounded-2xl bg-blue-50 p-3 mb-3">
-                    <div className="text-xs font-bold text-blue-700 mb-1">
-                      AIコンセンサス
-                    </div>
+        <section className="space-y-3">
+          {filteredEvents.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
 
-                    <div className="flex items-center justify-between">
-                      <div className="font-extrabold">{consensus.name}</div>
+          {filteredEvents.length === 0 && (
+            <div className="rounded-[24px] bg-white p-6 text-center shadow-sm">
+              <div className="text-3xl">🔍</div>
 
-                      <div className="text-sm font-bold text-blue-700">
-                        {consensus.count}/{predictions.length} AI
-                      </div>
-                    </div>
-
-                    <div className="mt-2 h-2 rounded-full bg-white overflow-hidden">
-                      <div
-                        className="h-2 rounded-full bg-blue-700"
-                        style={{
-                          width: `${
-                            (consensus.count / predictions.length) * 100
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex -space-x-2">
-                    {predictions.map((prediction) => (
-                      <img
-                        key={prediction.ai}
-                        src={logoFor(prediction.ai)}
-                        alt={prediction.ai}
-                        className="w-8 h-8 rounded-full bg-white border border-gray-200 p-1 object-contain"
-                      />
-                    ))}
-                  </div>
-
-                  <div className="text-xs font-bold text-gray-500">
-                    {predictions.length} AI予測
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Link
-                    href={`/race/${race.id}`}
-                    className="rounded-2xl bg-blue-700 text-white text-center py-3 text-sm font-bold"
-                  >
-                    詳細を見る
-                  </Link>
-
-                  <Link
-                    href={`/admin/edit/${race.id}`}
-                    className="rounded-2xl bg-gray-100 text-gray-700 text-center py-3 text-sm font-bold"
-                  >
-                    編集
-                  </Link>
-                </div>
+              <div className="mt-3 text-sm font-bold text-gray-500">
+                条件に合うイベントがありません
               </div>
-            );
-          })}
 
-          {races.length === 0 && (
-            <div className="bg-white rounded-3xl p-5 text-center text-sm text-gray-500">
-              まだレースが登録されていません。
+              <button
+                type="button"
+                onClick={() => {
+                  setKeyword("");
+                  setStatusFilter("all");
+                  setCategoryFilter("all");
+                }}
+                className="mt-4 rounded-2xl bg-blue-700 px-5 py-3 text-sm font-bold text-white"
+              >
+                条件をリセット
+              </button>
             </div>
           )}
-        </div>
+        </section>
       </div>
 
       <BottomNav />

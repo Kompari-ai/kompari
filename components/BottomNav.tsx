@@ -1,34 +1,82 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const navItems = [
+  {
+    label: "ホーム",
+    href: "/",
+    icon: "⌂",
+  },
+  {
+    label: "予測",
+    href: "/races",
+    icon: "◇",
+  },
+  {
+    label: "ランキング",
+    href: "/ranking",
+    icon: "♕",
+  },
+  {
+    label: "My AI",
+    href: "/my-ai",
+    icon: "○",
+  },
+];
+
+function isActive(pathname: string, href: string) {
+  if (href === "/") {
+    return pathname === "/";
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function BottomNav() {
+  const pathname = usePathname();
+
   return (
-    <nav className="fixed bottom-0 left-1/2 z-50 w-full max-w-[430px] -translate-x-1/2 border-t border-gray-200 bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.04)]">
-      <div className="grid grid-cols-4 py-2">
-        <Link href="/" className="flex flex-col items-center gap-1 text-blue-700">
-          <span className="text-xl">🏠</span>
-          <span className="text-[10px] font-bold">ホーム</span>
-        </Link>
+    <nav
+      className="fixed bottom-0 z-50 border-t border-gray-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.08)]"
+      style={{
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "100%",
+        maxWidth: "430px",
+      }}
+    >
+      <div className="grid h-[76px] w-full grid-cols-4 bg-white">
+        {navItems.map((item) => {
+          const active = isActive(pathname, item.href);
 
-<Link
-  href="/races"
-  className="flex flex-col items-center gap-1 text-gray-400"
->
-  <span className="text-xl">🐎</span>
-  <span className="text-[10px] font-bold">レース</span>
-</Link>
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex h-full w-full flex-col items-center justify-center gap-1"
+            >
+              <div
+                className={`flex h-8 w-8 items-center justify-center rounded-2xl text-base font-extrabold ${
+                  active
+                    ? "bg-blue-700 text-white"
+                    : "bg-transparent text-gray-400"
+                }`}
+              >
+                {item.icon}
+              </div>
 
-        <Link
-          href="/ranking"
-          className="flex flex-col items-center gap-1 text-gray-400"
-        >
-          <span className="text-xl">🏆</span>
-          <span className="text-[10px] font-bold">ランキング</span>
-        </Link>
-
-        <a className="flex flex-col items-center gap-1 text-gray-400">
-          <span className="text-xl">🤖</span>
-          <span className="text-[10px] font-bold">マイAI</span>
-        </a>
+              <div
+                className={`text-[11px] font-bold leading-none ${
+                  active ? "text-blue-700" : "text-gray-400"
+                }`}
+              >
+                {item.label}
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );

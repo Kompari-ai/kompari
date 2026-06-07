@@ -1,109 +1,175 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { db } from "@/lib/firebase";
+import { useEffect, useMemo, useState } from "react";
 import {
-  addDoc,
-  collection,
+  doc,
   onSnapshot,
-  query,
+  runTransaction,
   serverTimestamp,
-  where,
 } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
-export function VoteButtons({ ai }: { ai: string }) {
+type VoteType = "up" | "down" | null;
+
+type VoteButtonsProps = {
+  eventId: string;
+  ai: string;
+};
+
+type VoteCounts = {
+  up: number;
+  down: number;
+};
+
+function getVoteDocId(eventId: string, ai: string) {
+  return `${eventId}__${encodeURIComponent(ai)}`;
+}
+
+function getLocalVoteKey(eventId: string, ai: string) {
+  return `kompari-vote-${eventId}-${ai}`;
+}
+
+export function VoteButtons({ eventId, ai }: VoteButtonsProps) {
+  const [counts, setCounts] = useState<VoteCounts>({
+    up: 0,
+    down: 0,
+  });
+
+  const [myVote, setMyVote] = useState<VoteType>(null);
   const [loading, setLoading] = useState(false);
-  const [goodCount, setGoodCount] = useState(0);
-  const [badCount, setBadCount] = useState(0);
-  const [myVote, setMyVote] = useState<"good" | "bad" | null>(null);
 
-  const storageKey = `kompari-vote-${ai}`;
+  const voteDocId = useMemo(() => getVoteDocId(eventId, ai), [eventId, ai]);
+  const localVoteKey = useMemo(
+    () => getLocalVoteKey(eventId, ai),
+    [eventId, ai]
+  );
 
   useEffect(() => {
-    const savedVote = localStorage.getItem(storageKey);
+    const savedVote = localStorage.getItem(localVoteKey);
 
-    if (savedVote === "good" || savedVote === "bad") {
+    if (savedVote === "up" || savedVote === "down") {
       setMyVote(savedVote);
+    } else {
+      setMyVote(null);
     }
+  }, [localVoteKey]);
 
-    const q = query(collection(db, "votes"), where("ai", "==", ai));
+  useEffect(() => {
+    const ref = doc(db, "votes", voteDocId);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let good = 0;
-      let bad = 0;
+    const unsubscribe = onSnapshot(ref, (snapshot) => {
+      if (!snapshot.exists()) {
+        setCounts({
+          up: 0,
+          down: 0,
+        });
+        return;
+      }
 
-      snapshot.docs.forEach((doc) => {
-        const data = doc.data();
+      const data = snapshot.data();
 
-        if (data.type === "good") good += 1;
-        if (data.type === "bad") bad += 1;
+      setCounts({
+        up: Number(data.up || 0),
+        down: Number(data.down || 0),
       });
-
-      setGoodCount(good);
-      setBadCount(bad);
     });
 
     return () => unsubscribe();
-  }, [ai, storageKey]);
+  }, [voteDocId]);
 
-  const vote = async (type: "good" | "bad") => {
-    if (myVote) {
-      alert("このAIにはすでに投票済みです");
-      return;
-    }
-
-    setLoading(true);
+  const vote = async (nextVote: Exclude<VoteType, null>) => {
+    if (loading) return;
 
     try {
-      await addDoc(collection(db, "votes"), {
-        ai,
-        type,
-        createdAt: serverTimestamp(),
+      setLoading(true);
+
+      const ref = doc(db, "votes", voteDocId);
+
+      const previousVote = myVote;
+      const finalVote: VoteType = previousVote === nextVote ? null : nextVote;
+
+      await runTransaction(db, async (transaction) => {
+        const snapshot = await transaction.get(ref);
+
+        const currentUp = snapshot.exists() ? Number(snapshot.data().up || 0) : 0;
+        const currentDown = snapshot.exists()
+          ? Number(snapshot.data().down || 0)
+          : 0;
+
+        let nextUp = currentUp;
+        let nextDown = currentDown;
+
+        if (previousVote === "up") {
+          nextUp -= 1;
+        }
+
+        if (previousVote === "down") {
+          nextDown -= 1;
+        }
+
+        if (finalVote === "up") {
+          nextUp += 1;
+        }
+
+        if (finalVote === "down") {
+          nextDown += 1;
+        }
+
+        transaction.set(
+          ref,
+          {
+            eventId,
+            ai,
+            up: Math.max(0, nextUp),
+            down: Math.max(0, nextDown),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       });
 
-      localStorage.setItem(storageKey, type);
-      setMyVote(type);
+      if (finalVote) {
+        localStorage.setItem(localVoteKey, finalVote);
+      } else {
+        localStorage.removeItem(localVoteKey);
+      }
+
+      setMyVote(finalVote);
     } catch (error) {
       console.error(error);
-      alert("保存に失敗しました");
+      alert("投票の保存に失敗しました");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
-    <div className="mt-4">
-      <div className="flex gap-2">
-        <button
-          onClick={() => vote("good")}
-          disabled={loading || !!myVote}
-          className={`flex-1 rounded-2xl py-3 font-bold disabled:opacity-60 ${
-            myVote === "good"
-              ? "bg-blue-700 text-white"
-              : "bg-blue-50 text-blue-700"
-          }`}
-        >
-          👍 Good {goodCount}
-        </button>
+    <div className="grid grid-cols-2 gap-2">
+      <button
+        type="button"
+        onClick={() => vote("up")}
+        disabled={loading}
+        className={`rounded-full px-3 py-2 text-xs font-extrabold transition disabled:opacity-50 ${
+          myVote === "up"
+            ? "bg-blue-700 text-white"
+            : "bg-blue-50 text-blue-700"
+        }`}
+      >
+        👍 いいね {counts.up}
+      </button>
 
-        <button
-          onClick={() => vote("bad")}
-          disabled={loading || !!myVote}
-          className={`flex-1 rounded-2xl py-3 font-bold disabled:opacity-60 ${
-            myVote === "bad"
-              ? "bg-gray-800 text-white"
-              : "bg-gray-200 text-gray-700"
-          }`}
-        >
-          👎 Bad {badCount}
-        </button>
-      </div>
-
-      {myVote && (
-        <p className="mt-2 text-center text-xs text-gray-500">
-          投票済み：{myVote === "good" ? "Good" : "Bad"}
-        </p>
-      )}
+      <button
+        type="button"
+        onClick={() => vote("down")}
+        disabled={loading}
+        className={`rounded-full px-3 py-2 text-xs font-extrabold transition disabled:opacity-50 ${
+          myVote === "down"
+            ? "bg-red-600 text-white"
+            : "bg-red-50 text-red-700"
+        }`}
+      >
+        👎 うーん {counts.down}
+      </button>
     </div>
   );
 }

@@ -1,296 +1,460 @@
 "use client";
 
 import { useState } from "react";
-import { db } from "@/lib/firebase";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
+import { BottomNav } from "@/components/BottomNav";
+import {
+  eventCategories,
+  getCategoryEmoji,
+  getCategoryLabel,
+} from "@/lib/categories";
+import type { KompariPrediction } from "@/lib/events";
 
-const aiNames = ["ChatGPT", "Claude", "Gemini", "DeepSeek"];
-
-type PredictionInput = {
-  ai: string;
-  main: string;
-  second: string;
-  third: string;
-  confidence: string;
-  reason: string;
-  evidence: string;
-};
+const officialAis = ["ChatGPT", "Claude", "Gemini", "DeepSeek"];
 
 export default function AdminPage() {
-  const [password, setPassword] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
+  const router = useRouter();
+
+  const [category, setCategory] = useState("horse_racing");
   const [title, setTitle] = useState("");
   const [venue, setVenue] = useState("");
   const [startsIn, setStartsIn] = useState("");
+  const [candidateText, setCandidateText] = useState("");
   const [resultWinner, setResultWinner] = useState("");
+  const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [predictions, setPredictions] = useState<KompariPrediction[]>([]);
 
-  const [predictions, setPredictions] = useState<PredictionInput[]>(
-    aiNames.map((ai) => ({
-      ai,
-      main: "",
-      second: "",
-      third: "",
-      confidence: "",
-      reason: "",
-      evidence: "",
-    }))
-  );
+  const candidates = candidateText
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
 
-  const updatePrediction = (
-    index: number,
-    key: keyof PredictionInput,
-    value: string
-  ) => {
-    const next = [...predictions];
-    next[index] = { ...next[index], [key]: value };
-    setPredictions(next);
-  };
+  const canCreate = title.trim().length > 0 && candidates.length >= 2;
 
   const generatePredictions = async () => {
-    if (!title) {
-      alert("先にレース名を入力してください");
+    if (!canCreate) {
+      alert("イベント名と候補を2つ以上入力してください");
       return;
     }
 
-    setSaving(true);
-
     try {
-      const results = await Promise.all(
-        aiNames.map(async (aiName) => {
-          const res = await fetch("/api/generate-prediction", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title, venue, aiName }),
-          });
+      setGenerating(true);
 
-          if (!res.ok) {
-            throw new Error("AI生成に失敗しました");
-          }
+      const generated: KompariPrediction[] = [];
 
-          return res.json();
-        })
-      );
+      for (const aiName of officialAis) {
+        const response = await fetch("/api/generate-prediction", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: title.trim(),
+            category,
+            aiName,
+            candidates,
+          }),
+        });
 
-      setPredictions(results);
+        if (!response.ok) {
+          throw new Error(`${aiName}の予測生成に失敗しました`);
+        }
+
+        const data = (await response.json()) as KompariPrediction;
+
+        generated.push({
+          ...data,
+          ai: aiName,
+          source: "official",
+        });
+      }
+
+      setPredictions(generated);
     } catch (error) {
       console.error(error);
       alert("AI予測の生成に失敗しました");
+    } finally {
+      setGenerating(false);
     }
-
-    setSaving(false);
   };
 
-  const saveRace = async () => {
-    if (!title) {
-      alert("レース名は必須です");
-      return;
+  const createPredictionsBeforeSave = async () => {
+    const generated: KompariPrediction[] = [];
+
+    for (const aiName of officialAis) {
+      const response = await fetch("/api/generate-prediction", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          category,
+          aiName,
+          candidates,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`${aiName}の予測生成に失敗しました`);
+      }
+
+      const data = (await response.json()) as KompariPrediction;
+
+      generated.push({
+        ...data,
+        ai: aiName,
+        source: "official",
+      });
     }
 
-    const validPredictions = predictions.filter((p) => p.main);
+    return generated;
+  };
 
-    if (validPredictions.length === 0) {
-      alert("最低1つのAI予測を入力してください");
+  const createEvent = async () => {
+    if (!canCreate) {
+      alert("イベント名と候補を2つ以上入力してください");
       return;
     }
-
-    setSaving(true);
 
     try {
-      await addDoc(collection(db, "races"), {
-        title,
-        venue,
-        startsIn,
-        resultWinner,
-        predictions: validPredictions,
+      setSaving(true);
+
+      const finalPredictions =
+        predictions.length > 0
+          ? predictions
+          : await createPredictionsBeforeSave();
+
+      const docRef = await addDoc(collection(db, "races"), {
+        category,
+        title: title.trim(),
+        venue: venue.trim(),
+        startsIn: startsIn.trim(),
+        candidates,
+        resultWinner: resultWinner || "",
+        result: resultWinner ? { winner: resultWinner } : null,
+        predictions: finalPredictions,
         createdAt: serverTimestamp(),
       });
 
-      alert("保存しました");
-
-      setTitle("");
-      setVenue("");
-      setStartsIn("");
-      setResultWinner("");
-      setPredictions(
-        aiNames.map((ai) => ({
-          ai,
-          main: "",
-          second: "",
-          third: "",
-          confidence: "",
-          reason: "",
-          evidence: "",
-        }))
-      );
+      alert("イベントを作成しました");
+      router.push(`/race/${docRef.id}`);
     } catch (error) {
       console.error(error);
-      alert("保存に失敗しました");
+      alert(
+        "イベント作成に失敗しました。Googleログイン中のメールアドレスとFirestoreルールを確認してください。"
+      );
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
   };
 
-  if (!unlocked) {
-    return (
-      <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
-        <div className="max-w-[430px] mx-auto px-4 py-20">
-          <section className="bg-white rounded-3xl p-5 shadow-sm">
-            <h1 className="text-2xl font-extrabold mb-3">管理画面ログイン</h1>
-
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              placeholder="管理パスワード"
-              className="w-full rounded-xl border border-gray-200 px-3 py-3 mb-4"
-            />
-
-            <button
-              onClick={() => {
-                if (password === "kompari-admin") {
-                  setUnlocked(true);
-                } else {
-                  alert("パスワードが違います");
-                }
-              }}
-              className="w-full rounded-2xl bg-blue-700 text-white py-4 font-bold"
-            >
-              ログイン
-            </button>
-          </section>
-        </div>
-      </main>
-    );
-  }
+  const clearForm = () => {
+    setTitle("");
+    setVenue("");
+    setStartsIn("");
+    setCandidateText("");
+    setResultWinner("");
+    setPredictions([]);
+  };
 
   return (
-    <main className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
+    <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
       <TopBar />
 
-      <div className="max-w-[430px] mx-auto px-4 py-4">
-        <section className="rounded-3xl bg-blue-700 p-5 text-white mb-5">
-          <div className="text-xs opacity-80 mb-2">ADMIN</div>
-          <h1 className="text-2xl font-extrabold">レース登録</h1>
-          <p className="text-sm opacity-80 mt-2">
-            AI予測を自動生成して、結果も登録できます。
-          </p>
+      <div className="mx-auto max-w-[430px] px-4 pb-28 pt-4">
+        <section className="mb-5 overflow-hidden rounded-[32px] bg-white shadow-sm">
+          <div
+            className="p-5 text-white"
+            style={{
+              background:
+                "linear-gradient(135deg, #2563eb 0%, #1d4ed8 45%, #172554 100%)",
+            }}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <span className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold tracking-[0.18em] text-white">
+                ADMIN
+              </span>
+
+              <span className="rounded-full bg-white px-4 py-2 text-xs font-extrabold text-blue-700">
+                作成
+              </span>
+            </div>
+
+            <h1 className="text-3xl font-black leading-tight">
+              イベント作成
+            </h1>
+
+            <p className="mt-3 text-sm font-semibold leading-6 text-blue-50">
+              予測対象を作成し、公式AIの予測を生成します。
+            </p>
+          </div>
         </section>
 
-        <section className="bg-white rounded-3xl p-4 shadow-sm space-y-4 mb-5">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="レース名"
-            className="w-full rounded-xl border border-gray-200 px-3 py-3"
-          />
+        <section className="mb-5 rounded-[26px] bg-white p-4 shadow-sm">
+          <div className="mb-3 text-sm font-extrabold text-gray-700">
+            管理メニュー
+          </div>
 
-          <input
-            value={venue}
-            onChange={(e) => setVenue(e.target.value)}
-            placeholder="開催場所"
-            className="w-full rounded-xl border border-gray-200 px-3 py-3"
-          />
-
-          <input
-            value={startsIn}
-            onChange={(e) => setStartsIn(e.target.value)}
-            placeholder="発走まで"
-            className="w-full rounded-xl border border-gray-200 px-3 py-3"
-          />
-
-          <input
-            value={resultWinner}
-            onChange={(e) => setResultWinner(e.target.value)}
-            placeholder="結果：1着馬名（後から入力でもOK）"
-            className="w-full rounded-xl border border-gray-200 px-3 py-3"
-          />
-        </section>
-
-        <button
-          onClick={generatePredictions}
-          disabled={saving}
-          className="mb-5 w-full rounded-2xl bg-black text-white py-4 font-bold disabled:opacity-50"
-        >
-          {saving ? "生成中..." : "AI予測を生成"}
-        </button>
-
-        <div className="space-y-4">
-          {predictions.map((prediction, index) => (
-            <section
-              key={prediction.ai}
-              className="bg-white rounded-3xl p-4 shadow-sm"
+          <div className="grid grid-cols-2 gap-3">
+            <Link
+              href="/admin"
+              className="rounded-2xl bg-blue-700 py-4 text-center text-sm font-extrabold text-white"
             >
-              <div className="font-extrabold text-blue-700 mb-3">
-                {prediction.ai}
+              イベント作成
+            </Link>
+
+            <Link
+              href="/admin/results"
+              className="rounded-2xl bg-gray-100 py-4 text-center text-sm font-extrabold text-gray-700"
+            >
+              結果入力
+            </Link>
+          </div>
+
+          <Link
+            href="/ranking"
+            className="mt-3 block rounded-2xl border border-gray-200 bg-white py-4 text-center text-sm font-extrabold text-gray-700"
+          >
+            ランキング確認
+          </Link>
+        </section>
+
+        <section className="space-y-4 rounded-[26px] bg-white p-4 shadow-sm">
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold text-gray-500">
+              カテゴリ
+            </span>
+
+            <select
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setPredictions([]);
+              }}
+              className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-sm font-bold outline-none"
+            >
+              {eventCategories.map((item, index) => (
+                <option key={`${item.value}-${index}`} value={item.value}>
+                  {item.emoji} {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold text-gray-500">
+              イベント名
+            </span>
+
+            <input
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setPredictions([]);
+              }}
+              placeholder="例：阪神 vs 巨人"
+              className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm font-bold outline-none focus:border-blue-400 focus:bg-white"
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-2 block text-xs font-bold text-gray-500">
+                開催場所
+              </span>
+
+              <input
+                value={venue}
+                onChange={(e) => setVenue(e.target.value)}
+                placeholder="例：甲子園"
+                className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm font-bold outline-none focus:border-blue-400 focus:bg-white"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-xs font-bold text-gray-500">
+                開始時期
+              </span>
+
+              <input
+                value={startsIn}
+                onChange={(e) => setStartsIn(e.target.value)}
+                placeholder="例：明日18:00"
+                className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm font-bold outline-none focus:border-blue-400 focus:bg-white"
+              />
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold text-gray-500">
+              候補リスト
+            </span>
+
+            <textarea
+              value={candidateText}
+              onChange={(e) => {
+                setCandidateText(e.target.value);
+                setPredictions([]);
+              }}
+              placeholder={`候補を1行ずつ入力してください\n例：\n阪神勝利\n巨人勝利\n引き分け`}
+              rows={7}
+              className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm font-bold leading-6 outline-none focus:border-blue-400 focus:bg-white"
+            />
+          </label>
+
+          <div className="rounded-2xl bg-blue-50 p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-sm font-extrabold text-blue-700">
+                現在のカテゴリ
               </div>
 
-              <input
-                value={prediction.main}
-                onChange={(e) =>
-                  updatePrediction(index, "main", e.target.value)
-                }
-                placeholder="◎ 本命"
-                className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
-              />
+              <div className="text-sm font-extrabold text-blue-700">
+                {getCategoryEmoji(category)} {getCategoryLabel(category)}
+              </div>
+            </div>
 
-              <input
-                value={prediction.second}
-                onChange={(e) =>
-                  updatePrediction(index, "second", e.target.value)
-                }
-                placeholder="○ 対抗"
-                className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
-              />
+            <div className="text-xs font-bold leading-5 text-gray-500">
+              候補数：{candidates.length}件 / AI予測：
+              {predictions.length}件
+            </div>
+          </div>
 
-              <input
-                value={prediction.third}
-                onChange={(e) =>
-                  updatePrediction(index, "third", e.target.value)
-                }
-                placeholder="▲ 穴"
-                className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
-              />
+          {candidates.length > 0 && (
+            <div className="rounded-2xl bg-gray-50 p-4">
+              <div className="mb-3 text-xs font-bold text-gray-500">
+                入力された候補
+              </div>
 
-              <input
-                value={prediction.confidence}
-                onChange={(e) =>
-                  updatePrediction(index, "confidence", e.target.value)
-                }
-                placeholder="信頼度"
-                className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3"
-              />
+              <div className="flex flex-wrap gap-2">
+                {candidates.map((candidate, index) => (
+                  <span
+                    key={`${candidate}-${index}`}
+                    className="rounded-full bg-white px-3 py-2 text-xs font-extrabold text-gray-700"
+                  >
+                    {candidate}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
-              <textarea
-                value={prediction.reason}
-                onChange={(e) =>
-                  updatePrediction(index, "reason", e.target.value)
-                }
-                placeholder="予測理由"
-                className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-3 min-h-24"
-              />
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold text-gray-500">
+              結果 winner
+            </span>
 
-              <textarea
-                value={prediction.evidence}
-                onChange={(e) =>
-                  updatePrediction(index, "evidence", e.target.value)
-                }
-                placeholder="データ根拠"
-                className="w-full rounded-xl border border-gray-200 px-3 py-3 min-h-24"
-              />
-            </section>
-          ))}
-        </div>
+            <select
+              value={resultWinner}
+              onChange={(e) => setResultWinner(e.target.value)}
+              className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-sm font-bold outline-none"
+            >
+              <option value="">未入力</option>
 
-        <button
-          onClick={saveRace}
-          disabled={saving}
-          className="mt-5 mb-10 w-full rounded-2xl bg-blue-700 text-white py-4 font-bold disabled:opacity-50"
-        >
-          {saving ? "保存中..." : "Firestoreに保存"}
-        </button>
+              {candidates.map((candidate, index) => (
+                <option key={`${candidate}-${index}`} value={candidate}>
+                  {candidate}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={generatePredictions}
+              disabled={!canCreate || generating || saving}
+              className="rounded-2xl bg-gray-900 py-4 text-sm font-extrabold text-white disabled:bg-gray-300"
+            >
+              {generating ? "生成中..." : "AI予測生成"}
+            </button>
+
+            <button
+              type="button"
+              onClick={createEvent}
+              disabled={!canCreate || generating || saving}
+              className="rounded-2xl bg-blue-700 py-4 text-sm font-extrabold text-white disabled:bg-gray-300"
+            >
+              {saving ? "作成中..." : "イベント作成"}
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={clearForm}
+            className="w-full rounded-2xl bg-gray-100 py-4 text-sm font-extrabold text-gray-700"
+          >
+            入力をクリア
+          </button>
+        </section>
+
+        {predictions.length > 0 && (
+          <section className="mt-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-extrabold">生成済みAI予測</h2>
+
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-gray-500 shadow-sm">
+                {predictions.length}件
+              </span>
+            </div>
+
+            {predictions.map((prediction, index) => (
+              <article
+                key={`${prediction.ai}-${index}`}
+                className="rounded-[24px] bg-white p-4 shadow-sm"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-lg font-extrabold">{prediction.ai}</h3>
+
+                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                    {prediction.confidence || "-"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-2xl bg-blue-50 p-3">
+                    <div className="text-[11px] font-bold text-gray-500">
+                      本命
+                    </div>
+                    <div className="mt-1 truncate text-sm font-extrabold text-blue-700">
+                      {prediction.main}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-3">
+                    <div className="text-[11px] font-bold text-gray-400">
+                      対抗
+                    </div>
+                    <div className="mt-1 truncate text-sm font-extrabold">
+                      {prediction.second || "-"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 p-3">
+                    <div className="text-[11px] font-bold text-gray-400">
+                      3番手
+                    </div>
+                    <div className="mt-1 truncate text-sm font-extrabold">
+                      {prediction.third || "-"}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="mt-3 rounded-2xl bg-gray-50 p-3 text-sm font-semibold leading-6 text-gray-600">
+                  {prediction.reason}
+                </p>
+              </article>
+            ))}
+          </section>
+        )}
       </div>
+
+      <BottomNav />
     </main>
   );
 }
