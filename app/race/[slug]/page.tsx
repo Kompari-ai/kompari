@@ -122,9 +122,7 @@ function getAiProfileLink(prediction: KompariPrediction, myAis: MyAi[]) {
     return `/my-ai/${matchedMyAi.id}`;
   }
 
-  const slug = prediction.ai.toLowerCase();
-
-  return `/ai/${slug}`;
+  return `/ai/${prediction.ai.toLowerCase()}`;
 }
 
 function getAiInitial(prediction: KompariPrediction) {
@@ -311,9 +309,7 @@ function CandidateCard({
   return (
     <div
       className={`rounded-[24px] border p-4 shadow-sm ${
-        isWinner
-          ? "border-green-100 bg-green-50"
-          : "border-gray-100 bg-white"
+        isWinner ? "border-green-100 bg-green-50" : "border-gray-100 bg-white"
       }`}
     >
       <div className="mb-3 flex items-center justify-between">
@@ -346,9 +342,7 @@ function CandidateCard({
       <div className="rounded-2xl bg-gray-50 p-3">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-bold text-gray-500">AI支持率</span>
-          <span className="text-xs font-extrabold text-blue-700">
-            {rate}%
-          </span>
+          <span className="text-xs font-extrabold text-blue-700">{rate}%</span>
         </div>
 
         <div className="h-2 overflow-hidden rounded-full bg-white">
@@ -773,13 +767,6 @@ export default function RaceDetailPage({
                 <div className="mt-3 text-sm font-bold text-gray-500">
                   まだAI予測がありません
                 </div>
-
-                <Link
-                  href={`/admin/edit/${event.id}`}
-                  className="mt-4 block rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white"
-                >
-                  公式AI予測を生成する
-                </Link>
               </div>
             )}
           </section>
@@ -789,7 +776,7 @@ export default function RaceDetailPage({
           <section className="space-y-3">
             {candidates.map((candidate, index) => (
               <CandidateCard
-                key={candidate}
+                key={`${candidate}-${index}`}
                 candidate={candidate}
                 index={index}
                 consensusCount={consensusMap[candidate] || 0}
@@ -806,19 +793,12 @@ export default function RaceDetailPage({
           </section>
         )}
 
-        <section className="mt-5 grid grid-cols-2 gap-3">
+        <section className="mt-5">
           <Link
             href="/races"
-            className="rounded-2xl bg-white py-4 text-center text-sm font-bold text-gray-700 shadow-sm"
+            className="block rounded-2xl bg-white py-4 text-center text-sm font-bold text-gray-700 shadow-sm"
           >
             一覧へ戻る
-          </Link>
-
-          <Link
-            href={`/admin/edit/${event.id}`}
-            className="rounded-2xl bg-blue-700 py-4 text-center text-sm font-bold text-white"
-          >
-            編集する
           </Link>
         </section>
       </div>
