@@ -235,9 +235,7 @@ export default function MyAiPage() {
                 USER AI LAB
               </span>
 
-              <span className="text-xs font-bold text-blue-100">
-                MY AI
-              </span>
+              <span className="text-xs font-bold text-blue-100">MY AI</span>
             </div>
 
             <h1 className="text-3xl font-extrabold">My AI</h1>
@@ -268,9 +266,7 @@ export default function MyAiPage() {
               </div>
 
               <div className="rounded-2xl bg-white p-3">
-                <div className="text-[11px] font-bold text-gray-500">
-                  的中
-                </div>
+                <div className="text-[11px] font-bold text-gray-500">的中</div>
 
                 <div className="mt-1 text-2xl font-extrabold text-gray-900">
                   {totalStats.hit}
@@ -281,27 +277,21 @@ export default function MyAiPage() {
 
           <div className="grid grid-cols-3 divide-x divide-gray-100 bg-white text-center">
             <div className="p-3">
-              <div className="text-[11px] font-bold text-gray-400">
-                結果済
-              </div>
+              <div className="text-[11px] font-bold text-gray-400">結果済</div>
               <div className="mt-1 text-lg font-extrabold">
                 {totalStats.finished}
               </div>
             </div>
 
             <div className="p-3">
-              <div className="text-[11px] font-bold text-gray-400">
-                予測中
-              </div>
+              <div className="text-[11px] font-bold text-gray-400">予測中</div>
               <div className="mt-1 text-lg font-extrabold">
                 {totalStats.pending}
               </div>
             </div>
 
             <div className="p-3">
-              <div className="text-[11px] font-bold text-gray-400">
-                収益化
-              </div>
+              <div className="text-[11px] font-bold text-gray-400">収益化</div>
               <div className="mt-1 text-sm font-extrabold text-blue-700">
                 候補
               </div>
