@@ -172,9 +172,9 @@ function categoryRows(stats: MyAiStats) {
 }
 
 function resultLabel(hit: boolean | null) {
-  if (hit === null) return "予測中";
+  if (hit === null) return "判定待ち";
   if (hit) return "的中";
-  return "不的中";
+  return "外れ";
 }
 
 function resultClass(hit: boolean | null) {
@@ -306,7 +306,9 @@ export default function MyAiDetailPage({
 
         <div className="mx-auto max-w-[430px] px-4 pb-28 pt-8">
           <section className="rounded-[24px] bg-white p-5 text-center shadow-sm">
-            <h1 className="text-xl font-extrabold">My AIが見つかりません</h1>
+            <h1 className="text-xl font-extrabold">
+              My AIが見つかりません
+            </h1>
 
             <p className="mt-2 text-sm leading-6 text-gray-500">
               このAIは削除されたか、Firestoreに保存されていない可能性があります。
@@ -369,7 +371,8 @@ export default function MyAiDetailPage({
             </div>
 
             <p className="text-sm font-semibold leading-6 text-blue-50">
-              {myAi.description || "ユーザーが作成した予測AIです。"}
+              {myAi.description ||
+                "ユーザーが作成した予測AIです。イベントに参加すると、成績がここに表示されます。"}
             </p>
 
             <div className="mt-5 grid grid-cols-3 gap-3 text-center">
@@ -420,14 +423,14 @@ export default function MyAiDetailPage({
             </div>
 
             <div className="p-3">
-              <div className="text-[11px] font-bold text-gray-400">予測中</div>
+              <div className="text-[11px] font-bold text-gray-400">判定待ち</div>
               <div className="mt-1 text-lg font-extrabold">
                 {stats.pending}
               </div>
             </div>
 
             <div className="p-3">
-              <div className="text-[11px] font-bold text-gray-400">種別</div>
+              <div className="text-[11px] font-bold text-gray-400">種類</div>
               <div className="mt-1 text-sm font-extrabold text-blue-700">
                 My AI
               </div>
@@ -455,9 +458,7 @@ export default function MyAiDetailPage({
             </div>
 
             <div className="rounded-2xl bg-red-50 p-4">
-              <div className="text-xs font-bold text-red-700">
-                👎 うーん
-              </div>
+              <div className="text-xs font-bold text-red-700">👎 うーん</div>
               <div className="mt-1 text-2xl font-extrabold text-red-700">
                 {voteStats.down}
               </div>
@@ -531,9 +532,7 @@ export default function MyAiDetailPage({
               </div>
 
               <div className="rounded-xl bg-white p-2">
-                <div className="text-[11px] font-bold text-gray-400">
-                  不的中
-                </div>
+                <div className="text-[11px] font-bold text-gray-400">外れ</div>
                 <div className="mt-1 font-extrabold">
                   {stats.finished - stats.hit}
                 </div>
@@ -541,7 +540,7 @@ export default function MyAiDetailPage({
 
               <div className="rounded-xl bg-white p-2">
                 <div className="text-[11px] font-bold text-gray-400">
-                  予測中
+                  判定待ち
                 </div>
                 <div className="mt-1 font-extrabold">{stats.pending}</div>
               </div>
@@ -554,7 +553,7 @@ export default function MyAiDetailPage({
             <h2 className="text-lg font-extrabold">カテゴリ別成績</h2>
 
             <span className="text-xs font-bold text-gray-400">
-              {categories.length}分野
+              {categories.length}分類
             </span>
           </div>
 
@@ -574,7 +573,7 @@ export default function MyAiDetailPage({
 
                 <div className="mb-2 flex items-center justify-between text-xs font-bold text-gray-400">
                   <span>
-                    予測 {item.total}件 / 結果 {item.finished}件
+                    予測 {item.total}件 / 結果済 {item.finished}件
                   </span>
 
                   <span>的中 {item.hit}件</span>
@@ -660,7 +659,7 @@ export default function MyAiDetailPage({
             {stats.recent.length === 0 && (
               <div className="rounded-2xl bg-gray-50 p-4 text-center">
                 <div className="text-sm font-bold text-gray-400">
-                  このMy AIはまだイベント予測に参加していません
+                  このMy AIは、まだイベント予測に参加していません
                 </div>
 
                 <Link
