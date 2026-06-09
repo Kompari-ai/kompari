@@ -46,17 +46,7 @@ const menuItems = [
     label: "利用規約",
     href: "/terms",
     description: "ルール",
-  },
-  {
-    label: "イベント作成",
-    href: "/admin",
-    description: "管理",
-  },
-  {
-    label: "結果入力",
-    href: "/admin/results",
-    description: "管理",
-  },
+  },
 ];
 
 type RaceDoc = {
