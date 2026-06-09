@@ -338,28 +338,6 @@ export default function HomePage() {
             )}
           </div>
         </section>
-
-        <section className="rounded-2xl border border-dashed border-gray-300 bg-white p-4">
-          <div className="mb-3 text-center text-sm font-extrabold text-gray-600">
-            管理メニュー
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Link
-              href="/admin"
-              className="rounded-2xl bg-blue-700 py-3 text-center text-sm font-bold text-white"
-            >
-              イベント作成
-            </Link>
-
-            <Link
-              href="/admin/results"
-              className="rounded-2xl bg-gray-100 py-3 text-center text-sm font-bold text-gray-700"
-            >
-              結果入力
-            </Link>
-          </div>
-        </section>
       </div>
 
       <BottomNav />
