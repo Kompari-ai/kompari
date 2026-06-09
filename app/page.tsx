@@ -287,10 +287,10 @@ export default function HomePage() {
             </Link>
 
             <Link
-              href="/admin/results"
+              href="/notifications"
               className="rounded-2xl bg-gray-100 py-4 text-center text-sm font-bold text-gray-700"
             >
-              結果入力
+              通知
             </Link>
           </div>
         </section>
