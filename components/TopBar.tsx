@@ -203,7 +203,7 @@ export function TopBar() {
                   </h2>
 
                   <p className="mt-1 text-xs font-semibold leading-5 text-blue-50">
-                    予測イベント、ランキング、My AI、通知、法務ページ、管理画面へ移動できます。
+                    予測イベント、ランキング、My AI、通知、利用規約などを確認できます。
                   </p>
                 </section>
 
