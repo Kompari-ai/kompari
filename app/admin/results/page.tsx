@@ -18,6 +18,7 @@ import {
   getCategoryLabel,
 } from "@/lib/categories";
 import {
+  getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
   type LegacyRaceData,
@@ -27,10 +28,6 @@ type StatusFilter = "all" | "open" | "finished";
 
 function goTo(path: string) {
   window.location.assign(path);
-}
-
-function getResultWinner(event: KompariEvent) {
-  return event.result?.winner || event.resultWinner || "";
 }
 
 function isFinished(event: KompariEvent) {

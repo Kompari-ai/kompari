@@ -9,6 +9,8 @@ import { BottomNav } from "@/components/BottomNav";
 import { VoteButtons } from "@/components/VoteButtons";
 import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
+  formatStartsAt,
+  getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
   type KompariPrediction,
@@ -24,10 +26,6 @@ type MyAi = {
 };
 
 type Tab = "predictions" | "candidates";
-
-function getResultWinner(event: KompariEvent) {
-  return event.result?.winner || event.resultWinner || "";
-}
 
 function getStatusLabel(event: KompariEvent) {
   return getResultWinner(event) ? "結果入力済み" : "予測中";
@@ -587,9 +585,9 @@ export default function RaceDetailPage({
                 {getCategoryLabel(event.category)}
               </span>
 
-              {event.startsIn && (
+              {(event.startsAt || event.startsIn) && (
                 <span className="rounded-full bg-blue-950/35 px-3 py-1 text-xs font-bold text-blue-50 ring-1 ring-white/20">
-                  {event.startsIn}
+                  {event.startsAt ? formatStartsAt(event.startsAt) : event.startsIn}
                 </span>
               )}
             </div>

@@ -8,14 +8,11 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
+  getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
   type LegacyRaceData,
 } from "@/lib/events";
-
-function getResultWinner(event: KompariEvent) {
-  return event.result?.winner || event.resultWinner || "";
-}
 
 function topPrediction(event: KompariEvent) {
   const counts: Record<string, number> = {};
@@ -47,7 +44,7 @@ function NotificationCard({ event }: { event: KompariEvent }) {
           </span>
 
           <span className="rounded-full bg-green-50 px-3 py-1 text-[11px] font-bold text-green-700">
-            結果未入力
+            結果待ち
           </span>
         </div>
       </div>
@@ -146,16 +143,16 @@ export default function NotificationsPage() {
               <span className="text-xl">🔔</span>
             </div>
 
-            <h1 className="text-3xl font-extrabold">通知</h1>
+            <h1 className="text-3xl font-extrabold">結果待ちイベント</h1>
 
             <p className="mt-3 text-sm font-semibold leading-6 text-blue-50">
-              結果入力が必要なイベントや、現在の運用状況を確認できます。
+              AI予測が入っていて、まだ結果が出ていないイベントをまとめています。
             </p>
 
             <div className="mt-5 grid grid-cols-3 gap-3 text-center">
               <div className="rounded-2xl bg-white p-3">
                 <div className="text-[11px] font-bold text-gray-500">
-                  未入力
+                  結果待ち
                 </div>
 
                 <div className="mt-1 text-2xl font-extrabold text-blue-700">
@@ -187,14 +184,14 @@ export default function NotificationsPage() {
         </section>
 
         <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
-          <h2 className="mb-4 text-lg font-extrabold">すぐ行う操作</h2>
+          <h2 className="mb-4 text-lg font-extrabold">ページへ移動</h2>
 
           <div className="grid grid-cols-2 gap-3">
             <Link
               href="/ranking"
               className="rounded-2xl bg-blue-700 py-4 text-center text-sm font-bold text-white"
             >
-              ランキング確認
+              ランキングを見る
             </Link>
 
             <Link
@@ -208,7 +205,7 @@ export default function NotificationsPage() {
 
         <section className="mb-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">結果未入力イベント</h2>
+            <h2 className="text-lg font-extrabold">結果待ちイベント</h2>
 
             <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
               {pendingResultEvents.length}件
@@ -225,11 +222,11 @@ export default function NotificationsPage() {
                 <div className="text-3xl">✅</div>
 
                 <div className="mt-3 text-sm font-bold text-gray-500">
-                  結果未入力のイベントはありません
+                  結果待ちのイベントはありません
                 </div>
 
                 <p className="mt-2 text-xs leading-5 text-gray-400">
-                  すべての結果入力が完了しています。
+                  すべてのイベントの結果が確定しています。
                 </p>
               </div>
             )}

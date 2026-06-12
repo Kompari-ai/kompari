@@ -12,16 +12,14 @@ import {
   getCategoryLabel,
 } from "@/lib/categories";
 import {
+  formatStartsAt,
+  getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
   type LegacyRaceData,
 } from "@/lib/events";
 
 type StatusFilter = "all" | "open" | "finished";
-
-function getResultWinner(event: KompariEvent) {
-  return event.result?.winner || event.resultWinner || "";
-}
 
 function getStatus(event: KompariEvent) {
   return getResultWinner(event) ? "finished" : "open";
@@ -81,9 +79,9 @@ function EventCard({ event }: { event: KompariEvent }) {
         {event.venue || "開催情報未入力"}
       </p>
 
-      {event.startsIn && (
+      {(event.startsAt || event.startsIn) && (
         <p className="mt-1 text-xs font-bold text-blue-700">
-          {event.startsIn}
+          {event.startsAt ? formatStartsAt(event.startsAt) : event.startsIn}
         </p>
       )}
 

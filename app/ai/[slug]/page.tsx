@@ -8,6 +8,7 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
+  getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
   type KompariPrediction,
@@ -101,10 +102,6 @@ const aiProfiles: Record<string, AiProfile> = {
     accent: "#4f46e5",
   },
 };
-
-function getResultWinner(event: KompariEvent) {
-  return event.result?.winner || event.resultWinner || "";
-}
 
 function formatConfidence(confidence?: string) {
   if (!confidence) return "-";

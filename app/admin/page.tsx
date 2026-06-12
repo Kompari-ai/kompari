@@ -22,7 +22,7 @@ export default function AdminPage() {
   const [category, setCategory] = useState("horse_racing");
   const [title, setTitle] = useState("");
   const [venue, setVenue] = useState("");
-  const [startsIn, setStartsIn] = useState("");
+  const [startsAt, setStartsAt] = useState("");
   const [candidateText, setCandidateText] = useState("");
   const [resultWinner, setResultWinner] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -134,7 +134,7 @@ export default function AdminPage() {
         category,
         title: title.trim(),
         venue: venue.trim(),
-        startsIn: startsIn.trim(),
+        startsAt: startsAt || null,
         candidates,
         resultWinner: resultWinner || "",
         result: resultWinner ? { winner: resultWinner } : null,
@@ -157,7 +157,7 @@ export default function AdminPage() {
   const clearForm = () => {
     setTitle("");
     setVenue("");
-    setStartsIn("");
+    setStartsAt("");
     setCandidateText("");
     setResultWinner("");
     setPredictions([]);
@@ -279,13 +279,13 @@ export default function AdminPage() {
 
             <label className="block">
               <span className="mb-2 block text-xs font-bold text-gray-500">
-                開始時期
+                開始日時
               </span>
 
               <input
-                value={startsIn}
-                onChange={(e) => setStartsIn(e.target.value)}
-                placeholder="例：明日18:00"
+                type="datetime-local"
+                value={startsAt}
+                onChange={(e) => setStartsAt(e.target.value)}
                 className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm font-bold outline-none focus:border-blue-400 focus:bg-white"
               />
             </label>

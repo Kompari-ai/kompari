@@ -8,14 +8,12 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
+  formatStartsAt,
+  getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
   type LegacyRaceData,
 } from "@/lib/events";
-
-function getResultWinner(event: KompariEvent) {
-  return event.result?.winner || event.resultWinner || "";
-}
 
 function statusLabel(event: KompariEvent) {
   return getResultWinner(event) ? "結果入力済み" : "予測中";
@@ -104,7 +102,7 @@ function EventCard({ event }: { event: KompariEvent }) {
         <div className="rounded-2xl bg-gray-50 p-3">
           <div className="text-[11px] font-bold text-gray-400">締切</div>
           <div className="mt-1 truncate text-sm font-extrabold">
-            {event.startsIn || "未設定"}
+            {(event.startsAt ? formatStartsAt(event.startsAt) : event.startsIn) || "未設定"}
           </div>
         </div>
       </div>

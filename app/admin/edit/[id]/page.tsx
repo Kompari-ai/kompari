@@ -78,7 +78,7 @@ export default function AdminEditPage({
   const [category, setCategory] = useState("horse_racing");
   const [title, setTitle] = useState("");
   const [venue, setVenue] = useState("");
-  const [startsIn, setStartsIn] = useState("");
+  const [startsAt, setStartsAt] = useState("");
   const [candidateText, setCandidateText] = useState("");
   const [resultWinner, setResultWinner] = useState("");
 
@@ -101,7 +101,7 @@ export default function AdminEditPage({
         setCategory(normalized.category);
         setTitle(normalized.title);
         setVenue(normalized.venue || "");
-        setStartsIn(normalized.startsIn || "");
+        setStartsAt(normalized.startsAt || "");
         setCandidateText((normalized.candidates || []).join("\n"));
         setResultWinner(
           normalized.result?.winner || normalized.resultWinner || ""
@@ -148,7 +148,7 @@ export default function AdminEditPage({
         category,
         title: title.trim(),
         venue: venue.trim(),
-        startsIn: startsIn.trim(),
+        startsAt: startsAt || null,
         candidates,
         resultWinner: resultWinner.trim(),
         result: resultWinner.trim()
@@ -216,7 +216,7 @@ export default function AdminEditPage({
         category,
         title: title.trim(),
         venue: venue.trim(),
-        startsIn: startsIn.trim(),
+        startsAt: startsAt || null,
         candidates,
         predictions: [...preservedPredictions, nextPrediction],
       });
@@ -394,13 +394,13 @@ export default function AdminEditPage({
 
           <label className="block">
             <span className="mb-2 block text-xs font-bold text-gray-500">
-              開始・締切
+              開始日時
             </span>
 
             <input
-              value={startsIn}
-              onChange={(e) => setStartsIn(e.target.value)}
-              placeholder="例：あと3時間 / 6月7日 18:00"
+              type="datetime-local"
+              value={startsAt}
+              onChange={(e) => setStartsAt(e.target.value)}
               className="w-full rounded-xl border border-gray-200 px-3 py-3"
             />
           </label>

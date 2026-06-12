@@ -45,6 +45,7 @@ export type LegacyRaceData = {
   category?: string;
   title?: string;
   venue?: string;
+  startsAt?: string;
   startsIn?: string;
   resultWinner?: string;
   candidates?: string[];
@@ -67,7 +68,7 @@ export function normalizeRaceToEvent(race: LegacyRaceData): KompariEvent {
 
     candidates: normalizeCandidates(race.candidates, predictions),
 
-    startsAt: undefined,
+    startsAt: race.startsAt || undefined,
     participants: [],
     predictions,
 
@@ -82,6 +83,23 @@ export function normalizeRaceToEvent(race: LegacyRaceData): KompariEvent {
     resultWinner: race.resultWinner || race.result?.winner || "",
     createdAt: race.createdAt,
   };
+}
+
+export function getResultWinner(event: KompariEvent): string {
+  return (event.result?.winner || event.resultWinner || "").trim();
+}
+
+export function formatStartsAt(startsAt?: string): string {
+  if (!startsAt) return "";
+  const date = new Date(startsAt);
+  if (isNaN(date.getTime())) return "";
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const dayOfWeek = days[date.getDay()];
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${month}月${day}日(${dayOfWeek}) ${hours}:${minutes}`;
 }
 
 function normalizeCandidates(

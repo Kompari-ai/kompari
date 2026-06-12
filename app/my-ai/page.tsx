@@ -21,6 +21,7 @@ import {
   getCategoryLabel,
 } from "@/lib/categories";
 import {
+  getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
   type KompariPrediction,
@@ -43,10 +44,6 @@ type MyAiStats = {
   pending: number;
   hitRate: number;
 };
-
-function getResultWinner(event: KompariEvent) {
-  return event.result?.winner || event.resultWinner || "";
-}
 
 function isThisMyAiPrediction(prediction: KompariPrediction, myAi: MyAi) {
   if (prediction.myAiId === myAi.id) return true;

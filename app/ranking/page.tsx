@@ -13,6 +13,7 @@ import {
   type EventCategory,
 } from "@/lib/categories";
 import {
+  getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
   type KompariPrediction,
@@ -41,10 +42,6 @@ type RankingRow = {
   accuracy: number;
   history: RankingHistory[];
 };
-
-function getResultWinner(event: KompariEvent) {
-  return (event.result?.winner || event.resultWinner || "").trim();
-}
 
 function getPredictionSource(prediction: KompariPrediction) {
   return prediction.source === "user" ? "user" : "official";
