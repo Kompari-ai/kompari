@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kompari v2 — 改善プロトタイプ</title>
+<style>
+:root{
+  --bg:#F2F4F8; --card:#FFFFFF; --ink:#0F172A; --sub:#64748B; --line:#E8ECF2;
+  --blue:#1D5BFF; --navy:#0B1F4B;
+  --gpt:#10A37F; --claude:#D97757; --gemini:#4285F4; --deep:#4D6BFE;
+  --win:#16A34A; --lose:#DC2626; --gold:#F59E0B;
+  --r:18px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#DDE2EA;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:var(--ink);display:flex;justify-content:center;padding:24px 8px}
+.phone{width:393px;max-width:100%;background:var(--bg);border-radius:42px;box-shadow:0 24px 60px rgba(15,23,42,.25);overflow:hidden;position:relative;border:6px solid #0F172A}
+.statusbar{display:flex;justify-content:space-between;padding:14px 26px 6px;font-size:14px;font-weight:600}
+.screen{height:760px;overflow-y:auto;padding:0 14px 96px;scrollbar-width:none}
+.screen::-webkit-scrollbar{display:none}
+.page{display:none}
+.page.active{display:block;animation:fade .22s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* header */
+.head{display:flex;align-items:center;justify-content:space-between;padding:8px 4px 12px}
+.logo{text-align:center;flex:1}
+.logo b{font-size:21px;color:var(--blue);font-style:italic;letter-spacing:-.5px}
+.logo span{display:block;font-size:8.5px;letter-spacing:2.5px;color:var(--sub);font-weight:600}
+.icbtn{width:36px;height:36px;border-radius:12px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font-size:16px;position:relative}
+.icbtn .dot{position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:#EF4444}
+
+/* cards */
+.card{background:var(--card);border-radius:var(--r);border:1px solid var(--line);padding:16px;margin-bottom:12px}
+.sec{display:flex;align-items:baseline;justify-content:space-between;margin:18px 4px 10px}
+.sec h2{font-size:15.5px;font-weight:700}
+.sec a{font-size:12px;color:var(--blue);text-decoration:none;font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:99px}
+.chip.live{background:#FEE2E2;color:#DC2626}
+.chip.live::before{content:"";width:6px;height:6px;border-radius:50%;background:#DC2626;animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.25}}
+.chip.split{background:#FEF3C7;color:#B45309}
+.chip.lean{background:#DBEAFE;color:#1D4ED8}
+.chip.unan{background:#DCFCE7;color:#15803D}
+.muted{color:var(--sub);font-size:11.5px}
+
+/* AI identity */
+.ai{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;color:#fff;font-size:12px;font-weight:800}
+.ai.gpt{background:var(--gpt)} .ai.cl{background:var(--claude)} .ai.gm{background:var(--gemini)} .ai.ds{background:var(--deep)}
+
+/* signature: split meter */
+.smeter{display:flex;height:10px;border-radius:99px;overflow:hidden;gap:2px}
+.smeter i{display:block;height:100%}
+.smeter i.gpt{background:var(--gpt)} .smeter i.cl{background:var(--claude)} .smeter i.gm{background:var(--gemini)} .smeter i.ds{background:var(--deep)}
+.slegend{display:flex;gap:10px;margin-top:7px;flex-wrap:wrap}
+.slegend span{font-size:10.5px;color:var(--sub);display:flex;align-items:center;gap:4px;font-weight:600}
+.slegend i{width:8px;height:8px;border-radius:3px;display:inline-block}
+
+/* hero */
+.hero{background:linear-gradient(150deg,#0B1F4B 0%,#13307A 60%,#1D5BFF 130%);color:#fff;border:none;position:relative;overflow:hidden}
+.hero::after{content:"VS";position:absolute;right:-14px;bottom:-34px;font-size:120px;font-weight:900;font-style:italic;color:rgba(255,255,255,.06);letter-spacing:-6px}
+.hero .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.hero .race{font-size:20px;font-weight:800;letter-spacing:.5px}
+.hero .when{font-size:11px;color:#BFD0FF;margin-top:2px}
+.duel{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:12px 10px;margin-bottom:12px}
+.duel .side{text-align:center}
+.duel .num{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-size:12px;font-weight:800;margin-bottom:5px}
+.duel .n1{background:#fff;color:#0F172A}.duel .n2{background:#0F172A;color:#fff;border:1px solid #475569}
+.duel .horse{font-size:14.5px;font-weight:800}
+.duel .backers{display:flex;justify-content:center;gap:4px;margin-top:7px}
+.duel .vsmark{font-size:12px;font-weight:800;color:#BFD0FF;padding:0 10px}
+.hero .meterwrap{margin-bottom:14px}
+.hero .meterlabel{display:flex;justify-content:space-between;font-size:11px;color:#BFD0FF;margin-bottom:6px;font-weight:600}
+.cta{display:block;width:100%;text-align:center;background:#fff;color:var(--navy);font-weight:800;font-size:14px;border:none;border-radius:12px;padding:13px;cursor:pointer}
+
+/* quick vote */
+.qvote{margin-top:10px}
+.qvote p{font-size:11px;color:#BFD0FF;margin-bottom:7px;font-weight:600}
+.qvote .opts{display:flex;gap:8px}
+.qvote button{flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:10px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer}
+.qvote button.sel{background:#fff;color:var(--navy)}
+
+/* live card */
+.lrow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;text-align:center;margin:10px 0 12px}
+.lrow .team{font-size:13px;font-weight:700}
+.lrow .score{font-size:26px;font-weight:800;letter-spacing:1px}
+.probbar{height:8px;border-radius:99px;overflow:hidden;display:flex;background:#E2E8F0}
+.probbar .a{background:var(--win)}.probbar .b{background:#94A3B8}
+.problabel{display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-top:5px}
+.scoreboard{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.scoreboard .pick{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;background:#F1F5F9;border-radius:99px;padding:4px 9px 4px 4px}
+.pick .ai{width:20px;height:20px;border-radius:6px;font-size:10px}
+.pick.hit{background:#DCFCE7;color:#15803D}
+.pick.miss{background:#FEE2E2;color:#B91C1C}
+
+/* race detail */
+.tabs2{display:flex;background:#E7EBF2;border-radius:12px;padding:3px;margin-bottom:12px}
+.tabs2 button{flex:1;border:none;background:transparent;font-size:13px;font-weight:700;padding:8px;border-radius:10px;color:var(--sub);cursor:pointer}
+.tabs2 button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(15,23,42,.1)}
+.racetitle{display:flex;justify-content:space-between;align-items:baseline}
+.racetitle h1{font-size:18px;font-weight:800}
+.count{font-size:12px;color:var(--sub);font-weight:600}
+.count b{color:var(--blue);font-size:16px;font-variant-numeric:tabular-nums}
+
+.podium{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.podium .p{background:#F8FAFC;border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
+.podium .p.first{background:#FFFBEB;border-color:#FDE68A}
+.podium .rank{font-size:10px;font-weight:800;color:var(--sub)}
+.podium .first .rank{color:#B45309}
+.podium .name{font-size:12.5px;font-weight:800;margin:3px 0}
+.podium .agree{font-size:10px;color:var(--sub);font-weight:600}
+
+/* AI card */
+.aicard{border-left:4px solid var(--line);position:relative}
+.aicard.gpt{border-left-color:var(--gpt)} .aicard.cl{border-left-color:var(--claude)}
+.aicard.gm{border-left-color:var(--gemini)} .aicard.ds{border-left-color:var(--deep)}
+.aihead{display:flex;align-items:center;gap:9px}
+.aihead .ai{width:32px;height:32px;border-radius:10px;font-size:14px}
+.aihead .nm{font-size:15px;font-weight:800}
+.streak{font-size:10px;font-weight:800;padding:2px 7px;border-radius:99px;background:#DCFCE7;color:#15803D;margin-left:auto}
+.streak.cold{background:#F1F5F9;color:var(--sub)}
+.form{display:flex;gap:3px;align-items:center;margin-top:3px}
+.form i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.form i.w{background:var(--win)} .form i.l{background:#CBD5E1}
+.form span{font-size:10px;color:var(--sub);font-weight:600;margin-left:4px}
+.statline{display:flex;gap:14px;margin:10px 0 8px}
+.statline .st b{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums}
+.statline .st span{display:block;font-size:9.5px;color:var(--sub);font-weight:600}
+.picks{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.pr{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700}
+.pr .tag{font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;min-width:34px;text-align:center}
+.tag.honmei{background:#FEE2E2;color:#B91C1C}.tag.taikou{background:#DBEAFE;color:#1D4ED8}.tag.ana{background:#FEF3C7;color:#B45309}
+.pr .uma{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:5px;font-size:11px;font-weight:800;color:#fff}
+.u1{background:#fff;color:#0F172A;border:1px solid #CBD5E1}.u2{background:#0F172A}.u3{background:#DC2626}.u4{background:#2563EB}.u5{background:#F59E0B}
+.comment{font-size:12px;line-height:1.65;color:#334155;margin:8px 0}
+.evi{background:#F8FAFC;border-radius:10px;padding:10px 12px;font-size:11.5px;color:#475569;line-height:1.8;display:none}
+.evi.open{display:block}
+.evibtn{font-size:11.5px;color:var(--blue);font-weight:700;background:none;border:none;cursor:pointer;padding:4px 0}
+.aifoot{display:flex;align-items:center;gap:8px;margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+.ride{flex:1;border:1.5px solid var(--blue);color:var(--blue);background:#fff;border-radius:10px;padding:8px;font-size:12.5px;font-weight:800;cursor:pointer}
+.ride.sel{background:var(--blue);color:#fff}
+.fb{display:flex;align-items:center;gap:4px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:7px 10px;font-size:12px;cursor:pointer;font-weight:700;color:var(--sub)}
+.fb.sel{border-color:var(--blue);color:var(--blue);background:#EFF4FF}
+
+/* ranking */
+.lb .row{display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line)}
+.lb .row:last-child{border-bottom:none}
+.lb .rk{width:24px;text-align:center;font-weight:800;font-size:15px;color:var(--sub)}
+.lb .rk.g{color:var(--gold)}
+.lb .ai{width:34px;height:34px;border-radius:10px;font-size:14px}
+.lb .info{flex:1}
+.lb .nm{font-size:14px;font-weight:800}
+.lb .delta{font-size:10px;font-weight:700}
+.delta.up{color:var(--win)} .delta.dn{color:var(--lose)} .delta.fl{color:var(--sub)}
+.lb .pct{text-align:right}
+.lb .pct b{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+.lb .pct span{display:block;font-size:9.5px;color:var(--sub)}
+.catpick{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;scrollbar-width:none}
+.catpick::-webkit-scrollbar{display:none}
+.catpick button{flex:none;border:1px solid var(--line);background:#fff;border-radius:99px;padding:6px 13px;font-size:12px;font-weight:700;color:var(--sub);cursor:pointer}
+.catpick button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.cbar{margin-bottom:11px}
+.cbar .lab{display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;margin-bottom:4px}
+.cbar .lab span{color:var(--sub);font-weight:600}
+.cbar .track{height:9px;background:#EEF1F6;border-radius:99px;overflow:hidden}
+.cbar .fill{height:100%;border-radius:99px;transition:width .4s ease}
+.bestai{font-size:11px;color:var(--sub);margin-top:8px;line-height:1.7}
+
+/* soccer */
+.matchhead{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;text-align:center;margin:6px 0 4px}
+.matchhead .tm{font-size:15px;font-weight:800}
+.matchhead .fm{font-size:10.5px;color:var(--sub);font-weight:600;margin-top:2px}
+.matchhead .mid{font-size:11px;color:var(--sub);font-weight:700;padding:0 8px}
+.wdl{display:flex;height:34px;border-radius:10px;overflow:hidden;font-size:11.5px;font-weight:800;color:#fff;text-align:center;margin-top:10px}
+.wdl span{display:flex;flex-direction:column;justify-content:center;line-height:1.2}
+.wdl .h{background:var(--blue)} .wdl .d{background:#94A3B8} .wdl .aw{background:#EF4444}
+.wdl small{font-size:9px;font-weight:700;opacity:.85}
+.consensus-score{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px}
+.consensus-score b{font-size:24px;font-weight:800;letter-spacing:2px}
+.consensus-score span{font-size:11px;color:var(--sub);font-weight:700}
+.goals{display:flex;gap:6px;margin-top:10px}
+.goals .g{flex:1;text-align:center;background:#F8FAFC;border:1px solid var(--line);border-radius:10px;padding:8px 2px}
+.goals .g.hot{background:#EFF4FF;border-color:#BFD0FF}
+.goals .g b{font-size:13px;font-weight:800;display:block}
+.goals .g span{font-size:9.5px;color:var(--sub);font-weight:700}
+.goals .g.hot b{color:var(--blue)}
+.opill{font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:7px;margin-left:auto}
+.opill.h{background:#DBEAFE;color:#1D4ED8}.opill.d{background:#F1F5F9;color:#475569}.opill.aw{background:#FEE2E2;color:#B91C1C}
+.pscore{font-size:18px;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums}
+.pscore small{font-size:9.5px;color:var(--sub);font-weight:700;display:block;letter-spacing:0}
+
+/* camps under WDL bar */
+.camps{display:flex;margin-top:8px}
+.camps .c{display:flex;justify-content:center;gap:5px}
+.camps .ai{width:22px;height:22px;border-radius:7px;font-size:10px}
+
+/* shutsuba table */
+.shutsuba{width:100%;border-collapse:collapse;font-size:12px}
+.shutsuba th{font-size:10px;color:var(--sub);font-weight:700;padding:6px 2px;border-bottom:1.5px solid var(--line);text-align:center}
+.shutsuba td{padding:9px 2px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+.shutsuba tr:last-child td{border-bottom:none}
+.shutsuba .hname{text-align:left;font-weight:800;font-size:12.5px}
+.shutsuba .jockey{display:block;font-size:10px;color:var(--sub);font-weight:600}
+.shutsuba .odds{font-weight:800;font-variant-numeric:tabular-nums}
+.shutsuba .fav{font-size:9.5px;color:var(--sub);display:block}
+.mk{font-size:13px;font-weight:800}
+.mk.h{color:#DC2626}.mk.t{color:#1D4ED8}.mk.a{color:#B45309}.mk.n{color:#CBD5E1}
+.mklegend{display:flex;gap:12px;margin-top:10px;font-size:10.5px;color:var(--sub);font-weight:700}
+.mklegend b.h{color:#DC2626}.mklegend b.t{color:#1D4ED8}.mklegend b.a{color:#B45309}
+
+/* match info */
+.vsrow{display:grid;grid-template-columns:1fr 92px 1fr;align-items:center;gap:6px;margin-bottom:10px}
+.vsrow .lab{text-align:center;font-size:10.5px;color:var(--sub);font-weight:700}
+.vsrow .val{font-size:13.5px;font-weight:800;font-variant-numeric:tabular-nums}
+.vsrow .val.l{text-align:right}.vsrow .val.r{text-align:left}
+.cmpbar{display:flex;height:7px;border-radius:99px;overflow:hidden;background:#EEF1F6;margin-top:3px}
+.cmpbar .lft{background:var(--blue)} .cmpbar .rgt{background:#EF4444;margin-left:auto}
+.h2h{display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line);font-size:12px}
+.h2h:last-child{border-bottom:none}
+.h2h .dt{color:var(--sub);font-size:10.5px;font-weight:600;width:64px}
+.h2h .sc{font-weight:800;font-variant-numeric:tabular-nums}
+.h2h .res{font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px}
+.res.hw{background:#DBEAFE;color:#1D4ED8}.res.dw{background:#F1F5F9;color:#475569}.res.aw{background:#FEE2E2;color:#B91C1C}
+
+/* lineup pitch */
+.pitch{position:relative;width:100%;height:480px;border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#2F9E44 0%,#37A24B 50%,#2F9E44 100%);margin-top:10px}
+.pitch::before{content:"";position:absolute;inset:8px;border:1.5px solid rgba(255,255,255,.55);border-radius:6px}
+.pitch::after{content:"";position:absolute;left:8px;right:8px;top:50%;border-top:1.5px solid rgba(255,255,255,.55)}
+.pitch .circle{position:absolute;left:50%;top:50%;width:84px;height:84px;border:1.5px solid rgba(255,255,255,.55);border-radius:50%;transform:translate(-50%,-50%)}
+.pitch .box{position:absolute;left:50%;transform:translateX(-50%);width:46%;height:42px;border:1.5px solid rgba(255,255,255,.55)}
+.pitch .box.t{top:8px;border-top:none}
+.pitch .box.b{bottom:8px;border-bottom:none}
+.pl{position:absolute;transform:translate(-50%,-50%);text-align:center;width:64px}
+.pl .num{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:50%;font-size:11px;font-weight:800;color:#fff;border:2px solid rgba(255,255,255,.85);box-shadow:0 2px 5px rgba(0,0,0,.25)}
+.pl.home .num{background:#1D5BFF}
+.pl.away .num{background:#E11D48}
+.pl .pnm{display:block;font-size:8.5px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);margin-top:2px;line-height:1.2}
+.teamtag{position:absolute;left:10px;font-size:10px;font-weight:800;color:#fff;background:rgba(0,0,0,.35);padding:3px 9px;border-radius:99px}
+.teamtag.t{top:14px}.teamtag.b{bottom:14px}
+.benchwrap{margin-top:10px}
+.benchwrap .bt{font-size:11px;font-weight:800;margin:8px 0 5px;display:flex;align-items:center;gap:5px}
+.benchwrap .bt i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.benchlist{display:flex;flex-wrap:wrap;gap:5px}
+.benchlist span{font-size:10.5px;font-weight:700;background:#F1F5F9;border:1px solid var(--line);border-radius:99px;padding:4px 9px;color:#334155}
+.benchlist span b{color:var(--sub);font-weight:800;margin-right:3px}
+
+/* weather grid */
+.wgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.wgrid .w{background:#F8FAFC;border:1px solid var(--line);border-radius:10px;padding:9px 4px;text-align:center}
+.wgrid .w .ic2{font-size:17px}
+.wgrid .w b{display:block;font-size:12.5px;font-weight:800;margin-top:2px}
+.wgrid .w span{font-size:9px;color:var(--sub);font-weight:700}
+
+/* bottom nav */
+.nav{position:absolute;bottom:0;left:0;right:0;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-top:1px solid var(--line);display:flex;padding:8px 0 20px}
+.nav button{flex:1;background:none;border:none;font-size:10px;font-weight:700;color:#94A3B8;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.nav button .ic{font-size:19px}
+.nav button.on{color:var(--blue)}
+.note{font-size:10.5px;color:var(--sub);text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="statusbar"><span>9:41</span><span>📶 ⌁ 🔋</span></div>
+  <div class="screen" id="screen">
+
+    <!-- ================= HOME ================= -->
+    <div class="page active" id="pg-home">
+      <div class="head">
+        <button class="icbtn">☰</button>
+        <div class="logo"><b>Kompari</b><span>AI PREDICTION ARENA</span></div>
+        <button class="icbtn">🔔<i class="dot"></i></button>
+      </div>
+
+      <!-- HERO: the split itself is the product -->
+      <div class="card hero">
+        <div class="top">
+          <div>
+            <span class="chip split" style="background:rgba(254,243,199,.95)">⚡ AIの意見が真っ二つ</span>
+            <div class="race" style="margin-top:8px">日本ダービー（GI）</div>
+            <div class="when">東京11R・芝2400m ｜ 発走まで <b style="font-variant-numeric:tabular-nums">00:45:18</b></div>
+          </div>
+        </div>
+        <div class="duel">
+          <div class="side">
+            <span class="num n1">1</span>
+            <div class="horse">イクイノックス</div>
+            <div class="backers"><span class="ai gpt" style="width:20px;height:20px;font-size:10px">G</span><span class="ai gm" style="width:20px;height:20px;font-size:10px">✦</span></div>
+          </div>
+          <div class="vsmark">VS</div>
+          <div class="side">
+            <span class="num n2">2</span>
+            <div class="horse">ドウデュース</div>
+            <div class="backers"><span class="ai cl" style="width:20px;height:20px;font-size:10px">C</span><span class="ai ds" style="width:20px;height:20px;font-size:10px">D</span></div>
+          </div>
+        </div>
+        <div class="meterwrap">
+          <div class="meterlabel"><span>本命支持 2</span><span>2</span></div>
+          <div class="smeter"><i class="gpt" style="width:25%"></i><i class="gm" style="width:25%"></i><i class="cl" style="width:25%"></i><i class="ds" style="width:25%"></i></div>
+        </div>
+        <button class="cta" onclick="go('race')">4つの予測根拠をくらべる</button>
+        <div class="qvote">
+          <p>あなたはどちらに乗りますか？（結果発表後に的中判定）</p>
+          <div class="opts">
+            <button onclick="vote(this)">イクイノックス派 62%</button>
+            <button onclick="vote(this)">ドウデュース派 38%</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIVE -->
+      <div class="sec"><h2>進行中の答え合わせ</h2><a href="#">すべて見る ›</a></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="chip live">LIVE</span>
+          <span class="muted">NBAプレイオフ 準決勝 G3 ｜ 第3Q 4:32</span>
+        </div>
+        <div class="lrow">
+          <div><div class="team">セルティックス</div></div>
+          <div class="score">58 – 54</div>
+          <div><div class="team">ナゲッツ</div></div>
+        </div>
+        <div class="probbar"><span class="a" style="width:62%"></span><span class="b" style="width:38%"></span></div>
+        <div class="problabel"><span style="color:var(--win)">62%</span><span style="color:var(--sub)">38%</span></div>
+        <div class="scoreboard">
+          <span class="pick hit"><span class="ai gpt">G</span>BOS ◎</span>
+          <span class="pick hit"><span class="ai cl">C</span>BOS ◎</span>
+          <span class="pick hit"><span class="ai gm">✦</span>BOS ◎</span>
+          <span class="pick miss"><span class="ai ds">D</span>DEN ✕</span>
+        </div>
+        <p class="note">DeepSeekだけがナゲッツ予想。逆転なるか？</p>
+      </div>
+
+      <!-- Upcoming -->
+      <div class="sec"><h2>このあとの注目カード</h2><a href="#">すべて見る ›</a></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b style="font-size:14px">CL決勝　レアル vs バイエルン</b>
+          <span class="chip lean">3–1 でレアル優勢</span>
+        </div>
+        <div class="smeter"><i class="gpt" style="width:25%"></i><i class="cl" style="width:25%"></i><i class="gm" style="width:25%"></i><i class="ds" style="width:25%;opacity:.35"></i></div>
+        <div class="slegend">
+          <span><i style="background:var(--gpt)"></i>ChatGPT</span>
+          <span><i style="background:var(--claude)"></i>Claude</span>
+          <span><i style="background:var(--gemini)"></i>Gemini</span>
+          <span><i style="background:var(--deep);opacity:.4"></i>DeepSeek（バイエルン）</span>
+        </div>
+        <p class="muted" style="margin-top:9px">開始まで 01:18:42 ｜ ウェンブリー・スタジアム</p>
+      </div>
+      <div class="card" onclick="go('soccer')" style="cursor:pointer">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b style="font-size:14px">J1 第16節　FC東京 vs 横浜FM</b>
+          <span class="chip split">意見が割れています</span>
+        </div>
+        <div class="wdl" style="height:26px;font-size:10px">
+          <span class="h" style="width:45%">HOME 45%</span>
+          <span class="d" style="width:28%">引分 28%</span>
+          <span class="aw" style="width:27%">AWAY 27%</span>
+        </div>
+        <div class="camps">
+          <div class="c" style="width:45%"><span class="ai gpt" style="width:18px;height:18px;font-size:9px">G</span><span class="ai gm" style="width:18px;height:18px;font-size:9px">✦</span></div>
+          <div class="c" style="width:28%"><span class="ai cl" style="width:18px;height:18px;font-size:9px">C</span></div>
+          <div class="c" style="width:27%"><span class="ai ds" style="width:18px;height:18px;font-size:9px">D</span></div>
+        </div>
+        <p class="muted" style="margin-top:9px">5/18（日）14:00 ｜ 味の素スタジアム　<b style="color:var(--blue)">詳細を見る ›</b></p>
+      </div>
+    </div>
+
+    <!-- ================= RACE DETAIL ================= -->
+    <div class="page" id="pg-race">
+      <div class="head">
+        <button class="icbtn" onclick="go('home')">‹</button>
+        <div class="logo"><b>Kompari</b><span>AI PREDICTION ARENA</span></div>
+        <button class="icbtn">⤴</button>
+      </div>
+      <div class="tabs2"><button class="on" onclick="sub(this,'race',0)">AI予測</button><button onclick="sub(this,'race',1)">出馬表</button></div>
+
+      <div class="card">
+        <div class="racetitle"><h1>日本ダービー（G1）</h1><span class="muted">東京11R / 芝2400m</span></div>
+        <p class="count" style="margin-top:6px">⏱ 発走まで <b>00:45:18</b></p>
+      </div>
+
+      <div id="race-sub0">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:14px">👑 AIコンセンサス</b>
+          <span class="chip split">本命が割れています</span>
+        </div>
+        <div class="podium">
+          <div class="p first"><div class="rank">1着予想</div><div class="name">イクイノックス</div><div class="agree">本命 2/4・対抗 2/4</div></div>
+          <div class="p"><div class="rank">2着予想</div><div class="name">ドウデュース</div><div class="agree">本命 2/4・対抗 2/4</div></div>
+          <div class="p"><div class="rank">3着予想</div><div class="name">サトノクラウン</div><div class="agree">本命 1/4</div></div>
+        </div>
+        <div class="smeter"><i class="gpt" style="width:25%"></i><i class="gm" style="width:25%"></i><i class="cl" style="width:25%"></i><i class="ds" style="width:25%"></i></div>
+        <div class="slegend">
+          <span><i style="background:var(--gpt)"></i>① イクイノックス</span>
+          <span><i style="background:var(--gemini)"></i>① イクイノックス</span>
+          <span><i style="background:var(--claude)"></i>② ドウデュース</span>
+          <span><i style="background:var(--deep)"></i>③ サトノクラウン</span>
+        </div>
+      </div>
+
+      <!-- ChatGPT -->
+      <div class="card aicard gpt">
+        <div class="aihead">
+          <span class="ai gpt">G</span>
+          <div><div class="nm">ChatGPT</div>
+            <div class="form"><i class="w"></i><i class="w"></i><i class="w"></i><i class="l"></i><i class="w"></i><span>直近5戦 4勝</span></div>
+          </div>
+          <span class="streak">🔥 3連勝中</span>
+        </div>
+        <div class="statline">
+          <div class="st"><b>61.7%</b><span>競馬の的中率（42レース）</span></div>
+          <div class="st"><b>72%</b><span>今回の自信度</span></div>
+        </div>
+        <div class="picks">
+          <div class="pr"><span class="tag honmei">本命</span><span class="uma u1">1</span>イクイノックス</div>
+          <div class="pr"><span class="tag taikou">対抗</span><span class="uma u2">2</span>ドウデュース</div>
+          <div class="pr"><span class="tag ana">穴</span><span class="uma u5">5</span>ジオグリフ</div>
+        </div>
+        <p class="comment">イクイノックスは東京芝2400mでの適性と、上がり3Fの鋭さが抜群です。</p>
+        <button class="evibtn" onclick="tog(this)">データ根拠を見る ▾</button>
+        <div class="evi">・上がり3F：最速 33.2<br>・東京芝2400m【2-1-0-0】<br>・単勝オッズ：1.7倍</div>
+        <div class="aifoot">
+          <button class="ride" onclick="ridepick(this)">この予想に乗る（128人）</button>
+          <button class="fb" onclick="fbk(this)">👍 312</button>
+          <button class="fb" onclick="fbk(this)">👎 41</button>
+        </div>
+      </div>
+
+      <!-- Claude -->
+      <div class="card aicard cl">
+        <div class="aihead">
+          <span class="ai cl">C</span>
+          <div><div class="nm">Claude</div>
+            <div class="form"><i class="w"></i><i class="w"></i><i class="l"></i><i class="w"></i><i class="l"></i><span>直近5戦 3勝</span></div>
+          </div>
+          <span class="streak">🔥 2連勝中</span>
+        </div>
+        <div class="statline">
+          <div class="st"><b>58.2%</b><span>競馬の的中率（42レース）</span></div>
+          <div class="st"><b>65%</b><span>今回の自信度</span></div>
+        </div>
+        <div class="picks">
+          <div class="pr"><span class="tag honmei">本命</span><span class="uma u2">2</span>ドウデュース</div>
+          <div class="pr"><span class="tag taikou">対抗</span><span class="uma u1">1</span>イクイノックス</div>
+          <div class="pr"><span class="tag ana">穴</span><span class="uma u3">3</span>サトノクラウン</div>
+        </div>
+        <p class="comment">ドウデュースは成長力が継続中。皐月賞の内容が非常に優秀でした。</p>
+        <button class="evibtn" onclick="tog(this)">データ根拠を見る ▾</button>
+        <div class="evi">・上がり3F：2位 33.4<br>・近走上がり順位：1, 1, 2<br>・単勝オッズ：3.2倍</div>
+        <div class="aifoot">
+          <button class="ride" onclick="ridepick(this)">この予想に乗る（86人）</button>
+          <button class="fb" onclick="fbk(this)">👍 247</button>
+          <button class="fb" onclick="fbk(this)">👎 38</button>
+        </div>
+      </div>
+
+      <!-- Gemini -->
+      <div class="card aicard gm">
+        <div class="aihead">
+          <span class="ai gm">✦</span>
+          <div><div class="nm">Gemini</div>
+            <div class="form"><i class="l"></i><i class="w"></i><i class="w"></i><i class="l"></i><i class="w"></i><span>直近5戦 3勝</span></div>
+          </div>
+          <span class="streak cold">—</span>
+        </div>
+        <div class="statline">
+          <div class="st"><b>55.9%</b><span>競馬の的中率（42レース）</span></div>
+          <div class="st"><b>63%</b><span>今回の自信度</span></div>
+        </div>
+        <div class="picks">
+          <div class="pr"><span class="tag honmei">本命</span><span class="uma u1">1</span>イクイノックス</div>
+          <div class="pr"><span class="tag taikou">対抗</span><span class="uma u2">2</span>ドウデュース</div>
+          <div class="pr"><span class="tag ana">穴</span><span class="uma u4">4</span>タイトルホルダー</div>
+        </div>
+        <p class="comment">イクイノックスは総合力で一枚上。東京コースでの安定感が魅力です。</p>
+        <button class="evibtn" onclick="tog(this)">データ根拠を見る ▾</button>
+        <div class="evi">・ペース適性：◎ ミドル<br>・東京芝2400m：連対率100%<br>・上がり3F：最速 33.2</div>
+        <div class="aifoot">
+          <button class="ride" onclick="ridepick(this)">この予想に乗る（54人）</button>
+          <button class="fb" onclick="fbk(this)">👍 198</button>
+          <button class="fb" onclick="fbk(this)">👎 29</button>
+        </div>
+      </div>
+
+      <!-- DeepSeek -->
+      <div class="card aicard ds">
+        <div class="aihead">
+          <span class="ai ds">D</span>
+          <div><div class="nm">DeepSeek</div>
+            <div class="form"><i class="w"></i><i class="l"></i><i class="w"></i><i class="w"></i><i class="w"></i><span>直近5戦 4勝</span></div>
+          </div>
+          <span class="streak cold">的中率 全体1位</span>
+        </div>
+        <div class="statline">
+          <div class="st"><b>64.1%</b><span>競馬の的中率（42レース）</span></div>
+          <div class="st"><b>59%</b><span>今回の自信度</span></div>
+        </div>
+        <div class="picks">
+          <div class="pr"><span class="tag honmei">本命</span><span class="uma u3">3</span>サトノクラウン</div>
+          <div class="pr"><span class="tag taikou">対抗</span><span class="uma u1">1</span>イクイノックス</div>
+          <div class="pr"><span class="tag ana">穴</span><span class="uma u5">5</span>ジオグリフ</div>
+        </div>
+        <p class="comment">サトノクラウンは展開利で台頭可能。オッズ妙味のある1頭です。</p>
+        <button class="evibtn" onclick="tog(this)">データ根拠を見る ▾</button>
+        <div class="evi">・差し有利指数：高<br>・前走上がり3F：最速 33.3<br>・単勝オッズ：6.5倍</div>
+        <div class="aifoot">
+          <button class="ride" onclick="ridepick(this)">この予想に乗る（73人）</button>
+          <button class="fb" onclick="fbk(this)">👍 221</button>
+          <button class="fb" onclick="fbk(this)">👎 19</button>
+        </div>
+      </div>
+
+      <div class="card" style="border-style:dashed;text-align:center;background:#F8FAFF;border-color:#BFD0FF">
+        <b style="color:var(--blue);font-size:13.5px">＋ あなたのAIを参加させる</b>
+        <p class="muted" style="margin-top:4px">自分専用のAIを作成して予測に参加しよう（5/4公開）</p>
+      </div>
+      </div><!-- /race-sub0 -->
+
+      <div id="race-sub1" style="display:none">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <b style="font-size:14px">出馬表 × AI印</b>
+            <span class="muted">単勝オッズ 10:30時点</span>
+          </div>
+          <table class="shutsuba">
+            <tr>
+              <th>馬番</th><th style="text-align:left">馬名・騎手</th><th>単勝</th>
+              <th><span class="ai gpt" style="width:18px;height:18px;font-size:9px">G</span></th>
+              <th><span class="ai cl" style="width:18px;height:18px;font-size:9px">C</span></th>
+              <th><span class="ai gm" style="width:18px;height:18px;font-size:9px">✦</span></th>
+              <th><span class="ai ds" style="width:18px;height:18px;font-size:9px">D</span></th>
+            </tr>
+            <tr style="background:#FFFBEB">
+              <td><span class="uma u1">1</span></td>
+              <td class="hname">イクイノックス<span class="jockey">C.ルメール 57.0</span></td>
+              <td class="odds">1.7<span class="fav">1人気</span></td>
+              <td><span class="mk h">◎</span></td><td><span class="mk t">○</span></td><td><span class="mk h">◎</span></td><td><span class="mk t">○</span></td>
+            </tr>
+            <tr>
+              <td><span class="uma u2">2</span></td>
+              <td class="hname">ドウデュース<span class="jockey">武豊 57.0</span></td>
+              <td class="odds">3.2<span class="fav">2人気</span></td>
+              <td><span class="mk t">○</span></td><td><span class="mk h">◎</span></td><td><span class="mk t">○</span></td><td><span class="mk n">–</span></td>
+            </tr>
+            <tr>
+              <td><span class="uma u3">3</span></td>
+              <td class="hname">サトノクラウン<span class="jockey">戸崎圭太 57.0</span></td>
+              <td class="odds">6.5<span class="fav">4人気</span></td>
+              <td><span class="mk n">–</span></td><td><span class="mk a">▲</span></td><td><span class="mk n">–</span></td><td><span class="mk h">◎</span></td>
+            </tr>
+            <tr>
+              <td><span class="uma u4">4</span></td>
+              <td class="hname">タイトルホルダー<span class="jockey">横山和生 57.0</span></td>
+              <td class="odds">5.8<span class="fav">3人気</span></td>
+              <td><span class="mk n">–</span></td><td><span class="mk n">–</span></td><td><span class="mk a">▲</span></td><td><span class="mk n">–</span></td>
+            </tr>
+            <tr>
+              <td><span class="uma u5">5</span></td>
+              <td class="hname">ジオグリフ<span class="jockey">福永祐一 57.0</span></td>
+              <td class="odds">9.4<span class="fav">5人気</span></td>
+              <td><span class="mk a">▲</span></td><td><span class="mk n">–</span></td><td><span class="mk n">–</span></td><td><span class="mk a">▲</span></td>
+            </tr>
+            <tr>
+              <td><span class="uma u2" style="background:#16A34A">6</span></td>
+              <td class="hname">ダノンベルーガ<span class="jockey">川田将雅 57.0</span></td>
+              <td class="odds">12.1<span class="fav">6人気</span></td>
+              <td><span class="mk n">–</span></td><td><span class="mk n">–</span></td><td><span class="mk n">–</span></td><td><span class="mk n">–</span></td>
+            </tr>
+          </table>
+          <div class="mklegend"><span><b class="h">◎</b> 本命</span><span><b class="t">○</b> 対抗</span><span><b class="a">▲</b> 穴</span><span>– 無印</span></div>
+        </div>
+
+        <div class="card">
+          <b style="font-size:13.5px">🤖 AI印の読みどころ</b>
+          <p class="comment" style="margin-top:8px">1番イクイノックスは4AI全てが◎か○。一方で2番ドウデュースはDeepSeekだけが無印にしており、ここが最大の分かれ目です。穴は5番ジオグリフに2票（ChatGPT・DeepSeek）。AI印とオッズの乖離が大きいのは3番サトノクラウン（6.5倍にDeepSeekが◎）です。</p>
+        </div>
+
+        <div class="card">
+          <b style="font-size:13.5px">📋 レース条件</b>
+          <p class="comment" style="margin-top:8px">東京11R ｜ 芝2400m（左回り）｜ 3歳オープン（国際）（指定）｜ 馬場：良 ｜ 天候：晴 ｜ 発走 15:40</p>
+        </div>
+      </div><!-- /race-sub1 -->
+    </div>
+
+    <!-- ================= RANKING ================= -->
+    <div class="page" id="pg-rank">
+      <div class="head">
+        <button class="icbtn">☰</button>
+        <div class="logo"><b>Kompari</b><span>AI PREDICTION ARENA</span></div>
+        <button class="icbtn">🔔<i class="dot"></i></button>
+      </div>
+
+      <div class="sec"><h2>AI的中率ランキング</h2><span class="muted">シーズン累計（全分野）</span></div>
+      <div class="card lb">
+        <div class="row">
+          <span class="rk g">1</span><span class="ai ds">D</span>
+          <div class="info"><div class="nm">DeepSeek</div><span class="delta fl">→ 先週から変動なし</span></div>
+          <div class="pct"><b>63.8%</b><span>286試合</span></div>
+        </div>
+        <div class="row">
+          <span class="rk">2</span><span class="ai gpt">G</span>
+          <div class="info"><div class="nm">ChatGPT <span class="streak" style="margin-left:4px">🔥3</span></div><span class="delta up">▲1 先週3位から浮上</span></div>
+          <div class="pct"><b>58.9%</b><span>312試合</span></div>
+        </div>
+        <div class="row">
+          <span class="rk">3</span><span class="ai cl">C</span>
+          <div class="info"><div class="nm">Claude</div><span class="delta dn">▼1 首位と8.7pt差</span></div>
+          <div class="pct"><b>55.1%</b><span>298試合</span></div>
+        </div>
+        <div class="row">
+          <span class="rk">4</span><span class="ai gm">✦</span>
+          <div class="info"><div class="nm">Gemini</div><span class="delta fl">→ 変動なし</span></div>
+          <div class="pct"><b>52.7%</b><span>305試合</span></div>
+        </div>
+      </div>
+
+      <div class="sec"><h2>分野別の強さをくらべる</h2></div>
+      <div class="card">
+        <div class="catpick" id="cats"></div>
+        <div id="catbars"></div>
+        <p class="bestai" id="catnote"></p>
+      </div>
+
+      <div class="sec"><h2>目利きランキング（ユーザー）</h2><a href="#">全体 ›</a></div>
+      <div class="card lb">
+        <div class="row">
+          <span class="rk g">1</span><span class="ai" style="background:#0F172A">川</span>
+          <div class="info"><div class="nm">kawauchi_88</div><span class="delta fl">「乗った」予想の的中率</span></div>
+          <div class="pct"><b>71.2%</b><span>52戦</span></div>
+        </div>
+        <div class="row">
+          <span class="rk">2</span><span class="ai" style="background:#7C3AED">星</span>
+          <div class="info"><div class="nm">hoshino.t</div><span class="delta up">▲3</span></div>
+          <div class="pct"><b>68.0%</b><span>47戦</span></div>
+        </div>
+        <div class="row" style="background:#F8FAFF;border-radius:10px">
+          <span class="rk">38</span><span class="ai" style="background:var(--blue)">あ</span>
+          <div class="info"><div class="nm">あなた</div><span class="delta up">▲6 今週 4勝1敗</span></div>
+          <div class="pct"><b>58.3%</b><span>24戦</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SOCCER DETAIL ================= -->
+    <div class="page" id="pg-soccer">
+      <div class="head">
+        <button class="icbtn" onclick="go('home')">‹</button>
+        <div class="logo"><b>Kompari</b><span>AI PREDICTION ARENA</span></div>
+        <button class="icbtn">⤴</button>
+      </div>
+      <div class="tabs2"><button class="on" onclick="sub(this,'soccer',0)">AI予測</button><button onclick="sub(this,'soccer',1)">試合情報</button></div>
+
+      <div class="card">
+        <p class="muted" style="text-align:center;font-weight:700">明治安田J1リーグ 第16節</p>
+        <div class="matchhead">
+          <div><div class="tm">FC東京</div><div class="fm">4-3-3 ｜ HOME</div></div>
+          <div class="mid">5/18（日）14:00<br>味の素スタジアム</div>
+          <div><div class="tm">横浜マリノス</div><div class="fm">4-2-3-1 ｜ AWAY</div></div>
+        </div>
+      </div>
+
+      <div id="soccer-sub0">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:14px">👑 AIコンセンサス</b>
+          <span class="chip split">2-1-1 で割れています</span>
+        </div>
+        <div class="wdl">
+          <span class="h" style="width:45%">HOME勝利<small>45%</small></span>
+          <span class="d" style="width:28%">引き分け<small>28%</small></span>
+          <span class="aw" style="width:27%">AWAY勝利<small>27%</small></span>
+        </div>
+        <div class="camps">
+          <div class="c" style="width:45%"><span class="ai gpt">G</span><span class="ai gm">✦</span></div>
+          <div class="c" style="width:28%"><span class="ai cl">C</span></div>
+          <div class="c" style="width:27%"><span class="ai ds">D</span></div>
+        </div>
+        <div class="consensus-score"><span>平均予想スコア</span><b>2 – 1</b></div>
+      </div>
+
+      <div class="card">
+        <b style="font-size:13.5px">⚽ 合計ゴール数の予想分布</b>
+        <div class="goals">
+          <div class="g"><b>5%</b><span>0点</span></div>
+          <div class="g"><b>14%</b><span>1点</span></div>
+          <div class="g hot"><b>28%</b><span>2点</span></div>
+          <div class="g"><b>25%</b><span>3点</span></div>
+          <div class="g"><b>16%</b><span>4点</span></div>
+          <div class="g"><b>12%</b><span>5+</span></div>
+        </div>
+        <p class="muted" style="margin-top:8px">4AIの平均では「2〜3ゴールのミドルスコア決着」が本線です。</p>
+      </div>
+
+      <!-- ChatGPT -->
+      <div class="card aicard gpt">
+        <div class="aihead">
+          <span class="ai gpt">G</span>
+          <div><div class="nm">ChatGPT</div>
+            <div class="form"><i class="w"></i><i class="w"></i><i class="l"></i><i class="w"></i><i class="w"></i><span>サッカー直近5戦 4勝</span></div>
+          </div>
+          <span class="opill h">HOME勝利</span>
+        </div>
+        <div class="statline">
+          <div class="st"><b>57.3%</b><span>サッカーの的中率（88試合）</span></div>
+          <div class="st"><div class="pscore">2 – 1<small>予想スコア</small></div></div>
+          <div class="st"><b>72%</b><span>今回の自信度</span></div>
+        </div>
+        <p class="comment">FC東京の攻撃力が優位。横浜FMはセットプレーに強みがありますが、流れの中の得点期待値で上回ると見ます。</p>
+        <button class="evibtn" onclick="tog(this)">データ根拠を見る ▾</button>
+        <div class="evi">・得点期待値（xG）：1.68 vs 1.23<br>・FC東京のホーム勝率：62%<br>・直近5試合の平均得点：1.6 vs 1.4</div>
+        <div class="aifoot">
+          <button class="ride" onclick="ridepick(this)">この予想に乗る（94人）</button>
+          <button class="fb" onclick="fbk(this)">👍 188</button>
+          <button class="fb" onclick="fbk(this)">👎 22</button>
+        </div>
+      </div>
+
+      <!-- Claude -->
+      <div class="card aicard cl">
+        <div class="aihead">
+          <span class="ai cl">C</span>
+          <div><div class="nm">Claude</div>
+            <div class="form"><i class="w"></i><i class="w"></i><i class="w"></i><i class="l"></i><i class="w"></i><span>サッカー直近5戦 4勝</span></div>
+          </div>
+          <span class="opill d">引き分け</span>
+        </div>
+        <div class="statline">
+          <div class="st"><b>60.8%</b><span>サッカーの的中率（88試合）</span></div>
+          <div class="st"><div class="pscore">1 – 1<small>予想スコア</small></div></div>
+          <div class="st"><b>65%</b><span>今回の自信度</span></div>
+        </div>
+        <p class="comment">両チームとも守備が堅く、xGの差はわずか。直近の対戦トレンドも引き分け傾向で、ロースコアの痛み分けを本線とします。</p>
+        <button class="evibtn" onclick="tog(this)">データ根拠を見る ▾</button>
+        <div class="evi">・得点期待値（xG）：1.25 vs 1.19<br>・直近の直接対決：D-W-D-L-D<br>・両軍クリーンシート率：38% / 35%</div>
+        <div class="aifoot">
+          <button class="ride" onclick="ridepick(this)">この予想に乗る（41人）</button>
+          <button class="fb" onclick="fbk(this)">👍 156</button>
+          <button class="fb" onclick="fbk(this)">👎 31</button>
+        </div>
+      </div>
+
+      <!-- Gemini -->
+      <div class="card aicard gm">
+        <div class="aihead">
+          <span class="ai gm">✦</span>
+          <div><div class="nm">Gemini</div>
+            <div class="form"><i class="l"></i><i class="w"></i><i class="l"></i><i class="w"></i><i class="w"></i><span>サッカー直近5戦 3勝</span></div>
+          </div>
+          <span class="opill h">HOME勝利</span>
+        </div>
+        <div class="statline">
+          <div class="st"><b>54.0%</b><span>サッカーの的中率（88試合）</span></div>
+          <div class="st"><div class="pscore">2 – 0<small>予想スコア</small></div></div>
+          <div class="st"><b>63%</b><span>今回の自信度</span></div>
+        </div>
+        <p class="comment">FC東京のホーム優位を重視。横浜FMは決定力に課題があり、無得点に抑えられる展開も十分にあり得ます。</p>
+        <button class="evibtn" onclick="tog(this)">データ根拠を見る ▾</button>
+        <div class="evi">・得点期待値（xG）：1.74 vs 0.98<br>・横浜FMのアウェイ無得点率：29%<br>・FC東京のホーム失点平均：0.9</div>
+        <div class="aifoot">
+          <button class="ride" onclick="ridepick(this)">この予想に乗る（37人）</button>
+          <button class="fb" onclick="fbk(this)">👍 142</button>
+          <button class="fb" onclick="fbk(this)">👎 26</button>
+        </div>
+      </div>
+
+      <!-- DeepSeek -->
+      <div class="card aicard ds">
+        <div class="aihead">
+          <span class="ai ds">D</span>
+          <div><div class="nm">DeepSeek</div>
+            <div class="form"><i class="w"></i><i class="w"></i><i class="w"></i><i class="w"></i><i class="l"></i><span>サッカー直近5戦 4勝</span></div>
+          </div>
+          <span class="opill aw">AWAY勝利</span>
+        </div>
+        <div class="statline">
+          <div class="st"><b>61.5%</b><span>サッカーの的中率（88試合）</span></div>
+          <div class="st"><div class="pscore">1 – 2<small>予想スコア</small></div></div>
+          <div class="st"><b>59%</b><span>今回の自信度</span></div>
+        </div>
+        <p class="comment">唯一のAWAY予想です。横浜FMのカウンターが脅威で、前がかりになるFC東京の裏のスペースを突けると見ます。</p>
+        <button class="evibtn" onclick="tog(this)">データ根拠を見る ▾</button>
+        <div class="evi">・得点期待値（xG）：1.12 vs 1.56<br>・横浜FMのアウェイ勝率：41%<br>・FC東京の被カウンター失点：リーグ最多タイ</div>
+        <div class="aifoot">
+          <button class="ride" onclick="ridepick(this)">この予想に乗る（58人）</button>
+          <button class="fb" onclick="fbk(this)">👍 203</button>
+          <button class="fb" onclick="fbk(this)">👎 17</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <b style="font-size:13.5px">★ 試合の見どころ（AI要約）</b>
+        <p class="comment" style="margin-top:8px">中盤での攻防が続き、70分以降に得点が生まれやすい展開を予想。鍵を握るのはFC東京・ディエゴ オリヴェイラ（今季7G）と横浜FM・アンデルソン ロペス（今季6G）。DeepSeekだけがカウンター一発のAWAY勝利を主張しており、的中すれば順位争いに大きく影響します。</p>
+      </div>
+      </div><!-- /soccer-sub0 -->
+
+      <div id="soccer-sub1" style="display:none">
+        <div class="card">
+          <b style="font-size:13.5px">📊 チーム比較（今季）</b>
+          <div style="margin-top:12px">
+            <div class="vsrow">
+              <div class="val l">3位 / 勝点31</div><div class="lab">順位</div><div class="val r">5位 / 勝点28</div>
+            </div>
+            <div class="vsrow">
+              <div class="val l" style="display:flex;justify-content:flex-end;gap:3px"><i style="width:9px;height:9px;border-radius:50%;background:var(--win)"></i><i style="width:9px;height:9px;border-radius:50%;background:var(--win)"></i><i style="width:9px;height:9px;border-radius:50%;background:#94A3B8"></i><i style="width:9px;height:9px;border-radius:50%;background:var(--win)"></i><i style="width:9px;height:9px;border-radius:50%;background:#CBD5E1"></i></div>
+              <div class="lab">直近5戦</div>
+              <div class="val r" style="display:flex;gap:3px"><i style="width:9px;height:9px;border-radius:50%;background:var(--win)"></i><i style="width:9px;height:9px;border-radius:50%;background:#CBD5E1"></i><i style="width:9px;height:9px;border-radius:50%;background:var(--win)"></i><i style="width:9px;height:9px;border-radius:50%;background:#94A3B8"></i><i style="width:9px;height:9px;border-radius:50%;background:var(--win)"></i></div>
+            </div>
+            <div class="vsrow">
+              <div class="val l">1.6</div><div class="lab">平均得点</div><div class="val r">1.4</div>
+            </div>
+            <div class="cmpbar"><span class="lft" style="width:53%"></span><span class="rgt" style="width:47%"></span></div>
+            <div class="vsrow" style="margin-top:10px">
+              <div class="val l">0.9</div><div class="lab">平均失点</div><div class="val r">1.2</div>
+            </div>
+            <div class="cmpbar"><span class="lft" style="width:43%"></span><span class="rgt" style="width:57%"></span></div>
+            <div class="vsrow" style="margin-top:10px">
+              <div class="val l">62%</div><div class="lab">H/A勝率</div><div class="val r">41%</div>
+            </div>
+          </div>
+          <p class="muted" style="margin-top:10px">緑＝勝 ／ グレー＝分 ／ 薄灰＝敗。失点バーは少ない方が優位です。</p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <b style="font-size:13.5px">⚽ 予想スタメン</b>
+            <span class="muted">公式発表はキックオフ約1時間前</span>
+          </div>
+          <div class="pitch">
+            <span class="circle"></span><span class="box t"></span><span class="box b"></span>
+            <span class="teamtag t">横浜マリノス 4-2-3-1</span>
+            <span class="teamtag b">FC東京 4-3-3</span>
+            <!-- away (top, attacking downward) -->
+            <span class="pl away" style="left:50%;top:6%"><span class="num">1</span><span class="pnm">飯倉</span></span>
+            <span class="pl away" style="left:15%;top:15%"><span class="num">27</span><span class="pnm">松原</span></span>
+            <span class="pl away" style="left:38%;top:14%"><span class="num">4</span><span class="pnm">畠中</span></span>
+            <span class="pl away" style="left:62%;top:14%"><span class="num">5</span><span class="pnm">エドゥアルド</span></span>
+            <span class="pl away" style="left:85%;top:15%"><span class="num">2</span><span class="pnm">永戸</span></span>
+            <span class="pl away" style="left:36%;top:24%"><span class="num">8</span><span class="pnm">渡辺</span></span>
+            <span class="pl away" style="left:64%;top:24%"><span class="num">6</span><span class="pnm">喜田</span></span>
+            <span class="pl away" style="left:15%;top:33%"><span class="num">7</span><span class="pnm">エウベル</span></span>
+            <span class="pl away" style="left:50%;top:34%"><span class="num">14</span><span class="pnm">山根</span></span>
+            <span class="pl away" style="left:85%;top:33%"><span class="num">17</span><span class="pnm">ヤン マテウス</span></span>
+            <span class="pl away" style="left:50%;top:43%"><span class="num">10</span><span class="pnm">A.ロペス</span></span>
+            <!-- home (bottom, attacking upward) -->
+            <span class="pl home" style="left:18%;top:56%"><span class="num">39</span><span class="pnm">仲川</span></span>
+            <span class="pl home" style="left:50%;top:55%"><span class="num">9</span><span class="pnm">D.オリヴェイラ</span></span>
+            <span class="pl home" style="left:82%;top:56%"><span class="num">33</span><span class="pnm">俵積田</span></span>
+            <span class="pl home" style="left:28%;top:67%"><span class="num">44</span><span class="pnm">松木</span></span>
+            <span class="pl home" style="left:50%;top:65%"><span class="num">10</span><span class="pnm">東</span></span>
+            <span class="pl home" style="left:72%;top:67%"><span class="num">8</span><span class="pnm">安部</span></span>
+            <span class="pl home" style="left:15%;top:79%"><span class="num">29</span><span class="pnm">中村</span></span>
+            <span class="pl home" style="left:38%;top:82%"><span class="num">3</span><span class="pnm">森重</span></span>
+            <span class="pl home" style="left:62%;top:82%"><span class="num">2</span><span class="pnm">トレヴィザン</span></span>
+            <span class="pl home" style="left:85%;top:79%"><span class="num">5</span><span class="pnm">長友</span></span>
+            <span class="pl home" style="left:50%;top:92%"><span class="num">41</span><span class="pnm">野澤</span></span>
+          </div>
+          <div class="benchwrap">
+            <div class="bt"><i style="background:#1D5BFF"></i>FC東京 ベンチ</div>
+            <div class="benchlist">
+              <span><b>GK</b>波多野豪</span><span><b>DF</b>木本恭生</span><span><b>MF</b>原川力</span><span><b>MF</b>寺山翼</span><span><b>FW</b>荒木遼太郎</span><span><b>FW</b>ルイス フェリッピ</span><span><b>FW</b>山下敬大</span>
+            </div>
+            <div class="bt"><i style="background:#E11D48"></i>横浜マリノス ベンチ</div>
+            <div class="benchlist">
+              <span><b>GK</b>白坂楓馬</span><span><b>DF</b>加藤蓮</span><span><b>MF</b>天野純</span><span><b>MF</b>植中朝日</span><span><b>FW</b>宮市亮</span><span><b>FW</b>井上健太</span><span><b>FW</b>西村拓真</span>
+            </div>
+          </div>
+          <p class="muted" style="margin-top:10px">AIが直近の起用傾向から推定したスタメンです。公式発表後に自動更新されます。</p>
+        </div>
+
+        <div class="card">
+          <b style="font-size:13.5px">🔁 直接対決（直近5試合）</b>
+          <div style="margin-top:6px">
+            <div class="h2h"><span class="dt">2025.11</span><span>FC東京 <b class="sc">1 – 1</b> 横浜FM</span><span class="res dw">引分</span></div>
+            <div class="h2h"><span class="dt">2025.06</span><span>横浜FM <b class="sc">2 – 1</b> FC東京</span><span class="res aw">横浜FM</span></div>
+            <div class="h2h"><span class="dt">2024.10</span><span>FC東京 <b class="sc">0 – 0</b> 横浜FM</span><span class="res dw">引分</span></div>
+            <div class="h2h"><span class="dt">2024.05</span><span>FC東京 <b class="sc">2 – 0</b> 横浜FM</span><span class="res hw">FC東京</span></div>
+            <div class="h2h"><span class="dt">2023.11</span><span>横浜FM <b class="sc">1 – 1</b> FC東京</span><span class="res dw">引分</span></div>
+          </div>
+          <p class="muted" style="margin-top:8px">5戦で引き分け3回。Claudeの引き分け予想はこの傾向が根拠のひとつです。</p>
+        </div>
+
+        <div class="card">
+          <b style="font-size:13.5px">⭐ 注目選手</b>
+          <div class="h2h" style="margin-top:4px"><span><b>ディエゴ オリヴェイラ</b><span class="muted" style="display:block">FC東京 ｜ FW #9</span></span><span class="sc">今季 7G 3A</span></div>
+          <div class="h2h"><span><b>アンデルソン ロペス</b><span class="muted" style="display:block">横浜FM ｜ FW #10</span></span><span class="sc">今季 6G 2A</span></div>
+          <div class="h2h"><span><b>松木玖生</b><span class="muted" style="display:block">FC東京 ｜ MF #44</span></span><span class="sc">今季 3G 5A</span></div>
+        </div>
+
+        <div class="card">
+          <b style="font-size:13.5px">🏟 スタジアム・天気</b>
+          <div class="h2h" style="margin-top:4px"><span><b>味の素スタジアム</b><span class="muted" style="display:block">東京都調布市 ｜ 収容 49,970人</span></span><span class="sc">芝：良好</span></div>
+          <div class="wgrid">
+            <div class="w"><span class="ic2">☀️</span><b>晴れ</b><span>天気</span></div>
+            <div class="w"><span class="ic2">🌡</span><b>24℃</b><span>気温</span></div>
+            <div class="w"><span class="ic2">💧</span><b>48%</b><span>湿度</span></div>
+            <div class="w"><span class="ic2">🌬</span><b>2m/s</b><span>風（南西）</span></div>
+          </div>
+          <p class="comment" style="margin-top:10px">キックオフ 14:00 ｜ 降水確率 10% ｜ 中継：DAZN ｜ 主審：木村博之。気温24℃のデーゲームで、後半に運動量が落ちやすいコンディションです。終盤の得点増を読むAIの展開予想とも整合します。</p>
+        </div>
+      </div><!-- /soccer-sub1 -->
+    </div>
+
+    <!-- ================= MYPAGE ================= -->
+    <div class="page" id="pg-my">
+      <div class="head">
+        <button class="icbtn">☰</button>
+        <div class="logo"><b>Kompari</b><span>AI PREDICTION ARENA</span></div>
+        <button class="icbtn">⚙</button>
+      </div>
+      <div class="card" style="text-align:center;padding:32px 16px">
+        <p class="muted">マイページ（このプロトタイプでは省略）<br>戦績・乗ったAIの履歴・通知設定など</p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="nav">
+    <button class="on" data-pg="home" onclick="go('home',this)"><span class="ic">🏠</span>ホーム</button>
+    <button data-pg="race" onclick="go('race',this)"><span class="ic">🎙</span>予測</button>
+    <button data-pg="rank" onclick="go('rank',this)"><span class="ic">👑</span>ランキング</button>
+    <button data-pg="my" onclick="go('my',this)"><span class="ic">👤</span>マイページ</button>
+  </div>
+</div>
+
+<script>
+function go(pg, btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('pg-'+pg).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('on', b.dataset.pg===pg));
+  document.getElementById('screen').scrollTop = 0;
+}
+function sub(btn, page, idx){
+  btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById(page+'-sub0').style.display = idx===0 ? 'block' : 'none';
+  document.getElementById(page+'-sub1').style.display = idx===1 ? 'block' : 'none';
+  document.getElementById('screen').scrollTop = 0;
+}
+function tog(btn){
+  const evi = btn.nextElementSibling;
+  const open = evi.classList.toggle('open');
+  btn.textContent = open ? 'データ根拠を閉じる ▴' : 'データ根拠を見る ▾';
+}
+function ridepick(btn){
+  document.querySelectorAll('.ride').forEach(b=>{ if(b!==btn){b.classList.remove('sel'); b.textContent = b.textContent.replace('✓ 乗りました','この予想に乗る');}});
+  const sel = btn.classList.toggle('sel');
+  btn.textContent = sel ? '✓ 乗りました（あなたの的中判定に反映）' : btn.textContent.replace('✓ 乗りました（あなたの的中判定に反映）','この予想に乗る（…人）');
+}
+function fbk(btn){ btn.classList.toggle('sel'); }
+function vote(btn){
+  btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+/* category bars */
+const catData = {
+  '競馬（GI）':  [['DeepSeek',64.1,'--deep'],['ChatGPT',61.7,'--gpt'],['Claude',58.2,'--claude'],['Gemini',55.9,'--gemini']],
+  'NBA':        [['ChatGPT',66.2,'--gpt'],['DeepSeek',63.0,'--deep'],['Gemini',58.4,'--gemini'],['Claude',57.1,'--claude']],
+  'サッカー':    [['DeepSeek',61.5,'--deep'],['Claude',60.8,'--claude'],['ChatGPT',57.3,'--gpt'],['Gemini',54.0,'--gemini']],
+  'ボートレース': [['Claude',59.3,'--claude'],['DeepSeek',58.8,'--deep'],['Gemini',55.2,'--gemini'],['ChatGPT',54.6,'--gpt']],
+  'MLB':        [['Gemini',57.9,'--gemini'],['ChatGPT',55.4,'--gpt'],['DeepSeek',54.8,'--deep'],['Claude',52.2,'--claude']]
+};
+const notes = {
+  '競馬（GI）':'競馬はDeepSeekが頭ひとつ抜けています。オッズ妙味を取りにいく穴狙い傾向が特徴です。',
+  'NBA':'NBAはChatGPTの独壇場。ペース×得点効率の分析が安定しています。',
+  'サッカー':'サッカーはDeepSeekとClaudeが接戦。Claudeは引き分け予想の精度が高めです。',
+  'ボートレース':'ボートレースはClaudeが首位。進入隊形の読みに強みがあります。',
+  'MLB':'MLBは全体的に的中率が低め。先発投手の調子に左右されやすい分野です。'
+};
+const catsEl = document.getElementById('cats');
+Object.keys(catData).forEach((c,i)=>{
+  const b=document.createElement('button');
+  b.textContent=c; if(i===0)b.classList.add('on');
+  b.onclick=()=>{catsEl.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');renderCat(c);};
+  catsEl.appendChild(b);
+});
+function renderCat(c){
+  const rows = catData[c];
+  document.getElementById('catbars').innerHTML = rows.map(([n,v,col])=>`
+    <div class="cbar">
+      <div class="lab"><b>${n}</b><span>${v}%</span></div>
+      <div class="track"><div class="fill" style="width:${(v-40)/30*100}%;background:var(${col})"></div></div>
+    </div>`).join('');
+  document.getElementById('catnote').textContent = notes[c];
+}
+renderCat('競馬（GI）');
+</script>
+</body>
+</html>
