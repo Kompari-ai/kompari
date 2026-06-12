@@ -210,13 +210,6 @@ export default function RacesPage() {
               <span className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold tracking-[0.18em] text-white">
                 EVENTS
               </span>
-
-              <Link
-                href="/admin"
-                className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-blue-700"
-              >
-                作成
-              </Link>
             </div>
 
             <h1 className="text-3xl font-extrabold">予測イベント</h1>

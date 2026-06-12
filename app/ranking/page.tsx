@@ -476,19 +476,12 @@ export default function RankingPage() {
                 結果入力済みで、AI予測が入っているイベントが増えるとランキングが表示されます。
               </p>
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <Link
-                  href="/admin/results"
-                  className="rounded-2xl bg-blue-700 py-4 text-center text-sm font-extrabold text-white"
-                >
-                  結果入力へ
-                </Link>
-
+              <div className="mt-5">
                 <Link
                   href="/races"
-                  className="rounded-2xl bg-gray-100 py-4 text-center text-sm font-extrabold text-gray-700"
+                  className="block rounded-2xl bg-blue-700 py-4 text-center text-sm font-extrabold text-white"
                 >
-                  イベント一覧
+                  イベント一覧へ
                 </Link>
               </div>
             </div>

@@ -397,6 +397,7 @@ export default function MyAiPage() {
                       </p>
                     </div>
 
+                    {/* 将来対応: My AI削除 — Firestoreルール修正後に有効化 (see docs/AUDIT.md T-02)
                     <button
                       type="button"
                       onClick={() => deleteMyAi(ai.id)}
@@ -404,6 +405,7 @@ export default function MyAiPage() {
                     >
                       削除
                     </button>
+                    */}
                   </div>
 
                   <p className="mb-4 text-sm leading-6 text-gray-600">

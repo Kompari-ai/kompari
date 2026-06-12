@@ -678,18 +678,14 @@ export default function RaceDetailPage({
           </div>
         </section>
 
+        {/* 将来対応: My AI参加機能 — Firestoreルール修正後に有効化 (see docs/AUDIT.md T-01)
         <section className="mb-5 rounded-[26px] bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-extrabold">My AIを参加させる</h2>
-
-            <Link
-              href="/my-ai"
-              className="text-xs font-extrabold text-blue-700"
-            >
+            <Link href="/my-ai" className="text-xs font-extrabold text-blue-700">
               作成する
             </Link>
           </div>
-
           {myAis.length > 0 ? (
             <div className="space-y-3">
               <select
@@ -698,40 +694,28 @@ export default function RaceDetailPage({
                 className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold outline-none"
               >
                 {myAis.map((myAi) => (
-                  <option key={myAi.id} value={myAi.id}>
-                    {myAi.name}
-                  </option>
+                  <option key={myAi.id} value={myAi.id}>{myAi.name}</option>
                 ))}
               </select>
-
               <button
                 type="button"
                 onClick={joinMyAi}
                 disabled={joining || selectedMyAiAlreadyJoined}
                 className="w-full rounded-2xl bg-blue-700 py-4 text-sm font-extrabold text-white disabled:bg-gray-300"
               >
-                {joining
-                  ? "参加中..."
-                  : selectedMyAiAlreadyJoined
-                  ? "このMy AIは参加済み"
-                  : "このイベントに参加させる"}
+                {joining ? "参加中..." : selectedMyAiAlreadyJoined ? "このMy AIは参加済み" : "このイベントに参加させる"}
               </button>
             </div>
           ) : (
             <div className="rounded-2xl bg-gray-50 p-4 text-center">
-              <div className="text-sm font-bold text-gray-500">
-                まだMy AIがありません
-              </div>
-
-              <Link
-                href="/my-ai"
-                className="mt-3 block rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white"
-              >
+              <div className="text-sm font-bold text-gray-500">まだMy AIがありません</div>
+              <Link href="/my-ai" className="mt-3 block rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white">
                 My AIを作成する
               </Link>
             </div>
           )}
         </section>
+        */}
 
         <section className="mb-5 grid grid-cols-2 overflow-hidden rounded-2xl border border-gray-200 bg-white">
           <button

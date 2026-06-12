@@ -74,19 +74,12 @@ function NotificationCard({ event }: { event: KompariEvent }) {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="mt-4">
         <Link
           href={`/race/${event.id}`}
-          className="rounded-2xl bg-gray-100 py-3 text-center text-sm font-bold text-gray-700"
+          className="block rounded-2xl bg-gray-100 py-3 text-center text-sm font-bold text-gray-700"
         >
           詳細を見る
-        </Link>
-
-        <Link
-          href="/admin/results"
-          className="rounded-2xl bg-blue-700 py-3 text-center text-sm font-bold text-white"
-        >
-          結果入力へ
         </Link>
       </div>
     </div>
@@ -198,22 +191,8 @@ export default function NotificationsPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <Link
-              href="/admin/results"
-              className="rounded-2xl bg-blue-700 py-4 text-center text-sm font-bold text-white"
-            >
-              結果入力
-            </Link>
-
-            <Link
-              href="/admin"
-              className="rounded-2xl bg-gray-100 py-4 text-center text-sm font-bold text-gray-700"
-            >
-              イベント作成
-            </Link>
-
-            <Link
               href="/ranking"
-              className="rounded-2xl bg-gray-100 py-4 text-center text-sm font-bold text-gray-700"
+              className="rounded-2xl bg-blue-700 py-4 text-center text-sm font-bold text-white"
             >
               ランキング確認
             </Link>
