@@ -48,7 +48,14 @@ export default function RootLayout({
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full">
+        <div
+          className="relative mx-auto flex min-h-screen w-full flex-col bg-white shadow-[0_0_80px_rgba(0,0,0,0.7)]"
+          style={{ maxWidth: "430px" }}
+        >
+          {children}
+        </div>
+      </body>
     </html>
   );
 }
