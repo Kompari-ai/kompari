@@ -12,6 +12,7 @@ import {
   getCategoryLabel,
   type EventCategory,
 } from "@/lib/categories";
+import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   getResultWinner,
   normalizeRaceToEvent,
@@ -114,21 +115,32 @@ function formatAccuracy(value: number) {
   return `${Math.round(value * 1000) / 10}%`;
 }
 
-function sourceLabel(source: RankingRow["source"]) {
-  return source === "user" ? "My AI" : "Official AI";
-}
-
-function sourceClass(source: RankingRow["source"]) {
-  return source === "user"
-    ? "bg-purple-50 text-purple-700"
-    : "bg-blue-50 text-blue-700";
-}
-
 function rankBadge(index: number) {
   if (index === 0) return "🥇";
   if (index === 1) return "🥈";
   if (index === 2) return "🥉";
   return `${index + 1}`;
+}
+
+function AiAvatar({ aiName, source }: { aiName: string; source: "official" | "user" }) {
+  if (source === "user") {
+    return (
+      <div className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-sm font-extrabold text-white bg-purple-500">
+        {aiName.slice(0, 1).toUpperCase()}
+      </div>
+    );
+  }
+
+  const colors = getAiColors(aiName);
+
+  return (
+    <div
+      className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-sm font-extrabold"
+      style={{ background: colors.bg, color: colors.text }}
+    >
+      {getAiInitial(aiName)}
+    </div>
+  );
 }
 
 export default function RankingPage() {
@@ -187,16 +199,15 @@ export default function RankingPage() {
     return rankings.reduce((sum, row) => sum + row.hits, 0);
   }, [rankings]);
 
-  const overallAccuracy = totalPredictions
-    ? totalHits / totalPredictions
-    : 0;
+  const overallAccuracy = totalPredictions ? totalHits / totalPredictions : 0;
 
   return (
-    <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
+    <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
       <TopBar />
 
       <div className="mx-auto max-w-[430px] px-4 pb-28 pt-4">
-        <section className="mb-5 overflow-hidden rounded-[32px] bg-white shadow-sm">
+        {/* Header */}
+        <section className="mb-4 overflow-hidden rounded-[18px] border border-[#E8ECF2] bg-white shadow-sm">
           <div
             className="p-5 text-white"
             style={{
@@ -204,44 +215,39 @@ export default function RankingPage() {
                 "linear-gradient(135deg, #111827 0%, #1d4ed8 55%, #2563eb 100%)",
             }}
           >
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between">
               <span className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold tracking-[0.18em] text-white">
                 AI RANKING
               </span>
-
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-blue-700">
+              <span className="rounded-full bg-white/20 px-3 py-1 text-[11px] font-extrabold text-white">
                 1着的中
               </span>
             </div>
 
-            <h1 className="text-4xl font-black leading-tight tracking-tight">
+            <h1 className="text-[30px] font-black leading-tight tracking-tight">
               AI的中
               <br />
               ランキング
             </h1>
 
-            <p className="mt-4 text-sm font-semibold leading-6 text-blue-50">
+            <p className="mt-3 text-[12px] font-semibold leading-[1.6] text-white/70">
               結果入力済みイベントをもとに、各AIの本命予測が実際の勝者と一致したかを集計します。
             </p>
 
-            <div className="mt-6 grid grid-cols-3 gap-3 text-center">
-              <div className="rounded-2xl bg-white/10 p-3">
-                <div className="text-xs text-white/65">対象</div>
-                <div className="mt-1 text-2xl font-extrabold">
+            <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-[12px] bg-white/10 p-2.5">
+                <div className="text-[10px] text-white/65">対象</div>
+                <div className="mt-0.5 text-xl font-extrabold">
                   {targetEvents.length}
                 </div>
               </div>
-
-              <div className="rounded-2xl bg-white/10 p-3">
-                <div className="text-xs text-white/65">的中</div>
-                <div className="mt-1 text-2xl font-extrabold">
-                  {totalHits}
-                </div>
+              <div className="rounded-[12px] bg-white/10 p-2.5">
+                <div className="text-[10px] text-white/65">的中</div>
+                <div className="mt-0.5 text-xl font-extrabold">{totalHits}</div>
               </div>
-
-              <div className="rounded-2xl bg-white/10 p-3">
-                <div className="text-xs text-white/65">的中率</div>
-                <div className="mt-1 text-2xl font-extrabold">
+              <div className="rounded-[12px] bg-white/10 p-2.5">
+                <div className="text-[10px] text-white/65">的中率</div>
+                <div className="mt-0.5 text-xl font-extrabold">
                   {formatAccuracy(overallAccuracy)}
                 </div>
               </div>
@@ -249,220 +255,186 @@ export default function RankingPage() {
           </div>
         </section>
 
-        <section className="mb-5 rounded-[26px] bg-white p-4 shadow-sm">
-          <div className="mb-3 text-sm font-extrabold text-gray-700">
-            フィルター
-          </div>
+        {/* Filters */}
+        <section className="mb-4 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-sm">
+          <div className="mb-2 text-[11px] font-bold text-gray-500">フィルター</div>
 
-          <div className="grid grid-cols-3 overflow-hidden rounded-2xl border border-gray-200 bg-white">
-            <button
-              type="button"
-              onClick={() => setSourceFilter("all")}
-              className={`py-4 text-sm font-extrabold ${
-                sourceFilter === "all"
-                  ? "bg-blue-700 text-white"
-                  : "text-gray-600"
-              }`}
-            >
-              すべて
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSourceFilter("official")}
-              className={`py-4 text-sm font-extrabold ${
-                sourceFilter === "official"
-                  ? "bg-blue-700 text-white"
-                  : "text-gray-600"
-              }`}
-            >
-              公式AI
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSourceFilter("user")}
-              className={`py-4 text-sm font-extrabold ${
-                sourceFilter === "user"
-                  ? "bg-blue-700 text-white"
-                  : "text-gray-600"
-              }`}
-            >
-              My AI
-            </button>
-          </div>
-
-          <div className="mt-4 overflow-x-auto pb-1">
-            <div className="flex gap-2">
+          <div className="flex bg-[#E7EBF2] rounded-[12px] p-[3px] mb-3">
+            {[
+              { value: "all", label: "すべて" },
+              { value: "official", label: "公式AI" },
+              { value: "user", label: "My AI" },
+            ].map((item) => (
               <button
+                key={item.value}
                 type="button"
-                onClick={() => setCategoryFilter("all")}
-                className={`shrink-0 rounded-full px-4 py-2 text-xs font-extrabold ${
-                  categoryFilter === "all"
-                    ? "bg-blue-700 text-white"
-                    : "bg-gray-100 text-gray-600"
+                onClick={() => setSourceFilter(item.value as SourceFilter)}
+                className={`flex-1 py-2 text-[13px] font-bold rounded-[10px] transition-colors ${
+                  sourceFilter === item.value
+                    ? "bg-white text-[#0F172A] shadow-sm"
+                    : "text-[#64748B]"
                 }`}
               >
-                全カテゴリ
+                {item.label}
               </button>
+            ))}
+          </div>
 
-              {eventCategories.map((category) => (
-                <button
-                  key={category.value}
-                  type="button"
-                  onClick={() => setCategoryFilter(category.value)}
-                  className={`shrink-0 rounded-full px-4 py-2 text-xs font-extrabold ${
-                    categoryFilter === category.value
-                      ? "bg-blue-700 text-white"
-                      : "bg-gray-100 text-gray-600"
-                  }`}
-                >
-                  {category.emoji} {category.shortLabel}
-                </button>
-              ))}
-            </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button
+              type="button"
+              onClick={() => setCategoryFilter("all")}
+              className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-bold ${
+                categoryFilter === "all"
+                  ? "bg-[#0F172A] text-white border-[#0F172A]"
+                  : "bg-white text-[#64748B] border-[#E8ECF2]"
+              }`}
+            >
+              全カテゴリ
+            </button>
+
+            {eventCategories.map((category) => (
+              <button
+                key={category.value}
+                type="button"
+                onClick={() => setCategoryFilter(category.value)}
+                className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-bold ${
+                  categoryFilter === category.value
+                    ? "bg-[#0F172A] text-white border-[#0F172A]"
+                    : "bg-white text-[#64748B] border-[#E8ECF2]"
+                }`}
+              >
+                {category.emoji} {category.shortLabel}
+              </button>
+            ))}
           </div>
         </section>
 
         <section className="mb-3 flex items-center justify-between">
-          <h2 className="text-xl font-extrabold">ランキング</h2>
-
-          <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-gray-500 shadow-sm">
+          <h2 className="text-[15.5px] font-bold">ランキング</h2>
+          <span className="rounded-full border border-[#E8ECF2] bg-white px-3 py-1 text-[11px] font-bold text-gray-500 shadow-sm">
             {rankings.length} AI
           </span>
         </section>
 
         <section className="space-y-4">
-          {rankings.map((row, index) => (
-            <article
-              key={row.key}
-              className="rounded-[28px] bg-white p-4 shadow-sm"
-            >
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gray-900 text-lg font-black text-white">
-                    {rankBadge(index)}
+          {rankings.map((row, index) => {
+            const colors = row.source === "official" ? getAiColors(row.ai) : null;
+
+            return (
+              <article
+                key={row.key}
+                className="rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-sm"
+              >
+                {/* Header row */}
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {/* Rank badge */}
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-gray-900 text-base font-black text-white">
+                      {rankBadge(index)}
+                    </div>
+
+                    <div>
+                      <h3 className="text-[15px] font-extrabold leading-tight">
+                        {row.ai}
+                      </h3>
+                      <div className="mt-1 flex items-center gap-2">
+                        <AiAvatar aiName={row.ai} source={row.source} />
+                        {row.myAiId && (
+                          <Link
+                            href={`/my-ai/${row.myAiId}`}
+                            className="text-[11px] font-extrabold text-blue-700"
+                          >
+                            詳細
+                          </Link>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <h3 className="text-lg font-extrabold leading-tight">
-                      {row.ai}
-                    </h3>
+                  <div className="text-right">
+                    <div
+                      className="text-[22px] font-black"
+                      style={{ color: colors?.bg ?? "#6366f1" }}
+                    >
+                      {formatAccuracy(row.accuracy)}
+                    </div>
+                    <div className="text-[10px] font-bold text-gray-400">的中率</div>
+                  </div>
+                </div>
 
-                    <div className="mt-1 flex items-center gap-2">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${sourceClass(
-                          row.source
-                        )}`}
-                      >
-                        {sourceLabel(row.source)}
-                      </span>
-
-                      {row.myAiId && (
-                        <Link
-                          href={`/my-ai/${row.myAiId}`}
-                          className="text-[11px] font-extrabold text-blue-700"
-                        >
-                          詳細
-                        </Link>
-                      )}
+                {/* Stats */}
+                <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-[10px] bg-gray-50 p-2.5">
+                    <div className="text-[10px] font-bold text-gray-400">予測数</div>
+                    <div className="mt-0.5 text-base font-extrabold">{row.total}</div>
+                  </div>
+                  <div className="rounded-[10px] bg-green-50 p-2.5">
+                    <div className="text-[10px] font-bold text-green-600">的中</div>
+                    <div className="mt-0.5 text-base font-extrabold text-green-700">
+                      {row.hits}
+                    </div>
+                  </div>
+                  <div className="rounded-[10px] bg-red-50 p-2.5">
+                    <div className="text-[10px] font-bold text-red-400">外れ</div>
+                    <div className="mt-0.5 text-base font-extrabold text-red-600">
+                      {row.total - row.hits}
                     </div>
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <div className="text-2xl font-black text-blue-700">
-                    {formatAccuracy(row.accuracy)}
-                  </div>
-                  <div className="text-[11px] font-bold text-gray-400">
-                    的中率
-                  </div>
-                </div>
-              </div>
-
-              <div className="mb-4 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-2xl bg-gray-50 p-3">
-                  <div className="text-[11px] font-bold text-gray-400">
-                    予測数
-                  </div>
-                  <div className="mt-1 text-lg font-extrabold">
-                    {row.total}
-                  </div>
+                {/* Accuracy bar */}
+                <div className="mb-3 h-[9px] overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full transition-[width]"
+                    style={{
+                      width: `${Math.round(row.accuracy * 100)}%`,
+                      background: colors?.bg ?? "#6366f1",
+                    }}
+                  />
                 </div>
 
-                <div className="rounded-2xl bg-blue-50 p-3">
-                  <div className="text-[11px] font-bold text-blue-500">
-                    的中
+                {/* Recent history */}
+                <div className="rounded-[12px] bg-[#F8FAFC] p-3">
+                  <div className="mb-2 text-[11px] font-extrabold text-gray-500">
+                    最近の判定
                   </div>
-                  <div className="mt-1 text-lg font-extrabold text-blue-700">
-                    {row.hits}
-                  </div>
-                </div>
 
-                <div className="rounded-2xl bg-gray-50 p-3">
-                  <div className="text-[11px] font-bold text-gray-400">
-                    外れ
-                  </div>
-                  <div className="mt-1 text-lg font-extrabold">
-                    {row.total - row.hits}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mb-4 h-3 overflow-hidden rounded-full bg-gray-100">
-                <div
-                  className="h-full rounded-full bg-blue-700"
-                  style={{ width: `${Math.round(row.accuracy * 100)}%` }}
-                />
-              </div>
-
-              <div className="rounded-2xl bg-gray-50 p-3">
-                <div className="mb-2 text-xs font-extrabold text-gray-500">
-                  最近の判定
-                </div>
-
-                <div className="space-y-2">
-                  {row.history.slice(0, 3).map((item) => (
-                    <Link
-                      key={`${row.key}-${item.eventId}`}
-                      href={`/race/${item.eventId}`}
-                      className="block rounded-2xl bg-white p-3"
-                    >
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className="truncate text-sm font-extrabold">
-                          {item.title}
-                        </span>
-
+                  <div className="space-y-2">
+                    {row.history.slice(0, 3).map((item) => (
+                      <Link
+                        key={`${row.key}-${item.eventId}`}
+                        href={`/race/${item.eventId}`}
+                        className="flex items-center justify-between gap-2 rounded-[10px] bg-white p-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[12px] font-extrabold">
+                            {item.title}
+                          </div>
+                          <div className="text-[10px] font-bold text-gray-400 mt-0.5">
+                            {getCategoryEmoji(item.category)}{" "}
+                            {getCategoryLabel(item.category)} ｜ 予測:{item.pick} / 結果:{item.winner}
+                          </div>
+                        </div>
                         <span
-                          className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-extrabold ${
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-extrabold ${
                             item.hit
-                              ? "bg-blue-50 text-blue-700"
-                              : "bg-red-50 text-red-700"
+                              ? "bg-green-50 text-green-700"
+                              : "bg-red-50 text-red-600"
                           }`}
                         >
                           {item.hit ? "的中" : "外れ"}
                         </span>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-gray-400">
-                        <span>
-                          {getCategoryEmoji(item.category)}{" "}
-                          {getCategoryLabel(item.category)}
-                        </span>
-
-                        <span className="truncate">
-                          予測: {item.pick} / 結果: {item.winner}
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
 
           {rankings.length === 0 && (
-            <div className="rounded-[28px] bg-white p-6 text-center shadow-sm">
+            <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-6 text-center shadow-sm">
               <div className="text-3xl">🏁</div>
 
               <h3 className="mt-3 text-lg font-extrabold">
@@ -476,7 +448,7 @@ export default function RankingPage() {
               <div className="mt-5">
                 <Link
                   href="/races"
-                  className="block rounded-2xl bg-blue-700 py-4 text-center text-sm font-extrabold text-white"
+                  className="block rounded-[12px] bg-blue-700 py-4 text-center text-sm font-extrabold text-white"
                 >
                   イベント一覧へ
                 </Link>
