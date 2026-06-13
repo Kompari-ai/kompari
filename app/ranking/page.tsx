@@ -115,11 +115,11 @@ function formatAccuracy(value: number) {
   return `${Math.round(value * 1000) / 10}%`;
 }
 
-function rankBadge(index: number) {
-  if (index === 0) return "🥇";
-  if (index === 1) return "🥈";
-  if (index === 2) return "🥉";
-  return `${index + 1}`;
+function rankCircleClass(index: number): string {
+  if (index === 0) return "bg-amber-400 text-white";
+  if (index === 1) return "bg-gray-300 text-gray-700";
+  if (index === 2) return "bg-orange-500 text-white";
+  return "bg-gray-100 text-gray-400";
 }
 
 function AiAvatar({ aiName, source }: { aiName: string; source: "official" | "user" }) {
@@ -329,26 +329,28 @@ export default function RankingPage() {
                 {/* Header row */}
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    {/* Rank badge */}
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-gray-900 text-base font-black text-white">
-                      {rankBadge(index)}
+                    {/* Circular rank badge */}
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black ${rankCircleClass(index)}`}
+                    >
+                      {index + 1}
                     </div>
+
+                    {/* Brand avatar */}
+                    <AiAvatar aiName={row.ai} source={row.source} />
 
                     <div>
                       <h3 className="text-[15px] font-extrabold leading-tight">
                         {row.ai}
                       </h3>
-                      <div className="mt-1 flex items-center gap-2">
-                        <AiAvatar aiName={row.ai} source={row.source} />
-                        {row.myAiId && (
-                          <Link
-                            href={`/my-ai/${row.myAiId}`}
-                            className="text-[11px] font-extrabold text-blue-700"
-                          >
-                            詳細
-                          </Link>
-                        )}
-                      </div>
+                      {row.myAiId && (
+                        <Link
+                          href={`/my-ai/${row.myAiId}`}
+                          className="text-[11px] font-extrabold text-blue-700"
+                        >
+                          詳細
+                        </Link>
+                      )}
                     </div>
                   </div>
 

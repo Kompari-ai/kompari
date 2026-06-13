@@ -89,6 +89,35 @@ export function getResultWinner(event: KompariEvent): string {
   return (event.result?.winner || event.resultWinner || "").trim();
 }
 
+export function getConsensusChip(
+  predictions: KompariPrediction[]
+): { type: "unan" | "lean" | "split"; label: string } | null {
+  const officialPreds = predictions.filter((p) => p.source !== "user");
+  if (officialPreds.length === 0) return null;
+
+  const mains = officialPreds
+    .map((p) => p.main)
+    .filter((m): m is string => !!m);
+  const unique = new Set(mains);
+
+  if (unique.size <= 1) return { type: "unan", label: "全会一致" };
+
+  const counts: Record<string, number> = {};
+  mains.forEach((m) => {
+    counts[m] = (counts[m] || 0) + 1;
+  });
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const topCount = sorted[0]?.[1] ?? 0;
+  const topName = sorted[0]?.[0] ?? "";
+
+  if (topCount > officialPreds.length / 2) {
+    return { type: "lean", label: `${topName}優勢` };
+  }
+
+  return { type: "split", label: "意見が真っ二つ" };
+}
+
 export function formatStartsAt(startsAt?: string): string {
   if (!startsAt) return "";
   const date = new Date(startsAt);

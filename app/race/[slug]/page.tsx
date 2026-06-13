@@ -11,6 +11,7 @@ import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   formatStartsAt,
+  getConsensusChip,
   getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
@@ -97,32 +98,6 @@ function buildPodiumData(event: KompariEvent) {
     .slice(0, 3);
 }
 
-function getConsensusChip(predictions: KompariPrediction[]) {
-  const officialPreds = predictions.filter((p) => p.source !== "user");
-  if (officialPreds.length === 0) return null;
-
-  const mains = officialPreds.map((p) => p.main).filter(Boolean);
-  const unique = new Set(mains);
-
-  if (unique.size <= 1) return { type: "unan", label: "全会一致" };
-
-  const counts: Record<string, number> = {};
-  mains.forEach((m) => {
-    if (m) counts[m] = (counts[m] || 0) + 1;
-  });
-
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const topCount = sorted[0]?.[1] ?? 0;
-
-  if (topCount > officialPreds.length / 2) {
-    return {
-      type: "lean",
-      label: `${topCount}−${officialPreds.length - topCount}で優勢`,
-    };
-  }
-
-  return { type: "split", label: "本命が割れています" };
-}
 
 function getPredictionResult(
   prediction: KompariPrediction,
@@ -714,17 +689,17 @@ export default function RaceDetailPage({
                   />
                 ))}
               </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+              <div className="flex flex-wrap gap-x-[10px] gap-y-[5px] mt-[7px]">
                 {event.predictions.map((p, i) => (
                   <span
                     key={`leg-${p.ai}-${i}`}
-                    className="text-[10.5px] text-gray-500 font-semibold flex items-center gap-1"
+                    className="text-[10.5px] text-[#64748B] font-semibold flex items-center gap-1 whitespace-nowrap"
                   >
                     <span
                       className="w-2 h-2 rounded-[3px] inline-block shrink-0"
                       style={{ background: getAiColors(p.ai).bg }}
                     />
-                    {p.ai}: {p.main}
+                    {p.ai}→{p.main}
                   </span>
                 ))}
               </div>

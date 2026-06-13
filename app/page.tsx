@@ -10,6 +10,7 @@ import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   formatStartsAt,
+  getConsensusChip,
   getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
@@ -35,30 +36,10 @@ function topPrediction(event: KompariEvent) {
   return { name: sorted[0][0], count: sorted[0][1] };
 }
 
-function getConsensusChipLabel(event: KompariEvent) {
-  const preds = event.predictions.filter((p) => p.source !== "user");
-  if (preds.length === 0) return null;
-
-  const mains = preds.map((p) => p.main).filter(Boolean);
-  const unique = new Set(mains);
-
-  if (unique.size <= 1) return { type: "unan", label: "全会一致" };
-
-  const counts: Record<string, number> = {};
-  mains.forEach((m) => {
-    if (m) counts[m] = (counts[m] || 0) + 1;
-  });
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const topCount = sorted[0]?.[1] ?? 0;
-
-  if (topCount > preds.length / 2) return { type: "lean", label: "意見が分かれています" };
-  return { type: "split", label: "意見が割れています" };
-}
-
 function EventCard({ event }: { event: KompariEvent }) {
   const resultWinner = getResultWinner(event);
   const top = topPrediction(event);
-  const chip = getConsensusChipLabel(event);
+  const chip = getConsensusChip(event.predictions);
 
   return (
     <Link
