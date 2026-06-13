@@ -301,11 +301,11 @@ export default function AiProfilePage({
 
   if (!profile) {
     return (
-      <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
+      <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
         <TopBar />
 
         <div className="mx-auto max-w-[430px] px-4 pb-28 pt-8">
-          <section className="rounded-[24px] bg-white p-5 text-center shadow-sm">
+          <section className="rounded-[18px] border border-[#E8ECF2] bg-white p-5 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
             <h1 className="text-xl font-extrabold">AIが見つかりません</h1>
 
             <Link
@@ -323,16 +323,16 @@ export default function AiProfilePage({
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
+    <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
       <TopBar />
 
       <div className="mx-auto max-w-[430px] px-4 pb-28 pt-4">
-        <section className="mb-5 overflow-hidden rounded-[30px] bg-white shadow-sm">
+        <section className="mb-5 overflow-hidden rounded-[18px] border border-[#E8ECF2] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div
             className="p-5 text-white"
             style={{
               background:
-                "linear-gradient(135deg, #1d4ed8 0%, #1e40af 45%, #0f172a 100%)",
+                "linear-gradient(150deg, #0B1F4B 0%, #13307A 60%, #1D5BFF 130%)",
             }}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -416,14 +416,14 @@ export default function AiProfilePage({
           <div className="grid grid-cols-3 divide-x divide-gray-100 bg-white text-center">
             <div className="p-3">
               <div className="text-[11px] font-bold text-gray-400">結果済</div>
-              <div className="mt-1 text-lg font-extrabold">
+              <div className="mt-1 text-[15px] font-extrabold">
                 {stats.finished}
               </div>
             </div>
 
             <div className="p-3">
               <div className="text-[11px] font-bold text-gray-400">予測中</div>
-              <div className="mt-1 text-lg font-extrabold">
+              <div className="mt-1 text-[15px] font-extrabold">
                 {stats.pending}
               </div>
             </div>
@@ -437,9 +437,9 @@ export default function AiProfilePage({
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">人気</h2>
+            <h2 className="text-[15px] font-extrabold">人気</h2>
 
             <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
               スコア {popularityScore}
@@ -474,8 +474,8 @@ export default function AiProfilePage({
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
-          <h2 className="mb-4 text-lg font-extrabold">基本情報</h2>
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+          <h2 className="mb-4 text-[15px] font-extrabold">基本情報</h2>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-gray-50 p-4">
@@ -497,14 +497,14 @@ export default function AiProfilePage({
             <div className="rounded-2xl bg-gray-50 p-4">
               <div className="text-xs font-bold text-gray-400">参加形式</div>
 
-              <div className="mt-2 text-lg font-extrabold">公式AI</div>
+              <div className="mt-2 text-[15px] font-extrabold">公式AI</div>
             </div>
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">実績サマリー</h2>
+            <h2 className="text-[15px] font-extrabold">実績サマリー</h2>
 
             <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
               {stats.hit}/{stats.finished}
@@ -552,9 +552,9 @@ export default function AiProfilePage({
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">カテゴリ別成績</h2>
+            <h2 className="text-[15px] font-extrabold">カテゴリ別成績</h2>
 
             <span className="text-xs font-bold text-gray-400">
               {categories.length}分野
@@ -570,7 +570,7 @@ export default function AiProfilePage({
                     {getCategoryLabel(item.category)}
                   </div>
 
-                  <div className="text-lg font-extrabold text-blue-700">
+                  <div className="text-[15px] font-extrabold text-blue-700">
                     {item.rate}%
                   </div>
                 </div>
@@ -600,9 +600,9 @@ export default function AiProfilePage({
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">最近の予測</h2>
+            <h2 className="text-[15px] font-extrabold">最近の予測</h2>
 
             <span className="text-xs font-bold text-gray-400">
               {stats.recent.length}件
@@ -670,7 +670,7 @@ export default function AiProfilePage({
 
         <Link
           href="/ranking"
-          className="block rounded-2xl border border-gray-200 bg-white py-4 text-center font-bold text-gray-600"
+          className="block rounded-[18px] border border-[#E8ECF2] bg-white py-4 text-center font-bold text-gray-600 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
         >
           ランキングへ戻る
         </Link>

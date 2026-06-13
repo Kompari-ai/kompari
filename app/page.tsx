@@ -44,7 +44,7 @@ function EventCard({ event }: { event: KompariEvent }) {
   return (
     <Link
       href={`/race/${event.id}`}
-      className="block rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-sm"
+      className="block rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
     >
       {/* Top row */}
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -81,7 +81,7 @@ function EventCard({ event }: { event: KompariEvent }) {
 
       <h2 className="text-[15px] font-extrabold leading-snug">{event.title}</h2>
 
-      <p className="mt-1 text-[12px] font-semibold text-[#64748B]">
+      <p className="mt-1 text-[11px] text-[#94A3B8] font-semibold">
         {event.venue || "開催情報未入力"}
         {(event.startsAt || event.startsIn) && (
           <> ｜ {event.startsAt ? formatStartsAt(event.startsAt) : event.startsIn}</>
@@ -209,7 +209,7 @@ export default function HomePage() {
 
       <div className="mx-auto max-w-[430px] px-4 pb-28 pt-4">
         {/* Hero */}
-        <section className="mb-5 rounded-[18px] overflow-hidden shadow-sm">
+        <section className="mb-5 rounded-[18px] overflow-hidden shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div
             className="p-5 text-white"
             style={{
@@ -238,15 +238,15 @@ export default function HomePage() {
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">イベント</div>
-                <div className="mt-0.5 text-xl font-extrabold">{events.length}</div>
+                <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">{events.length}</div>
               </div>
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">予測中</div>
-                <div className="mt-0.5 text-xl font-extrabold">{pendingEvents.length}</div>
+                <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">{pendingEvents.length}</div>
               </div>
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">AI予測</div>
-                <div className="mt-0.5 text-xl font-extrabold">{totalPredictions}</div>
+                <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">{totalPredictions}</div>
               </div>
             </div>
           </div>
@@ -266,7 +266,7 @@ export default function HomePage() {
         )}
 
         {/* Quick links */}
-        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-sm">
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <h2 className="mb-3 text-[15.5px] font-bold">すぐ使う</h2>
 
           <div className="grid grid-cols-2 gap-2">
@@ -310,7 +310,7 @@ export default function HomePage() {
             ))}
 
             {pendingEvents.length === 0 && (
-              <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-5 text-center text-sm font-bold text-gray-400 shadow-sm">
+              <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-5 text-center text-sm font-bold text-gray-400 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
                 予測中イベントはありません
               </div>
             )}
@@ -330,7 +330,7 @@ export default function HomePage() {
             ))}
 
             {finishedEvents.length === 0 && (
-              <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-5 text-center text-sm font-bold text-gray-400 shadow-sm">
+              <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-5 text-center text-sm font-bold text-gray-400 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
                 結果入力済みイベントはありません
               </div>
             )}

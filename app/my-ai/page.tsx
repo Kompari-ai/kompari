@@ -215,16 +215,16 @@ export default function MyAiPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
+    <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
       <TopBar />
 
       <div className="mx-auto max-w-[430px] px-4 pb-28 pt-4">
-        <section className="mb-5 overflow-hidden rounded-[30px] bg-white shadow-sm">
+        <section className="mb-5 overflow-hidden rounded-[18px] border border-[#E8ECF2] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div
             className="p-5 text-white"
             style={{
               background:
-                "linear-gradient(135deg, #2563eb 0%, #1d4ed8 45%, #172554 100%)",
+                "linear-gradient(150deg, #0B1F4B 0%, #13307A 60%, #1D5BFF 130%)",
             }}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -247,7 +247,7 @@ export default function MyAiPage() {
                   作成AI
                 </div>
 
-                <div className="mt-1 text-2xl font-extrabold text-blue-700">
+                <div className="mt-1 text-2xl font-extrabold text-blue-700 [font-variant-numeric:tabular-nums]">
                   {myAis.length}
                 </div>
               </div>
@@ -257,7 +257,7 @@ export default function MyAiPage() {
                   予測数
                 </div>
 
-                <div className="mt-1 text-2xl font-extrabold text-gray-900">
+                <div className="mt-1 text-2xl font-extrabold text-gray-900 [font-variant-numeric:tabular-nums]">
                   {totalStats.total}
                 </div>
               </div>
@@ -265,7 +265,7 @@ export default function MyAiPage() {
               <div className="rounded-2xl bg-white p-3">
                 <div className="text-[11px] font-bold text-gray-500">的中</div>
 
-                <div className="mt-1 text-2xl font-extrabold text-gray-900">
+                <div className="mt-1 text-2xl font-extrabold text-gray-900 [font-variant-numeric:tabular-nums]">
                   {totalStats.hit}
                 </div>
               </div>
@@ -275,14 +275,14 @@ export default function MyAiPage() {
           <div className="grid grid-cols-3 divide-x divide-gray-100 bg-white text-center">
             <div className="p-3">
               <div className="text-[11px] font-bold text-gray-400">結果済</div>
-              <div className="mt-1 text-lg font-extrabold">
+              <div className="mt-1 text-[15px] font-extrabold">
                 {totalStats.finished}
               </div>
             </div>
 
             <div className="p-3">
               <div className="text-[11px] font-bold text-gray-400">予測中</div>
-              <div className="mt-1 text-lg font-extrabold">
+              <div className="mt-1 text-[15px] font-extrabold">
                 {totalStats.pending}
               </div>
             </div>
@@ -296,8 +296,8 @@ export default function MyAiPage() {
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
-          <h2 className="mb-4 text-lg font-extrabold">My AIを作成</h2>
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+          <h2 className="mb-4 text-[15px] font-extrabold">My AIを作成</h2>
 
           <div className="space-y-3">
             <input
@@ -350,9 +350,9 @@ export default function MyAiPage() {
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">作成済みAI</h2>
+            <h2 className="text-[15px] font-extrabold">作成済みAI</h2>
 
             <Link
               href="/ranking"
@@ -369,7 +369,7 @@ export default function MyAiPage() {
               return (
                 <div
                   key={ai.id}
-                  className="rounded-[24px] border border-gray-100 bg-gray-50 p-4"
+                  className="rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
                 >
                   <div className="mb-4 flex items-start gap-3">
                     <div
@@ -385,7 +385,7 @@ export default function MyAiPage() {
                         {getCategoryLabel(ai.strengthCategory)}
                       </div>
 
-                      <h3 className="mt-1 truncate text-lg font-extrabold">
+                      <h3 className="mt-1 truncate text-[15px] font-extrabold">
                         {ai.name}
                       </h3>
 
@@ -414,7 +414,7 @@ export default function MyAiPage() {
                       <div className="text-[11px] font-bold text-gray-400">
                         的中率
                       </div>
-                      <div className="mt-1 text-lg font-extrabold text-blue-700">
+                      <div className="mt-1 text-[15px] font-extrabold text-blue-700">
                         {stats.hitRate}%
                       </div>
                     </div>
@@ -423,7 +423,7 @@ export default function MyAiPage() {
                       <div className="text-[11px] font-bold text-gray-400">
                         的中
                       </div>
-                      <div className="mt-1 text-lg font-extrabold">
+                      <div className="mt-1 text-[15px] font-extrabold">
                         {stats.hit}
                       </div>
                     </div>
@@ -432,7 +432,7 @@ export default function MyAiPage() {
                       <div className="text-[11px] font-bold text-gray-400">
                         予測
                       </div>
-                      <div className="mt-1 text-lg font-extrabold">
+                      <div className="mt-1 text-[15px] font-extrabold">
                         {stats.total}
                       </div>
                     </div>
@@ -471,8 +471,8 @@ export default function MyAiPage() {
           </div>
         </section>
 
-        <section className="rounded-[24px] bg-white p-4 shadow-sm">
-          <h2 className="mb-3 text-lg font-extrabold">My AIの将来機能</h2>
+        <section className="rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+          <h2 className="mb-3 text-[15px] font-extrabold">My AIの将来機能</h2>
 
           <div className="space-y-2 text-sm leading-6 text-gray-600">
             <p>・成績の良いAIを公開し、他ユーザーがフォローできる</p>

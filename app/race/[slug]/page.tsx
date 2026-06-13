@@ -173,7 +173,7 @@ function PredictionCard({
 
   return (
     <article
-      className="rounded-[18px] border border-[#E8ECF2] bg-white shadow-sm overflow-hidden"
+      className="rounded-[18px] border border-[#E8ECF2] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden"
       style={{ borderLeftColor: colors.border, borderLeftWidth: "4px" }}
     >
       <div className="p-4">
@@ -312,7 +312,7 @@ function CandidateCard({
 
   return (
     <div
-      className={`rounded-[18px] border p-4 shadow-sm ${
+      className={`rounded-[18px] border p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] ${
         isWinner ? "border-green-200 bg-green-50" : "border-[#E8ECF2] bg-white"
       }`}
     >
@@ -542,7 +542,7 @@ export default function RaceDetailPage({
         <TopBar />
 
         <div className="mx-auto max-w-[430px] px-4 pb-28 pt-8">
-          <section className="rounded-[18px] bg-white p-5 text-center shadow-sm border border-[#E8ECF2]">
+          <section className="rounded-[18px] bg-white p-5 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)] border border-[#E8ECF2]">
             <h1 className="text-xl font-extrabold">
               イベントが見つかりません
             </h1>
@@ -571,7 +571,7 @@ export default function RaceDetailPage({
 
       <div className="mx-auto max-w-[430px] px-4 pb-28 pt-4">
         {/* Event header card */}
-        <section className="mb-4 overflow-hidden rounded-[18px] bg-white border border-[#E8ECF2] shadow-sm">
+        <section className="mb-4 overflow-hidden rounded-[18px] bg-white border border-[#E8ECF2] shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div
             className="p-5 text-white"
             style={{
@@ -594,7 +594,7 @@ export default function RaceDetailPage({
               {event.title}
             </h1>
 
-            <p className="mt-1 text-[11px] font-semibold text-blue-200">
+            <p className="mt-1 text-[11px] font-semibold text-white/60">
               {event.venue || "開催情報未入力"}
               {(event.startsAt || event.startsIn) && (
                 <> ｜ {event.startsAt ? formatStartsAt(event.startsAt) : event.startsIn}</>
@@ -627,7 +627,7 @@ export default function RaceDetailPage({
         </section>
 
         {/* Consensus section */}
-        <section className="mb-4 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-sm">
+        <section className="mb-4 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-3 flex items-center justify-between">
             <b className="text-[14px] font-extrabold">👑 AIコンセンサス</b>
             {consensusChip && (
@@ -693,7 +693,7 @@ export default function RaceDetailPage({
                 {event.predictions.map((p, i) => (
                   <span
                     key={`leg-${p.ai}-${i}`}
-                    className="text-[10.5px] text-[#64748B] font-semibold flex items-center gap-1 whitespace-nowrap"
+                    className="text-[10.5px] text-[#64748B] font-semibold inline-flex items-center gap-1 whitespace-nowrap"
                   >
                     <span
                       className="w-2 h-2 rounded-[3px] inline-block shrink-0"
@@ -712,7 +712,7 @@ export default function RaceDetailPage({
         </section>
 
         {/* 将来対応: My AI参加機能 — Firestoreルール修正後に有効化 (see docs/AUDIT.md T-01)
-        <section className="mb-4 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-sm">
+        <section className="mb-4 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-extrabold">My AIを参加させる</h2>
             <Link href="/my-ai" className="text-xs font-extrabold text-blue-700">
@@ -757,7 +757,7 @@ export default function RaceDetailPage({
             onClick={() => setTab("predictions")}
             className={`flex-1 py-2 text-sm font-bold rounded-[10px] transition-colors ${
               tab === "predictions"
-                ? "bg-white text-[#0F172A] shadow-sm"
+                ? "bg-white text-[#0F172A] shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
                 : "text-[#64748B]"
             }`}
           >
@@ -769,7 +769,7 @@ export default function RaceDetailPage({
             onClick={() => setTab("candidates")}
             className={`flex-1 py-2 text-sm font-bold rounded-[10px] transition-colors ${
               tab === "candidates"
-                ? "bg-white text-[#0F172A] shadow-sm"
+                ? "bg-white text-[#0F172A] shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
                 : "text-[#64748B]"
             }`}
           >
@@ -790,7 +790,7 @@ export default function RaceDetailPage({
             ))}
 
             {event.predictions.length === 0 && (
-              <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-6 text-center shadow-sm">
+              <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-6 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
                 <div className="text-3xl">🤖</div>
                 <div className="mt-3 text-sm font-bold text-gray-500">
                   まだAI予測がありません
@@ -830,7 +830,7 @@ export default function RaceDetailPage({
             ))}
 
             {candidates.length === 0 && (
-              <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-6 text-center text-sm font-bold text-gray-400 shadow-sm">
+              <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-6 text-center text-sm font-bold text-gray-400 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
                 候補リストがありません
               </div>
             )}
@@ -840,7 +840,7 @@ export default function RaceDetailPage({
         <section className="mt-5">
           <Link
             href="/races"
-            className="block rounded-[12px] border border-[#E8ECF2] bg-white py-4 text-center text-sm font-bold text-gray-700 shadow-sm"
+            className="block rounded-[12px] border border-[#E8ECF2] bg-white py-4 text-center text-sm font-bold text-gray-700 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
           >
             一覧へ戻る
           </Link>

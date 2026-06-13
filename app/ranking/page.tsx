@@ -207,12 +207,12 @@ export default function RankingPage() {
 
       <div className="mx-auto max-w-[430px] px-4 pb-28 pt-4">
         {/* Header */}
-        <section className="mb-4 overflow-hidden rounded-[18px] border border-[#E8ECF2] bg-white shadow-sm">
+        <section className="mb-4 overflow-hidden rounded-[18px] border border-[#E8ECF2] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div
             className="p-5 text-white"
             style={{
               background:
-                "linear-gradient(135deg, #111827 0%, #1d4ed8 55%, #2563eb 100%)",
+                "linear-gradient(150deg, #0B1F4B 0%, #13307A 60%, #1D5BFF 130%)",
             }}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -237,17 +237,17 @@ export default function RankingPage() {
             <div className="mt-5 grid grid-cols-3 gap-3 text-center">
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">対象</div>
-                <div className="mt-0.5 text-xl font-extrabold">
+                <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">
                   {targetEvents.length}
                 </div>
               </div>
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">的中</div>
-                <div className="mt-0.5 text-xl font-extrabold">{totalHits}</div>
+                <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">{totalHits}</div>
               </div>
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">的中率</div>
-                <div className="mt-0.5 text-xl font-extrabold">
+                <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">
                   {formatAccuracy(overallAccuracy)}
                 </div>
               </div>
@@ -256,7 +256,7 @@ export default function RankingPage() {
         </section>
 
         {/* Filters */}
-        <section className="mb-4 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-sm">
+        <section className="mb-4 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-2 text-[11px] font-bold text-gray-500">フィルター</div>
 
           <div className="flex bg-[#E7EBF2] rounded-[12px] p-[3px] mb-3">
@@ -271,7 +271,7 @@ export default function RankingPage() {
                 onClick={() => setSourceFilter(item.value as SourceFilter)}
                 className={`flex-1 py-2 text-[13px] font-bold rounded-[10px] transition-colors ${
                   sourceFilter === item.value
-                    ? "bg-white text-[#0F172A] shadow-sm"
+                    ? "bg-white text-[#0F172A] shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
                     : "text-[#64748B]"
                 }`}
               >
@@ -311,8 +311,8 @@ export default function RankingPage() {
         </section>
 
         <section className="mb-3 flex items-center justify-between">
-          <h2 className="text-[15.5px] font-bold">ランキング</h2>
-          <span className="rounded-full border border-[#E8ECF2] bg-white px-3 py-1 text-[11px] font-bold text-gray-500 shadow-sm">
+          <h2 className="text-[15px] font-extrabold">ランキング</h2>
+          <span className="rounded-full border border-[#E8ECF2] bg-white px-3 py-1 text-[11px] font-bold text-gray-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
             {rankings.length} AI
           </span>
         </section>
@@ -324,7 +324,7 @@ export default function RankingPage() {
             return (
               <article
                 key={row.key}
-                className="rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-sm"
+                className="rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
               >
                 {/* Header row */}
                 <div className="mb-4 flex items-start justify-between gap-3">
@@ -436,7 +436,7 @@ export default function RankingPage() {
           })}
 
           {rankings.length === 0 && (
-            <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-6 text-center shadow-sm">
+            <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-6 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
               <div className="text-3xl">🏁</div>
 
               <h3 className="mt-3 text-lg font-extrabold">

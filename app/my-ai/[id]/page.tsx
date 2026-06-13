@@ -284,7 +284,7 @@ export default function MyAiDetailPage({
 
   if (!loaded) {
     return (
-      <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
+      <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
         <TopBar />
 
         <div className="mx-auto max-w-[430px] px-4 py-10 text-center text-gray-500">
@@ -298,11 +298,11 @@ export default function MyAiDetailPage({
 
   if (!myAi) {
     return (
-      <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
+      <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
         <TopBar />
 
         <div className="mx-auto max-w-[430px] px-4 pb-28 pt-8">
-          <section className="rounded-[24px] bg-white p-5 text-center shadow-sm">
+          <section className="rounded-[18px] border border-[#E8ECF2] bg-white p-5 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
             <h1 className="text-xl font-extrabold">
               My AIが見つかりません
             </h1>
@@ -326,16 +326,16 @@ export default function MyAiDetailPage({
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
+    <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
       <TopBar />
 
       <div className="mx-auto max-w-[430px] px-4 pb-28 pt-4">
-        <section className="mb-5 overflow-hidden rounded-[30px] bg-white shadow-sm">
+        <section className="mb-5 overflow-hidden rounded-[18px] border border-[#E8ECF2] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div
             className="p-5 text-white"
             style={{
               background:
-                "linear-gradient(135deg, #2563eb 0%, #1d4ed8 45%, #172554 100%)",
+                "linear-gradient(150deg, #0B1F4B 0%, #13307A 60%, #1D5BFF 130%)",
             }}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -414,14 +414,14 @@ export default function MyAiDetailPage({
           <div className="grid grid-cols-3 divide-x divide-gray-100 bg-white text-center">
             <div className="p-3">
               <div className="text-[11px] font-bold text-gray-400">結果済</div>
-              <div className="mt-1 text-lg font-extrabold">
+              <div className="mt-1 text-[15px] font-extrabold">
                 {stats.finished}
               </div>
             </div>
 
             <div className="p-3">
               <div className="text-[11px] font-bold text-gray-400">判定待ち</div>
-              <div className="mt-1 text-lg font-extrabold">
+              <div className="mt-1 text-[15px] font-extrabold">
                 {stats.pending}
               </div>
             </div>
@@ -435,9 +435,9 @@ export default function MyAiDetailPage({
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">人気</h2>
+            <h2 className="text-[15px] font-extrabold">人気</h2>
 
             <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
               スコア {popularityScore}
@@ -470,8 +470,8 @@ export default function MyAiDetailPage({
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
-          <h2 className="mb-4 text-lg font-extrabold">基本情報</h2>
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+          <h2 className="mb-4 text-[15px] font-extrabold">基本情報</h2>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-gray-50 p-4">
@@ -497,9 +497,9 @@ export default function MyAiDetailPage({
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">実績サマリー</h2>
+            <h2 className="text-[15px] font-extrabold">実績サマリー</h2>
 
             <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
               {stats.hit}/{stats.finished}
@@ -545,9 +545,9 @@ export default function MyAiDetailPage({
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">カテゴリ別成績</h2>
+            <h2 className="text-[15px] font-extrabold">カテゴリ別成績</h2>
 
             <span className="text-xs font-bold text-gray-400">
               {categories.length}分類
@@ -563,7 +563,7 @@ export default function MyAiDetailPage({
                     {getCategoryLabel(item.category)}
                   </div>
 
-                  <div className="text-lg font-extrabold text-blue-700">
+                  <div className="text-[15px] font-extrabold text-blue-700">
                     {item.rate}%
                   </div>
                 </div>
@@ -593,9 +593,9 @@ export default function MyAiDetailPage({
           </div>
         </section>
 
-        <section className="mb-5 rounded-[24px] bg-white p-4 shadow-sm">
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">最近の予測</h2>
+            <h2 className="text-[15px] font-extrabold">最近の予測</h2>
 
             <span className="text-xs font-bold text-gray-400">
               {stats.recent.length}件
@@ -672,7 +672,7 @@ export default function MyAiDetailPage({
 
         <Link
           href="/my-ai"
-          className="block rounded-2xl border border-gray-200 bg-white py-4 text-center font-bold text-gray-600"
+          className="block rounded-[18px] border border-[#E8ECF2] bg-white py-4 text-center font-bold text-gray-600 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
         >
           My AI一覧へ戻る
         </Link>
