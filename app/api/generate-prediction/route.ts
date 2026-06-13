@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import { getAiConfigByDisplayName, resolveModelId } from "@/lib/ai/ai-config";
+import type { PredictionInput } from "@/lib/ai/types";
+import { callOpenAiCompatible } from "@/lib/ai/providers/openai-compatible";
+import { callGemini } from "@/lib/ai/providers/gemini";
+import { callAnthropic } from "@/lib/ai/providers/anthropic";
 
 export const runtime = "nodejs";
 
@@ -244,6 +249,52 @@ function buildEvidence({
   return `カテゴリ「${category}」の特性、候補「${candidateText}」の比較、AIの予測スタイル「${aiStyle}」をもとにした予測です。`;
 }
 
+// 実API呼び出し。キー未設定またはエラー時は null を返してモックに委ねる。
+async function callRealApi(
+  aiName: string,
+  input: PredictionInput
+): Promise<{
+  main: string;
+  second?: string;
+  third?: string;
+  confidence?: string;
+  reason?: string;
+  evidence?: string;
+  aiProvider: string;
+  aiModel: string;
+  aiModelId: string;
+} | null> {
+  const config = getAiConfigByDisplayName(aiName);
+  if (!config) return null;
+
+  const apiKey = process.env[config.apiKeyEnv];
+  if (!apiKey || apiKey.trim() === "") return null;
+
+  try {
+    let result;
+
+    if (config.providerKind === "openai-compatible") {
+      result = await callOpenAiCompatible(config, input);
+    } else if (config.providerKind === "gemini") {
+      result = await callGemini(config, input);
+    } else if (config.providerKind === "anthropic") {
+      result = await callAnthropic(config, input);
+    } else {
+      return null;
+    }
+
+    return {
+      ...result,
+      aiProvider: config.provider,
+      aiModel: config.model,
+      aiModelId: resolveModelId(config),
+    };
+  } catch (err) {
+    console.error(`[${aiName}] real API failed, falling back to mock:`, err);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as PredictionRequest;
@@ -268,6 +319,19 @@ export async function POST(req: Request) {
       );
     }
 
+    // 実API呼び出しを試みる（公式AIのみ。キー未設定時はモックにフォールバック）
+    const realResult = await callRealApi(aiName, {
+      title,
+      category,
+      candidates,
+      aiDisplayName: aiName,
+    });
+
+    if (realResult) {
+      return NextResponse.json({ ai: aiName, ...realResult });
+    }
+
+    // モック（フォールバック）
     const topThree = pickTopThree({
       candidates,
       aiName,
