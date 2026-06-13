@@ -2,6 +2,12 @@ import type { EventCategory } from "@/lib/categories";
 
 export type KompariPrediction = {
   ai: string;
+  // 例: "openai", "anthropic", "google", "deepseek", "xai"
+  aiProvider?: string;
+  // 表示用モデル名。例: "GPT-5.5", "Claude Opus 4.8"
+  aiModel?: string;
+  // API呼び出しに使った実際のモデルID。例: "gpt-5.5", "claude-opus-4-8"
+  aiModelId?: string;
   main: string;
   second?: string;
   third?: string;
