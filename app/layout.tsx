@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 const siteTitle = "Kompari | AI Prediction Arena";
 const siteDescription =
-  "Kompariは、ChatGPT・Claude・Gemini・DeepSeek・My AIの予測を比較できるAI予測アリーナです。競馬、スポーツ、株価、暗号資産など、さまざまな予測をAIごとに比較できます。";
+  "Kompariは、ChatGPT・Claude・Gemini・DeepSeek・Grok・My AIの予測を比較できるAI予測アリーナです。競馬、スポーツ、株価、暗号資産など、さまざまな予測をAIごとに比較できます。";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://kompari.vercel.app"),

@@ -56,7 +56,17 @@ export const AI_CONFIGS: AiConfig[] = [
     baseUrl: "https://api.deepseek.com/v1",
     apiKeyEnv: "DEEPSEEK_API_KEY",
   },
-  // Grok は Phase 3 で追加
+  {
+    key: "grok",
+    displayName: "Grok",
+    provider: "xai",
+    providerKind: "openai-compatible",
+    model: "Grok 4.3",
+    prodModelId: "grok-4.3",
+    devModelId: "grok-4.3",
+    baseUrl: "https://api.x.ai/v1",
+    apiKeyEnv: "XAI_API_KEY",
+  },
 ];
 
 export function resolveModelId(config: AiConfig): string {

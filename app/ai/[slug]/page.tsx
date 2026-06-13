@@ -101,6 +101,16 @@ const aiProfiles: Record<string, AiProfile> = {
     iconBg: "#4f46e5",
     accent: "#4f46e5",
   },
+  grok: {
+    name: "Grok",
+    label: "リアルタイム情報型AI",
+    description:
+      "SNSや最新ニュースをリアルタイムで参照し、今の流れを素直に読み解くAIです。",
+    style: "リアルタイム・トレンド重視",
+    icon: "X",
+    iconBg: "#111827",
+    accent: "#111827",
+  },
 };
 
 function formatConfidence(confidence?: string) {

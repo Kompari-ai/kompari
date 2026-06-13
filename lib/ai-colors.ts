@@ -35,6 +35,13 @@ const AI_COLOR_MAP: Record<string, AiColorSet> = {
     bgLight: "#e0e7ff",
     textDark: "#3730a3",
   },
+  Grok: {
+    bg: "#111827",
+    text: "#ffffff",
+    border: "#111827",
+    bgLight: "#f3f4f6",
+    textDark: "#111827",
+  },
 };
 
 const FALLBACK_COLORS: AiColorSet = {
@@ -54,5 +61,6 @@ export function getAiInitial(aiName: string): string {
   if (aiName === "Claude") return "C";
   if (aiName === "Gemini") return "✦";
   if (aiName === "DeepSeek") return "D";
+  if (aiName === "Grok") return "X";
   return aiName.slice(0, 1).toUpperCase();
 }

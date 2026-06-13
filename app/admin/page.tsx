@@ -14,7 +14,7 @@ import {
 } from "@/lib/categories";
 import type { KompariPrediction } from "@/lib/events";
 
-const officialAis = ["ChatGPT", "Claude", "Gemini", "DeepSeek"];
+const officialAis = ["ChatGPT", "Claude", "Gemini", "DeepSeek", "Grok"];
 
 export default function AdminPage() {
   const router = useRouter();

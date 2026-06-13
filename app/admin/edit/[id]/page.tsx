@@ -15,7 +15,7 @@ import {
   type LegacyRaceData,
 } from "@/lib/events";
 
-const officialAis = ["ChatGPT", "Claude", "Gemini", "DeepSeek"];
+const officialAis = ["ChatGPT", "Claude", "Gemini", "DeepSeek", "Grok"];
 
 function parseCandidates(text: string) {
   return text

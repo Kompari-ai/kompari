@@ -22,6 +22,7 @@ const officialAiStyles: Record<string, string> = {
   Claude: "慎重に展開やリスクを読む",
   Gemini: "データや比較材料を広く確認する",
   DeepSeek: "人気に寄りすぎず、意外性も見る",
+  Grok: "SNSや最新ニュースを踏まえ、流れを素直に読む",
 };
 
 function getDefaultCandidates(category: string) {
@@ -86,6 +87,7 @@ function getOfficialOffset(aiName: string) {
   if (aiName === "Claude") return 1;
   if (aiName === "Gemini") return 2;
   if (aiName === "DeepSeek") return 3;
+  if (aiName === "Grok") return 4;
 
   return null;
 }
@@ -166,6 +168,7 @@ function getConfidence(aiName: string, aiStyle: string, aiDescription: string) {
   if (aiName === "Claude") return "68";
   if (aiName === "Gemini") return "70";
   if (aiName === "DeepSeek") return "64";
+  if (aiName === "Grok") return "66";
 
   const seed = hashText(`${aiName}-${aiStyle}-${aiDescription}`);
   return String(61 + (seed % 18));
