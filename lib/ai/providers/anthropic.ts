@@ -22,7 +22,15 @@ export async function callAnthropic(
     messages: [{ role: "user", content: user }],
   });
 
-  const block = message.content[0];
-  const raw = block?.type === "text" ? block.text : "{}";
-  return parsePredictionOutput(raw, input.candidates);
+  const raw = message.content
+    .flatMap((b) => (b.type === "text" ? [b.text] : []))
+    .join("");
+
+  // Claude sometimes wraps JSON in code fences despite prompt instructions
+  const cleaned = raw
+    .replace(/^```(?:json)?\s*\n?/, "")
+    .replace(/\n?```\s*$/, "")
+    .trim();
+
+  return parsePredictionOutput(cleaned || "{}", input.candidates);
 }
