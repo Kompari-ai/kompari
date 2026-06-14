@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAiConfigByDisplayName, resolveModelId } from "@/lib/ai/ai-config";
+import { getAiConfigByDisplayName, resolveModelId, resolveApiKey } from "@/lib/ai/ai-config";
 import type { PredictionInput } from "@/lib/ai/types";
 import { callOpenAiCompatible } from "@/lib/ai/providers/openai-compatible";
 import { callGemini } from "@/lib/ai/providers/gemini";
@@ -270,7 +270,7 @@ async function callRealApi(
   const config = getAiConfigByDisplayName(aiName);
   if (!config) return null;
 
-  const apiKey = process.env[config.apiKeyEnv];
+  const apiKey = resolveApiKey(config.apiKeyEnv);
   if (!apiKey || apiKey.trim() === "") return null;
 
   try {

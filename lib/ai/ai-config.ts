@@ -74,6 +74,20 @@ export function resolveModelId(config: AiConfig): string {
   return tier === "prod" ? config.prodModelId : config.devModelId;
 }
 
+// Static object literal: each process.env.X is resolved at build time.
+// Dynamic access (process.env[varName]) is NOT inlined in production builds.
+const ENV_KEY_MAP: Record<string, string | undefined> = {
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+  XAI_API_KEY: process.env.XAI_API_KEY,
+};
+
+export function resolveApiKey(apiKeyEnv: string): string {
+  return ENV_KEY_MAP[apiKeyEnv] ?? "";
+}
+
 export function getAiConfigByDisplayName(name: string): AiConfig | undefined {
   return AI_CONFIGS.find((c) => c.displayName === name);
 }

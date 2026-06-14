@@ -2,7 +2,7 @@
 // Docs: https://ai.google.dev/gemini-api/docs/quickstart?lang=node
 import { GoogleGenAI } from "@google/genai";
 import type { AiConfig } from "@/lib/ai/ai-config";
-import { resolveModelId } from "@/lib/ai/ai-config";
+import { resolveModelId, resolveApiKey } from "@/lib/ai/ai-config";
 import { buildPredictionPrompt } from "@/lib/ai/prompt";
 import { parsePredictionOutput } from "@/lib/ai/parse";
 import type { PredictionInput, PredictionOutput } from "@/lib/ai/types";
@@ -11,7 +11,7 @@ export async function callGemini(
   config: AiConfig,
   input: PredictionInput
 ): Promise<PredictionOutput> {
-  const apiKey = process.env[config.apiKeyEnv] ?? "";
+  const apiKey = resolveApiKey(config.apiKeyEnv);
   const modelId = resolveModelId(config);
   const { system, user } = buildPredictionPrompt(input);
 
