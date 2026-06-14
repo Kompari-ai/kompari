@@ -20,7 +20,15 @@ import {
   type KompariPrediction,
   type LegacyRaceData,
 } from "@/lib/events";
+import {
+  aggregateByBrand,
+  aggregateByModel,
+  type BrandStats,
+  type ModelStats,
+  type HistoryItem,
+} from "@/lib/stats";
 
+type AggregationMode = "ai" | "brand" | "model";
 type CategoryFilter = "all" | EventCategory;
 type SourceFilter = "all" | "official" | "user";
 
@@ -42,6 +50,20 @@ type RankingRow = {
   hits: number;
   accuracy: number;
   history: RankingHistory[];
+};
+
+// 3モードを統一して描画する共通型
+type CardRow = {
+  key: string;
+  displayName: string;
+  source: "official" | "user";
+  myAiId?: string;
+  total: number;     // 全予測数(未確定含む)
+  finished: number;  // 結果確定済み予測数
+  hits: number;
+  miss: number;      // finished - hits
+  hitRatePercent: number | null; // 0-100 または null(データなし)
+  history: HistoryItem[];
 };
 
 function getPredictionSource(prediction: KompariPrediction) {
@@ -111,8 +133,53 @@ function buildRankings(events: KompariEvent[]) {
     });
 }
 
-function formatAccuracy(value: number) {
-  return `${Math.round(value * 1000) / 10}%`;
+// buildRankings は未確定イベントをスキップするため total === finished
+function rankingToCard(row: RankingRow): CardRow {
+  return {
+    key: row.key,
+    displayName: row.ai,
+    source: row.source,
+    myAiId: row.myAiId,
+    total: row.total,
+    finished: row.total,
+    hits: row.hits,
+    miss: row.total - row.hits,
+    hitRatePercent: row.total > 0 ? Math.round(row.accuracy * 1000) / 10 : null,
+    history: row.history,
+  };
+}
+
+function brandToCard(row: BrandStats): CardRow {
+  return {
+    key: row.key,
+    displayName: row.displayName,
+    source: "official",
+    total: row.total,
+    finished: row.finished,
+    hits: row.hits,
+    miss: row.finished - row.hits,
+    hitRatePercent: row.hitRate,
+    history: row.history,
+  };
+}
+
+function modelToCard(row: ModelStats): CardRow {
+  return {
+    key: row.key,
+    displayName: row.displayName,
+    source: "official",
+    total: row.total,
+    finished: row.finished,
+    hits: row.hits,
+    miss: row.finished - row.hits,
+    hitRatePercent: row.hitRate,
+    history: row.history,
+  };
+}
+
+function formatRate(value: number | null): string {
+  if (value === null) return "-";
+  return `${value}%`;
 }
 
 function rankCircleClass(index: number): string {
@@ -145,6 +212,7 @@ function AiAvatar({ aiName, source }: { aiName: string; source: "official" | "us
 
 export default function RankingPage() {
   const [events, setEvents] = useState<KompariEvent[]>([]);
+  const [aggregationMode, setAggregationMode] = useState<AggregationMode>("ai");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
 
@@ -184,22 +252,54 @@ export default function RankingPage() {
     });
   }, [finishedEvents, categoryFilter]);
 
-  const rankings = useMemo(() => {
-    return buildRankings(targetEvents).filter((row) => {
-      if (sourceFilter === "all") return true;
-      return row.source === sourceFilter;
-    });
+  // "ai" モード: 既存の buildRankings をそのまま使用
+  const aiCards = useMemo(() => {
+    return buildRankings(targetEvents)
+      .filter((row) => {
+        if (sourceFilter === "all") return true;
+        return row.source === sourceFilter;
+      })
+      .map(rankingToCard);
   }, [targetEvents, sourceFilter]);
 
-  const totalPredictions = useMemo(() => {
-    return rankings.reduce((sum, row) => sum + row.total, 0);
-  }, [rankings]);
+  // "brand" モード: 全イベント対象、category/source フィルタ無効
+  const brandCards = useMemo(() => {
+    return aggregateByBrand(events).map(brandToCard);
+  }, [events]);
 
-  const totalHits = useMemo(() => {
-    return rankings.reduce((sum, row) => sum + row.hits, 0);
-  }, [rankings]);
+  // "model" モード: 全イベント対象、category/source フィルタ無効
+  const modelCards = useMemo(() => {
+    return aggregateByModel(events).map(modelToCard);
+  }, [events]);
 
-  const overallAccuracy = totalPredictions ? totalHits / totalPredictions : 0;
+  const activeCards = useMemo(() => {
+    if (aggregationMode === "ai") return aiCards;
+    if (aggregationMode === "brand") return brandCards;
+    return modelCards;
+  }, [aggregationMode, aiCards, brandCards, modelCards]);
+
+  const headerHits = useMemo(
+    () => activeCards.reduce((s, r) => s + r.hits, 0),
+    [activeCards]
+  );
+  const headerFinished = useMemo(
+    () => activeCards.reduce((s, r) => s + r.finished, 0),
+    [activeCards]
+  );
+  const headerRateForDisplay: number | null =
+    headerFinished > 0
+      ? Math.round((headerHits / headerFinished) * 1000) / 10
+      : null;
+
+  const headerTarget =
+    aggregationMode === "ai" ? targetEvents.length : finishedEvents.length;
+
+  const badgeLabel =
+    aggregationMode === "ai"
+      ? `${activeCards.length} AI`
+      : aggregationMode === "brand"
+      ? `${activeCards.length} ブランド`
+      : `${activeCards.length} モデル`;
 
   return (
     <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
@@ -238,17 +338,19 @@ export default function RankingPage() {
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">対象</div>
                 <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">
-                  {targetEvents.length}
+                  {headerTarget}
                 </div>
               </div>
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">的中</div>
-                <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">{totalHits}</div>
+                <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">
+                  {headerHits}
+                </div>
               </div>
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">的中率</div>
                 <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">
-                  {formatAccuracy(overallAccuracy)}
+                  {formatRate(headerRateForDisplay)}
                 </div>
               </div>
             </div>
@@ -257,20 +359,29 @@ export default function RankingPage() {
 
         {/* Filters */}
         <section className="mb-4 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
-          <div className="mb-2 text-[11px] font-bold text-gray-500">フィルター</div>
+          <div className="mb-2 text-[11px] font-bold text-gray-500">集計軸</div>
 
+          {/* Aggregation mode — 3択セグメントコントロール */}
           <div className="flex bg-[#E7EBF2] rounded-[12px] p-[3px] mb-3">
-            {[
-              { value: "all", label: "すべて" },
-              { value: "official", label: "公式AI" },
-              { value: "user", label: "My AI" },
-            ].map((item) => (
+            {(
+              [
+                { value: "ai" as AggregationMode, label: "AI別" },
+                { value: "brand" as AggregationMode, label: "ブランド別" },
+                { value: "model" as AggregationMode, label: "モデル別" },
+              ]
+            ).map((item) => (
               <button
                 key={item.value}
                 type="button"
-                onClick={() => setSourceFilter(item.value as SourceFilter)}
+                onClick={() => {
+                  setAggregationMode(item.value);
+                  if (item.value !== "ai") {
+                    setSourceFilter("all");
+                    setCategoryFilter("all");
+                  }
+                }}
                 className={`flex-1 py-2 text-[13px] font-bold rounded-[10px] transition-colors ${
-                  sourceFilter === item.value
+                  aggregationMode === item.value
                     ? "bg-white text-[#0F172A] shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
                     : "text-[#64748B]"
                 }`}
@@ -280,72 +391,99 @@ export default function RankingPage() {
             ))}
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              type="button"
-              onClick={() => setCategoryFilter("all")}
-              className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-bold ${
-                categoryFilter === "all"
-                  ? "bg-[#0F172A] text-white border-[#0F172A]"
-                  : "bg-white text-[#64748B] border-[#E8ECF2]"
-              }`}
-            >
-              全カテゴリ
-            </button>
+          {/* Source filter + カテゴリ: ai モードのみ表示 */}
+          {aggregationMode === "ai" && (
+            <>
+              <div className="mb-2 text-[11px] font-bold text-gray-500">フィルター</div>
 
-            {eventCategories.map((category) => (
-              <button
-                key={category.value}
-                type="button"
-                onClick={() => setCategoryFilter(category.value)}
-                className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-bold ${
-                  categoryFilter === category.value
-                    ? "bg-[#0F172A] text-white border-[#0F172A]"
-                    : "bg-white text-[#64748B] border-[#E8ECF2]"
-                }`}
-              >
-                {category.emoji} {category.shortLabel}
-              </button>
-            ))}
-          </div>
+              <div className="flex bg-[#E7EBF2] rounded-[12px] p-[3px] mb-3">
+                {[
+                  { value: "all", label: "すべて" },
+                  { value: "official", label: "公式AI" },
+                  { value: "user", label: "My AI" },
+                ].map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setSourceFilter(item.value as SourceFilter)}
+                    className={`flex-1 py-2 text-[13px] font-bold rounded-[10px] transition-colors ${
+                      sourceFilter === item.value
+                        ? "bg-white text-[#0F172A] shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
+                        : "text-[#64748B]"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter("all")}
+                  className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-bold ${
+                    categoryFilter === "all"
+                      ? "bg-[#0F172A] text-white border-[#0F172A]"
+                      : "bg-white text-[#64748B] border-[#E8ECF2]"
+                  }`}
+                >
+                  全カテゴリ
+                </button>
+
+                {eventCategories.map((category) => (
+                  <button
+                    key={category.value}
+                    type="button"
+                    onClick={() => setCategoryFilter(category.value)}
+                    className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-bold ${
+                      categoryFilter === category.value
+                        ? "bg-[#0F172A] text-white border-[#0F172A]"
+                        : "bg-white text-[#64748B] border-[#E8ECF2]"
+                    }`}
+                  >
+                    {category.emoji} {category.shortLabel}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </section>
 
         <section className="mb-3 flex items-center justify-between">
           <h2 className="text-[15px] font-extrabold">ランキング</h2>
           <span className="rounded-full border border-[#E8ECF2] bg-white px-3 py-1 text-[11px] font-bold text-gray-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
-            {rankings.length} AI
+            {badgeLabel}
           </span>
         </section>
 
         <section className="space-y-4">
-          {rankings.map((row, index) => {
-            const colors = row.source === "official" ? getAiColors(row.ai) : null;
+          {activeCards.map((card, index) => {
+            const colors = card.source === "official" ? getAiColors(card.displayName) : null;
+            const barWidth = Math.round(card.hitRatePercent ?? 0);
 
             return (
               <article
-                key={row.key}
+                key={card.key}
                 className="rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
               >
                 {/* Header row */}
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    {/* Circular rank badge */}
                     <div
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black ${rankCircleClass(index)}`}
                     >
                       {index + 1}
                     </div>
 
-                    {/* Brand avatar */}
-                    <AiAvatar aiName={row.ai} source={row.source} />
+                    <AiAvatar aiName={card.displayName} source={card.source} />
 
                     <div>
                       <h3 className="text-[15px] font-extrabold leading-tight">
-                        {row.ai}
+                        {card.displayName}
                       </h3>
-                      {row.myAiId && (
+                      {card.myAiId && (
                         <Link
-                          href={`/my-ai/${row.myAiId}`}
+                          href={`/my-ai/${card.myAiId}`}
                           className="text-[11px] font-extrabold text-blue-700"
                         >
                           詳細
@@ -359,7 +497,7 @@ export default function RankingPage() {
                       className="text-[22px] font-black"
                       style={{ color: colors?.bg ?? "#6366f1" }}
                     >
-                      {formatAccuracy(row.accuracy)}
+                      {formatRate(card.hitRatePercent)}
                     </div>
                     <div className="text-[10px] font-bold text-gray-400">的中率</div>
                   </div>
@@ -369,18 +507,18 @@ export default function RankingPage() {
                 <div className="mb-3 grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-[10px] bg-gray-50 p-2.5">
                     <div className="text-[10px] font-bold text-gray-400">予測数</div>
-                    <div className="mt-0.5 text-base font-extrabold">{row.total}</div>
+                    <div className="mt-0.5 text-base font-extrabold">{card.total}</div>
                   </div>
                   <div className="rounded-[10px] bg-green-50 p-2.5">
                     <div className="text-[10px] font-bold text-green-600">的中</div>
                     <div className="mt-0.5 text-base font-extrabold text-green-700">
-                      {row.hits}
+                      {card.hits}
                     </div>
                   </div>
                   <div className="rounded-[10px] bg-red-50 p-2.5">
                     <div className="text-[10px] font-bold text-red-400">外れ</div>
                     <div className="mt-0.5 text-base font-extrabold text-red-600">
-                      {row.total - row.hits}
+                      {card.miss}
                     </div>
                   </div>
                 </div>
@@ -390,7 +528,7 @@ export default function RankingPage() {
                   <div
                     className="h-full rounded-full transition-[width]"
                     style={{
-                      width: `${Math.round(row.accuracy * 100)}%`,
+                      width: `${barWidth}%`,
                       background: colors?.bg ?? "#6366f1",
                     }}
                   />
@@ -403,9 +541,9 @@ export default function RankingPage() {
                   </div>
 
                   <div className="space-y-2">
-                    {row.history.slice(0, 3).map((item) => (
+                    {card.history.slice(0, 3).map((item) => (
                       <Link
-                        key={`${row.key}-${item.eventId}`}
+                        key={`${card.key}-${item.eventId}`}
                         href={`/race/${item.eventId}`}
                         className="flex items-center justify-between gap-2 rounded-[10px] bg-white p-2.5"
                       >
@@ -429,13 +567,18 @@ export default function RankingPage() {
                         </span>
                       </Link>
                     ))}
+                    {card.history.length === 0 && (
+                      <p className="text-center text-[12px] font-bold text-gray-400 py-2">
+                        まだ判定済みの予測はありません
+                      </p>
+                    )}
                   </div>
                 </div>
               </article>
             );
           })}
 
-          {rankings.length === 0 && (
+          {activeCards.length === 0 && (
             <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-6 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
               <div className="text-3xl">🏁</div>
 
