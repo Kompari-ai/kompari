@@ -1,5 +1,17 @@
 import type { KompariEvent, KompariPrediction } from "@/lib/events";
 import { getResultWinner } from "@/lib/events";
+import type { EventCategory } from "@/lib/categories";
+
+// RankingHistory(ranking/page.tsx)と互換のフィールド名にする。
+// page.tsx から直接 import しない。
+export type HistoryItem = {
+  eventId: string;
+  title: string;
+  category: EventCategory;
+  winner: string;
+  pick: string;
+  hit: boolean;
+};
 
 export type CategoryStats = {
   total: number;
@@ -18,6 +30,8 @@ export type BrandStats = {
   hits: number;
   hitRate: number | null;
   categories: Record<string, CategoryStats>;
+  // 確定済みイベントのみ。呼び出し元の events 順(createdAt desc 想定)で格納。
+  history: HistoryItem[];
 };
 
 export type ModelStats = {
@@ -32,6 +46,8 @@ export type ModelStats = {
   hits: number;
   hitRate: number | null;
   categories: Record<string, CategoryStats>;
+  // 確定済みイベントのみ。呼び出し元の events 順(createdAt desc 想定)で格納。
+  history: HistoryItem[];
 };
 
 function computeHitRate(hits: number, finished: number): number | null {
@@ -110,6 +126,7 @@ export function aggregateByBrand(events: KompariEvent[]): BrandStats[] {
           hits: 0,
           hitRate: null,
           categories: {},
+          history: [],
         });
       }
 
@@ -122,6 +139,14 @@ export function aggregateByBrand(events: KompariEvent[]): BrandStats[] {
         entry.finished += 1;
         if (hit) entry.hits += 1;
         entry.hitRate = computeHitRate(entry.hits, entry.finished);
+        entry.history.push({
+          eventId: event.id,
+          title: event.title,
+          category: event.category,
+          winner,
+          pick,
+          hit,
+        });
       }
 
       accumulateCategoryStats(entry.categories, event.category, isFinished, hit);
@@ -160,6 +185,7 @@ export function aggregateByModel(events: KompariEvent[]): ModelStats[] {
           hits: 0,
           hitRate: null,
           categories: {},
+          history: [],
         });
       }
 
@@ -172,6 +198,14 @@ export function aggregateByModel(events: KompariEvent[]): ModelStats[] {
         entry.finished += 1;
         if (hit) entry.hits += 1;
         entry.hitRate = computeHitRate(entry.hits, entry.finished);
+        entry.history.push({
+          eventId: event.id,
+          title: event.title,
+          category: event.category,
+          winner,
+          pick,
+          hit,
+        });
       }
 
       accumulateCategoryStats(entry.categories, event.category, isFinished, hit);
