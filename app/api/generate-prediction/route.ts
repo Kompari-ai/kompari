@@ -6,6 +6,7 @@ import { callGemini } from "@/lib/ai/providers/gemini";
 import { callAnthropic } from "@/lib/ai/providers/anthropic";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type PredictionRequest = {
   title?: string;
