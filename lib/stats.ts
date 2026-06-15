@@ -62,7 +62,9 @@ function computeHitRate(hits: number, finished: number): number | null {
 }
 
 function getPredictionSource(prediction: KompariPrediction): "official" | "user" {
-  return prediction.source === "user" ? "user" : "official";
+  if (prediction.source === "user") return "user";
+  if (prediction.myAiId) return "user";
+  return "official";
 }
 
 // ブランドキーは ai フィールド(displayName)に統一。

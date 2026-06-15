@@ -66,8 +66,10 @@ type CardRow = {
   history: HistoryItem[];
 };
 
-function getPredictionSource(prediction: KompariPrediction) {
-  return prediction.source === "user" ? "user" : "official";
+function getPredictionSource(prediction: KompariPrediction): "official" | "user" {
+  if (prediction.source === "user") return "user";
+  if (prediction.myAiId) return "user";
+  return "official";
 }
 
 function getPredictionKey(prediction: KompariPrediction) {
