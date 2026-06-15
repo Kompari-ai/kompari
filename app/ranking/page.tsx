@@ -66,10 +66,17 @@ type CardRow = {
   history: HistoryItem[];
 };
 
+const OFFICIAL_AI_NAMES = new Set([
+  "ChatGPT", "Claude", "Gemini", "DeepSeek", "Grok",
+]);
+// 公式AIを追加する際は ai-config.ts と合わせてここも更新すること
+// (lib/stats.ts は ai-config.ts を import できないため別管理になっている)
+
 function getPredictionSource(prediction: KompariPrediction): "official" | "user" {
   if (prediction.source === "user") return "user";
   if (prediction.myAiId) return "user";
-  return "official";
+  if (prediction.ai && OFFICIAL_AI_NAMES.has(prediction.ai)) return "official";
+  return "user";
 }
 
 function getPredictionKey(prediction: KompariPrediction) {
