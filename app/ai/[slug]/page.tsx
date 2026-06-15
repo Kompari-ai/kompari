@@ -14,6 +14,7 @@ import {
   type KompariPrediction,
   type LegacyRaceData,
 } from "@/lib/events";
+import { aggregateByModel } from "@/lib/stats";
 
 type AiProfile = {
   name: string;
@@ -308,6 +309,13 @@ export default function AiProfilePage({
 
   const popularityScore = voteStats.up - voteStats.down;
   const categories = useMemo(() => categoryRows(stats), [stats]);
+
+  const modelStats = useMemo(() => {
+    if (!profile) return [];
+    return aggregateByModel(events, { source: "official" }).filter(
+      (m) => m.brandKey === profile.name
+    );
+  }, [events, profile]);
 
   if (!profile) {
     return (
@@ -605,6 +613,51 @@ export default function AiProfilePage({
             {categories.length === 0 && (
               <div className="rounded-2xl bg-gray-50 p-4 text-center text-sm font-bold text-gray-400">
                 まだカテゴリ別成績がありません
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-[15px] font-extrabold">モデル別成績</h2>
+
+            <span className="text-xs font-bold text-gray-400">
+              {modelStats.length}モデル
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {modelStats.map((m) => (
+              <div key={m.key} className="rounded-2xl bg-gray-50 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="font-extrabold">{m.displayName}</div>
+
+                  <div className="text-[15px] font-extrabold text-blue-700">
+                    {m.hitRate !== null ? `${m.hitRate}%` : "-"}
+                  </div>
+                </div>
+
+                <div className="mb-2 flex items-center justify-between text-xs font-bold text-gray-400">
+                  <span>
+                    予測 {m.total}件 / 結果 {m.finished}件
+                  </span>
+
+                  <span>的中 {m.hits}件</span>
+                </div>
+
+                <div className="h-2 overflow-hidden rounded-full bg-white">
+                  <div
+                    className="h-2 rounded-full bg-blue-700"
+                    style={{ width: `${m.hitRate ?? 0}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+
+            {modelStats.length === 0 && (
+              <div className="rounded-2xl bg-gray-50 p-4 text-center text-sm font-bold text-gray-400">
+                まだモデル別データがありません。モデル情報が記録された予測が増えると、ここに表示されます。
               </div>
             )}
           </div>
