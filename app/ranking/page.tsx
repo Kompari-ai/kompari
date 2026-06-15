@@ -262,14 +262,14 @@ export default function RankingPage() {
       .map(rankingToCard);
   }, [targetEvents, sourceFilter]);
 
-  // "brand" モード: 全イベント対象、category/source フィルタ無効
+  // "brand" モード: 公式AIのみ対象、category/source フィルタ無効
   const brandCards = useMemo(() => {
-    return aggregateByBrand(events).map(brandToCard);
+    return aggregateByBrand(events, { source: "official" }).map(brandToCard);
   }, [events]);
 
-  // "model" モード: 全イベント対象、category/source フィルタ無効
+  // "model" モード: 公式AIのみ・aiModel/aiModelId 有りのデータのみ対象
   const modelCards = useMemo(() => {
-    return aggregateByModel(events).map(modelToCard);
+    return aggregateByModel(events, { source: "official" }).map(modelToCard);
   }, [events]);
 
   const activeCards = useMemo(() => {

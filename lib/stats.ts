@@ -2,6 +2,12 @@ import type { KompariEvent, KompariPrediction } from "@/lib/events";
 import { getResultWinner } from "@/lib/events";
 import type { EventCategory } from "@/lib/categories";
 
+export type StatsSourceFilter = "official" | "user" | "all";
+
+type StatsOptions = {
+  source?: StatsSourceFilter;
+};
+
 // RankingHistory(ranking/page.tsx)と互換のフィールド名にする。
 // page.tsx から直接 import しない。
 export type HistoryItem = {
@@ -21,7 +27,7 @@ export type CategoryStats = {
 };
 
 export type BrandStats = {
-  // aiProvider ?? ai ?? "unknown"
+  // prediction.ai (displayName) をキーに統一
   key: string;
   // prediction.ai (human-readable display name, e.g. "ChatGPT")
   displayName: string;
@@ -35,11 +41,11 @@ export type BrandStats = {
 };
 
 export type ModelStats = {
-  // aiModelId ?? aiModel ?? ai ?? "unknown"
+  // aiModelId ?? aiModel (ai へのフォールバックなし)
   key: string;
-  // aiModel ?? ai ?? "unknown"
+  // aiModel ?? aiModelId ?? "unknown"
   displayName: string;
-  // aiProvider ?? ai ?? "unknown"
+  // prediction.ai (displayName) をキーに統一
   brandKey: string;
   total: number;
   finished: number;
@@ -55,16 +61,24 @@ function computeHitRate(hits: number, finished: number): number | null {
   return Math.round((hits / finished) * 1000) / 10;
 }
 
-function getBrandKey(prediction: KompariPrediction): string {
-  return prediction.aiProvider ?? prediction.ai ?? "unknown";
+function getPredictionSource(prediction: KompariPrediction): "official" | "user" {
+  return prediction.source === "user" ? "user" : "official";
 }
 
-function getModelKey(prediction: KompariPrediction): string {
-  return prediction.aiModelId ?? prediction.aiModel ?? prediction.ai ?? "unknown";
+// ブランドキーは ai フィールド(displayName)に統一。
+// aiProvider はモック時に欠落するため使わない。
+function getBrandKey(prediction: KompariPrediction): string {
+  return prediction.ai ?? "unknown";
+}
+
+// aiModelId/aiModel が両方ない場合は null を返してモデル別集計から除外。
+// ai へのフォールバックは意図的に省く(モデル不明予測を "ChatGPT" と混同させない)。
+function getModelKey(prediction: KompariPrediction): string | null {
+  return prediction.aiModelId ?? prediction.aiModel ?? null;
 }
 
 function getModelDisplayName(prediction: KompariPrediction): string {
-  return prediction.aiModel ?? prediction.ai ?? "unknown";
+  return prediction.aiModel ?? prediction.aiModelId ?? "unknown";
 }
 
 function accumulateCategoryStats(
@@ -100,11 +114,12 @@ function sortByHits<T extends { hits: number; hitRate: number | null; total: num
 }
 
 /**
- * ブランド別(aiProvider)に成績を集計する。
- * aiProvider がない古いデータは prediction.ai をキーに使う。
- * official / user 両方を含む(buildRankings に倣う)。
+ * ブランド別(ai displayName)に成績を集計する。
+ * ブランドキーは prediction.ai に統一(aiProvider はモック時に欠落するため使わない)。
+ * source オプションで公式AI / My AI / 両方 を切り替えられる。
  */
-export function aggregateByBrand(events: KompariEvent[]): BrandStats[] {
+export function aggregateByBrand(events: KompariEvent[], options?: StatsOptions): BrandStats[] {
+  const sourceFilter = options?.source ?? "all";
   const map = new Map<string, BrandStats>();
 
   for (const event of events) {
@@ -112,6 +127,8 @@ export function aggregateByBrand(events: KompariEvent[]): BrandStats[] {
     const isFinished = !!winner;
 
     for (const prediction of event.predictions) {
+      if (sourceFilter !== "all" && getPredictionSource(prediction) !== sourceFilter) continue;
+
       const pick = prediction.main?.trim();
       if (!pick) continue;
 
@@ -157,11 +174,13 @@ export function aggregateByBrand(events: KompariEvent[]): BrandStats[] {
 }
 
 /**
- * モデルバージョン別(aiModelId)に成績を集計する。
- * aiModelId がない古いデータは aiModel → ai の順にフォールバックする。
- * official / user 両方を含む(buildRankings に倣う)。
+ * モデルバージョン別(aiModelId / aiModel)に成績を集計する。
+ * aiModelId も aiModel も無い予測(モックデータ等)は集計から除外する。
+ * ai へのフォールバックは意図的に省く(GPT-5.5 と ChatGPT が混在する事故を防ぐ)。
+ * source オプションで公式AI / My AI / 両方 を切り替えられる。
  */
-export function aggregateByModel(events: KompariEvent[]): ModelStats[] {
+export function aggregateByModel(events: KompariEvent[], options?: StatsOptions): ModelStats[] {
+  const sourceFilter = options?.source ?? "all";
   const map = new Map<string, ModelStats>();
 
   for (const event of events) {
@@ -169,10 +188,14 @@ export function aggregateByModel(events: KompariEvent[]): ModelStats[] {
     const isFinished = !!winner;
 
     for (const prediction of event.predictions) {
+      if (sourceFilter !== "all" && getPredictionSource(prediction) !== sourceFilter) continue;
+
       const pick = prediction.main?.trim();
       if (!pick) continue;
 
       const key = getModelKey(prediction);
+      if (key === null) continue; // aiModelId/aiModel なし → モデル別集計から除外
+
       const brandKey = getBrandKey(prediction);
 
       if (!map.has(key)) {
