@@ -83,7 +83,7 @@ function getBrandKey(prediction: KompariPrediction): string {
 // aiModelId/aiModel が両方ない場合は null を返してモデル別集計から除外。
 // ai へのフォールバックは意図的に省く(モデル不明予測を "ChatGPT" と混同させない)。
 function getModelKey(prediction: KompariPrediction): string | null {
-  return prediction.aiModelId ?? prediction.aiModel ?? null;
+  return prediction.aiModel ?? prediction.aiModelId ?? null;
 }
 
 function getModelDisplayName(prediction: KompariPrediction): string {
