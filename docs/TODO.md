@@ -317,3 +317,63 @@ P2（T-11 → T-13 → T-12）
 ### 進め方（次回）
 
 新スキーマの4論点を決める → 指示文を修正 → Step1+2（型追加+読み取りヘルパー、既存を呼ばない安全な追加のみ）→ build確認 → 以降のStepへ。
+
+→ 上記の論点整理を踏まえた正式方針は次節「predictions 新スキーマの方向性」を参照。
+
+---
+
+## predictions 新スキーマの方向性（方針16 vs 移行指示文の整理）
+
+方針16ドキュメント（`usedFactors` ベースのファクター構造化）と、別チャット由来の predictions 移行指示文（独立コレクション化・`outcome`/`confidence`数値化等）には設計差分がある。両者を比較し、「いいとこ取り」で正式方針を整理する。
+
+### 方針16の方向性
+
+- 現状の `KompariPrediction` 構造を大きく変えない。
+- `main` / `second` / `third` はフラットのまま。
+- `reason` / `evidence` / `confidence` も現状維持。
+- 追加の中心は `usedFactors?: PredictionFactor[]`。
+- `PredictionFactor` は `key` / `label` / `value` / `weight` / `direction` / `note` 等を持つ構造化ファクター。
+
+### 移行指示文の方向性
+
+- `predictions` を races 埋め込みから独立コレクションへ移す。
+- `outcome` / `predictedAt` / `evaluatedAt` など、予測単位の状態を持たせる。
+- `confidence` を number 化し、`confidenceRaw` を持たせる。
+- `picks` / `reasoning` / `predictionText` / `sourceContext` などの新構造を含む。
+
+### 採用したい方向性
+
+- predictions は将来的に独立コレクション化する（方針16.5 の検索・分析の前提）。
+  - AI別・モデル別・的中/外れ別・条件別で予測を検索・分析しやすくなる。
+- `outcome` / `status` / `predictedAt` / `evaluatedAt` のような予測単位の状態管理は将来性がある。
+- `confidence` は数値用と原文用に分ける方向が望ましい。
+  - 例: `confidence: number | null`
+  - 例: `confidenceRaw: string | null`
+- モック汚染対策として `isMock` または `predictionSource: "real-api" | "mock"` を持たせる方向も検討する。
+
+### 方針16を優先したい部分
+
+- ファクター情報は、緩い `sourceContext: Record<string, unknown>` よりも、方針16の `usedFactors?: PredictionFactor[]` を優先する。
+- `PredictionFactor` は構造化されたデータにする。
+  - 「ChatGPTが重視した要因」「Grokが穴狙いした根拠」「雨の日の競馬予測」などを検索・分析できるようにするため。
+  - `Record<string, unknown>` は柔軟だが中身がバラバラになりやすく、検索・集計に向かない。
+
+### 保留・再検討する部分
+
+- `main` / `second` / `third` を `picks` にネストするかは未決定。
+  - 現状コードは `prediction.main` を多数参照しているため、実利が明確でなければ移行初期はフラット維持が安全。
+- `reason` を `reasoning` に改名するかは未決定（単なる改名なら移行コストに見合うか要検討）。
+- `predictionText` は optional 扱いが安全（現状データに対応フィールドがないため必須にしない）。
+- `confidence` 数値化の変換ルールは未決定。
+  - `high` / `medium` / `low` を何点にするか決める必要がある。
+  - 変換できないものは `confidence: null`、原文を `confidenceRaw` に残す方針が安全。
+
+### 次回の進め方
+
+1. まず正式な `PredictionDocument` / `PredictionFactor` 型を設計する。
+2. 独立コレクション化・outcome保持・confidence数値化の将来性は取り入れる。
+3. ファクター情報は `sourceContext` ではなく、方針16の `usedFactors: PredictionFactor[]` を軸にする。
+4. `picks` / `reasoning` / `predictionText` は、必要性を再確認してから採用判断する。
+5. スキーマ確定後に、`lib/predictions.ts` へ型と変換ヘルパーだけ追加する。
+6. Firestore 書き込み変更・既存データ移行はさらに後の段階に分ける。
+7. 移行とスキーマ再設計を同時に進めない。
