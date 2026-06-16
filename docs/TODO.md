@@ -278,3 +278,42 @@ P2（T-11 → T-13 → T-12）
 - [ ] /races に管理者向け「作成」ボタンが表示されない
 - [ ] `npm run build` が通る
 - [ ] Vercel deployが成功する
+
+---
+
+## 予測データ独立コレクション移行（Step1+2）— 着手前に決めること
+
+別チャットで Step1+2 の指示文（`lib/events.ts` に型追加 + `lib/predictions.ts` 新設）が用意済み。ただし事前調査（15 完了後）で、指示文の前提と現状のズレ、および新スキーマ `KompariPredictionDoc` の設計論点が判明したため、着手前に以下を決める。
+
+### 指示文の要修正点
+
+- 指示文に「15-B-5 で `lib/stats.ts` に作った正規化マップを再利用」とあるが、そのようなマップは存在しない（あるのは `OFFICIAL_AI_NAMES` の allowlist のみ）。
+  → 指示文の当該箇所を削除し、必要な変換は `lib/predictions.ts` 内に独自定義する。
+
+### 新スキーマ `KompariPredictionDoc` の設計論点（要決定）
+
+1. **confidence の数値化ルール**:
+   現状 `confidence` は string で実データがバラバラ（`"medium"` `"high"` `"72%"` 等）。新型は `confidence: number`（0–100）+ `confidenceRaw: string`（原文）に分離する設計。
+   → `"medium"` / `"high"` / `"low"` を何点に変換するか、ルールを決める必要がある。
+   （現状の画面で `"medium%"` という不正表示も出ており、数値/原文分離は良い方向）
+2. **picks をネストするか**:
+   現状 `main`/`second`/`third` はフラット。新型は `picks: { main, second, third }` とネスト。
+   → ネストにする実利が不明確。既存コードは `prediction.main` を多数参照しており、変換コストが増える。フラット維持で良いか、設計者の意図を確認。
+3. **predictionText の扱い**:
+   新型に `predictionText`（予測の地の文）があるが現状に該当フィールドなし。
+   → 旧データ移行時は空になる。任意（optional）にするか、`main` 等から生成するか決める。
+4. **outcome の持たせ方**:
+   新型は予測ドキュメント自体に `outcome: "hit" | "miss" | null` を持つ設計（現状は集計時に `getResultWinner` で動的判定）。方針16・My AIランキングに有用。
+   → 旧データ移行時は `races.result` と突き合わせて算出するか `null` にするか決める。
+
+### 現状確認で判明した既知事項（再調査不要）
+
+- `LegacyRaceData` は実在し `normalizeRaceToEvent` で使用中（指示文の「残す」はOK）。
+- `predictions` 独立コレクションはコード上ゼロ参照（現状 races 埋め込みのみ）。
+- `lib/predictions.ts` は未存在（新規作成でOK）。
+- モックフォールバック予測は `aiProvider`/`aiModel`/`aiModelId` が欠ける → 移行時に null チェック必須。これは「モック汚染」問題と同根。
+- この移行は方針16（sourceContext/reasoning/confidence数値化）の土台。16と一体で設計する。
+
+### 進め方（次回）
+
+新スキーマの4論点を決める → 指示文を修正 → Step1+2（型追加+読み取りヘルパー、既存を呼ばない安全な追加のみ）→ build確認 → 以降のStepへ。
