@@ -377,3 +377,116 @@ P2（T-11 → T-13 → T-12）
 5. スキーマ確定後に、`lib/predictions.ts` へ型と変換ヘルパーだけ追加する。
 6. Firestore 書き込み変更・既存データ移行はさらに後の段階に分ける。
 7. 移行とスキーマ再設計を同時に進めない。
+
+---
+
+## 方針16 Factor Tags — Phase 1 正式設計（実装前の確定事項）
+
+### `PredictionFactor` 型（構造化ファクター）
+
+```ts
+type PredictionFactor = {
+  key: string;        // 固定リストから選択。該当なしのみ custom:xxx
+  label: string;      // 表示用の日本語ラベル
+  direction: "positive" | "negative" | "neutral";
+  note?: string;      // 補足理由
+  value?: string | number | boolean;  // Phase 1 では任意（将来用）
+  weight?: number;                     // Phase 1 では任意（将来用）
+};
+```
+
+- Phase 1 で AI に必ず出させる項目: `key` / `label` / `direction` / `note`。
+- `value` / `weight` は型に用意するが Phase 1 では必須にしない。
+  理由: `weight` はAI間で基準がブレる（ChatGPTの0.8とGrokの0.8が同義とは限らない）。
+- 重要度は `weight` ではなく「配列順」で表す（`usedFactors[0]`=最重視、`[1]`=2番目…）。
+
+### `PredictionDocument` への持たせ方
+
+```ts
+usedFactors?: PredictionFactor[];  // 表示・分析用（リッチな構造）
+factorKeys?: string[];             // 検索用（key だけの配列）
+```
+
+- `factorKeys` は Firestore の `array-contains` 検索用に別途持つ。
+  （`usedFactors[].key` では `array-contains` が効かないため非正規化して持つ）
+- 例: `usedFactors=[{key:"home_advantage",label:"ホーム開催",direction:"positive",note:"..."}]`
+      `factorKeys=["home_advantage"]`
+
+### factor key 正式リスト（命名規則: 小文字スネークケース）
+
+**共通キー**（カテゴリ横断で同じ意味で使えるものだけ）:
+
+| key | 意味 |
+|---|---|
+| `weather` | 天候 |
+| `news_sentiment` | ニュース材料 |
+| `market_sentiment` | 市場・世論の流れ |
+| `odds_movement` | オッズ・人気の動き |
+| `historical_record` | 過去実績 |
+| `data_uncertainty` | 情報不足・不確実性 |
+| `risk_event` | リスクイベント |
+
+**競馬キー**（MVP中心。厚めに用意）:
+
+| key | 意味 |
+|---|---|
+| `horse_form` | 馬の近走成績 |
+| `horse_condition` | 馬体・仕上がり |
+| `jockey` | 騎手 |
+| `trainer` | 調教師 |
+| `track_condition` | 馬場状態 |
+| `distance_fit` | 距離適性 |
+| `course_fit` | コース適性 |
+| `draw` | 枠順 |
+| `pace` | 展開・ペース |
+| `weight_carried` | 斤量 |
+| `bloodline` | 血統 |
+| `odds_value` | 妙味・過小評価 |
+
+**スポーツ共通キー**:
+
+| key | 意味 |
+|---|---|
+| `team_form` | チームの直近調子 |
+| `player_condition` | 選手状態 |
+| `injury` | 怪我・欠場 |
+| `home_advantage` | ホームアドバンテージ |
+| `head_to_head` | 対戦成績 |
+| `schedule_fatigue` | 日程疲労 |
+| `tactical_matchup` | 戦術相性 |
+| `motivation` | モチベーション |
+
+**株・暗号資産キー**:
+
+| key | 意味 |
+|---|---|
+| `macro_trend` | マクロ環境 |
+| `technical_signal` | テクニカル指標 |
+| `volume` | 出来高・取引量 |
+| `earnings` | 決算 |
+| `valuation` | 割安・割高 |
+| `regulation` | 規制 |
+| `liquidity` | 流動性 |
+| `risk_event` | リスクイベント（共通と共有） |
+
+注: `recent_form` / `condition` は共通から外し、各カテゴリの具体キー（`horse_form`/`horse_condition`、`team_form`/`player_condition`）に寄せた。AIが「共通の `condition` と `horse_condition` のどちらを使うか」迷うのを防ぐため。
+
+### 運用ルール
+
+- AIへの指示: 「最も重視した factor を3〜5個、重要度の高い順に選ぶ。標準キーから選び、該当しない場合のみ `custom:xxx` を使う」。
+- 1予測あたり: 最小3個 / 最大5個 / 推奨3個。
+- `custom:xxx` は許可するが、集計・検索では標準キーとは分けて扱う（標準キーのみを一級の集計対象とする。allowlist 思想と同じ）。
+
+### 置き場所
+
+- factor key の固定リストは `lib/factors.ts` に一元管理する。
+- 参照箇所: 予測生成プロンプト / `PredictionDocument` 型 / 検索UI / ランキング分析 / 管理画面。
+- `ai-config.ts` や `stats.ts` には置かない（今日 allowlist が2か所に分散して保守コストになった反省から、最初から1ファイルに集約）。
+
+### 次回の進め方
+
+1. この確定リストで `lib/factors.ts` の型と固定リストを作る（実装の第一歩）。
+2. その後 `PredictionDocument` / `PredictionFactor` を `lib/predictions.ts` に入れる。
+3. さらにその後、予測生成プロンプトに「factor を3〜5個選ぶ」指示を組み込む。
+
+※ いずれも「追加のみ・既存を呼ばない」安全な段階から。移行とスキーマ再設計は同時に進めない。
