@@ -1,3 +1,5 @@
+import type { PredictionFactor } from "@/lib/factors";
+
 export type PredictionInput = {
   title: string;
   category: string;
@@ -12,4 +14,6 @@ export type PredictionOutput = {
   confidence?: string;
   reason?: string;
   evidence?: string;
+  usedFactors?: PredictionFactor[];
+  factorKeys?: string[];
 };

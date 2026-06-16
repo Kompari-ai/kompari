@@ -1,4 +1,5 @@
 import type { EventCategory } from "@/lib/categories";
+import type { PredictionFactor } from "@/lib/factors";
 
 export type KompariPrediction = {
   ai: string;
@@ -20,6 +21,11 @@ export type KompariPrediction = {
 
   // Firestore ID for My AI
   myAiId?: string;
+
+  // Factor Tags（方針16）。表示・分析用のリッチな構造
+  usedFactors?: PredictionFactor[];
+  // Factor Tags の検索用キー一覧（Firestore array-contains 用）
+  factorKeys?: string[];
 };
 
 export type KompariEvent = {
