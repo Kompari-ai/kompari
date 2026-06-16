@@ -32,7 +32,30 @@ export function parsePredictionOutput(
   const evidence =
     typeof parsed.evidence === "string" ? parsed.evidence : undefined;
 
-  return { main, second, third, confidence, reason, evidence };
+  let usedFactors: PredictionFactor[] = [];
+  let factorKeys: string[] = [];
+  try {
+    const extracted = extractUsedFactors(parsed);
+    usedFactors = extracted.usedFactors;
+    factorKeys = extracted.factorKeys;
+  } catch {
+    // factor extraction must never break the core prediction
+  }
+
+  const output: PredictionOutput = {
+    main,
+    second,
+    third,
+    confidence,
+    reason,
+    evidence,
+  };
+  if (usedFactors.length > 0) {
+    output.usedFactors = usedFactors;
+    output.factorKeys = factorKeys;
+  }
+
+  return output;
 }
 
 const FACTOR_DIRECTIONS = new Set(["positive", "negative", "neutral"]);
