@@ -8,7 +8,8 @@ import {
 
 export function parsePredictionOutput(
   raw: string,
-  candidates: string[]
+  candidates: string[],
+  category?: string
 ): PredictionOutput {
   let parsed: Record<string, unknown> = {};
   try {
@@ -35,7 +36,7 @@ export function parsePredictionOutput(
   let usedFactors: PredictionFactor[] = [];
   let factorKeys: string[] = [];
   try {
-    const extracted = extractUsedFactors(parsed);
+    const extracted = extractUsedFactors(parsed, category);
     usedFactors = extracted.usedFactors;
     factorKeys = extracted.factorKeys;
   } catch {

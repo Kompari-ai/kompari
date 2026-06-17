@@ -27,5 +27,5 @@ export async function callGemini(
   });
 
   const raw = response.text ?? "{}";
-  return parsePredictionOutput(raw, input.candidates);
+  return parsePredictionOutput(raw, input.candidates, input.category);
 }

@@ -29,5 +29,5 @@ export async function callOpenAiCompatible(
   });
 
   const raw = response.choices[0]?.message?.content ?? "{}";
-  return parsePredictionOutput(raw, input.candidates);
+  return parsePredictionOutput(raw, input.candidates, input.category);
 }

@@ -32,5 +32,5 @@ export async function callAnthropic(
     .replace(/\n?```\s*$/, "")
     .trim();
 
-  return parsePredictionOutput(cleaned || "{}", input.candidates);
+  return parsePredictionOutput(cleaned || "{}", input.candidates, input.category);
 }
