@@ -490,3 +490,62 @@ factorKeys?: string[];             // 検索用（key だけの配列）
 3. さらにその後、予測生成プロンプトに「factor を3〜5個選ぶ」指示を組み込む。
 
 ※ いずれも「追加のみ・既存を呼ばない」安全な段階から。移行とスキーマ再設計は同時に進めない。
+
+---
+
+## 16-B-3b-2 — Factor Tags プロンプト確定文面（次回これを実装する）
+
+### 進め方（調査で確定済み）
+
+- `buildFactorInstruction(category)` を新設し、user プロンプト末尾に `includeFactors` フラグで条件付き連結する。
+  例: `const user = \`${baseUser}${includeFactors ? buildFactorInstruction(input.category) : ""}\`;`
+- 品質が落ちたら `includeFactors = false` に戻すだけで即 revert できる形にする。
+- factor 指示は予測本体の指示の「後ろ」に置く（本体優先）。
+- key 一覧は `getFactorKeysForCategory(category)` の key と、`lib/factors.ts` の label を「key: label」のペアで列挙する（`getFactorLabel` で label を引く）。
+
+### 確定プロンプト文面
+
+```
+【重視した要因 usedFactors について】
+あなたが上記の予測で重視した要因を、以下のリストから3〜5個、重要度の高い順に選び、
+usedFactors 配列で返してください。
+
+選べる要因一覧: {getFactorKeysForCategory(category) から作った "key: label" の一覧}
+
+各要因は次の形式で返してください。
+{
+  "key": "jockey",
+  "label": "騎手",
+  "direction": "positive",
+  "note": "騎手の相性が良く、勝ち切る可能性を高めるため。"
+}
+
+ルール:
+- key は上の一覧にある key をそのまま使う。
+- label は上の一覧にある対応 label をそのまま使う。
+- direction は、あなたの main 予測に対する影響として判断する。
+  - "positive": main 予測を後押しする要因
+  - "negative": main 予測に対する不安・減点要因
+  - "neutral": 中立、または不確実性を示す要因
+- note は、その要因を重視した理由を日本語1文で短く書く。
+- 最も重視した要因を配列の先頭に置く。
+- 原則として上の一覧から選ぶ。どうしても該当する key がない場合のみ
+  "custom:任意の英数字" を使う。
+- factorKeys は返さない（システム側で usedFactors から作成する）。
+- value / weight は今回は返さない。
+
+重要:
+- 必ず main / second / third / confidence / reason / evidence を優先して正確に返す。
+- usedFactors は予測本体を補足するための情報。
+- usedFactors の作成で迷っても、予測本体の品質を落とさない。
+```
+
+### 次回 16-B-3b-2 の手順
+
+1. factor 指示前に、各社1件ずつ予測を生成して main/reason/evidence を記録（ビフォー）。
+2. `buildFactorInstruction(category)` を上記文面で実装（`includeFactors` フラグ付き）。
+3. ローカルで1社ずつ実API確認: Gemini → ChatGPT → Claude → DeepSeek → Grok → 5社一括。
+4. 各社で: main/reason/evidence が正常、usedFactors が3〜5個、key が標準 or `custom:`、
+   direction が3値、factorKeys が usedFactors から導出、Claude が崩れても本体無事。
+5. ビフォー/アフター比較で予測本体の品質が劣化していないか判定。
+6. 問題なければ本番 push。劣化が見られたら `includeFactors=false` で即 revert。
