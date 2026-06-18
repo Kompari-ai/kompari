@@ -1,3 +1,160 @@
+# TODO / Next Session Notes
+
+## 16-B-3b-2-beta: Factor Tags prompt instruction rollout
+
+### Current status
+
+- Factor Tags prompt instruction has been enabled locally.
+- Main code commit:
+  - `657ddb6 feat(ai): enable Factor Tags prompt instruction (16-B-3b-2-beta)`
+- This commit changes only:
+  - `lib/ai/prompt.ts`
+  - `includeFactors = false` → `includeFactors = true`
+- NOTE:
+  - Because `657ddb6` is committed, the local working tree has `includeFactors=true`.
+  - Running the dev server locally will now include Factor Tags in prompts.
+  - This is expected.
+  - Production is unaffected until `git push`.
+- The code commit has NOT been pushed yet.
+- Production is NOT changed yet.
+- Vercel has NOT redeployed this change yet.
+- `.claude/` remains untracked and should not be committed.
+
+### Local validation summary
+
+Before/after local route tests were completed with 5 official AIs:
+
+- Gemini: PASS
+- ChatGPT: PASS
+- Claude: PASS
+- Grok: PASS
+- DeepSeek: PASS after retry validation
+
+DeepSeek evidence validation:
+
+- Initial after:
+  - evidence 55 chars / 46% of before
+  - judged borderline / not enough for immediate push
+- retry-1:
+  - evidence 74 chars / 62% of before
+  - individual horse-specific rationale returned
+- retry-2:
+  - evidence 103 chars / 87% of before
+  - individual horse-specific rationale returned
+- Conclusion:
+  - Initial DeepSeek evidence shortening appears to be one-time generation variance.
+  - It does not appear to be structural degradation caused by the Factor Tags prompt instruction.
+
+Validation files are outside the repository:
+
+- `C:\Users\toriniku\Desktop\kompari-factor-check\before.json`
+- `C:\Users\toriniku\Desktop\kompari-factor-check\after.json`
+- `C:\Users\toriniku\Desktop\kompari-factor-check\deepseek-retry-1.json`
+- `C:\Users\toriniku\Desktop\kompari-factor-check\deepseek-retry-2.json`
+
+Do not add these files to git.
+
+### Expected local git log
+
+Expected local log, most recent first:
+
+```text
+<docs commit>  docs(todo): add Factor Tags production rollout checklist
+657ddb6        feat(ai): enable Factor Tags prompt instruction (16-B-3b-2-beta)
+35548fc        feat(ai): prepare Factor Tags prompt instruction behind disabled flag (16-B-3b-2-alpha)
+```
+
+The docs commit may be the latest local commit.
+The important code commit for Factor Tags enablement is `657ddb6`.
+
+### Next session checklist
+
+Start with state confirmation only:
+
+```bash
+git status --short
+git log --oneline -5
+git status -sb
+```
+
+Confirm:
+
+* Working tree has no unexpected changes.
+* `.claude/` may remain untracked.
+* Local main is ahead of origin/main.
+* The Factor Tags code commit `657ddb6` is included in local history.
+* The docs TODO commit may be the latest local commit.
+* No API keys or `.env.local` values are displayed.
+
+### Production rollout steps
+
+Only after state confirmation:
+
+1. Push local commits:
+
+```bash
+git push origin main
+```
+
+2. Confirm Vercel deployment completed successfully.
+
+3. Run one production verification prediction.
+
+Production verification should confirm:
+
+* Prediction still returns:
+
+  * main
+  * second
+  * third
+  * confidence
+  * reason
+  * evidence
+* `usedFactors` is present.
+* `usedFactors` count is 3 to 5.
+* `factorKeys` is present.
+* No mock/fallback response.
+* reason/evidence are not obviously degraded.
+* No API error.
+* Firestore save behavior is expected.
+
+### Production verification caution
+
+Local validation used direct route tests without Firestore persistence.
+
+Production verification may create real Firestore prediction data.
+Before running production verification, decide whether to use:
+
+* a dedicated test event, or
+* a real event that is acceptable to store predictions for.
+
+Do not run broad or repeated production tests unless necessary.
+
+### Rollback plan
+
+Recommended rollback:
+
+1. Set `includeFactors=false` in `lib/ai/prompt.ts`.
+2. Commit the one-line rollback.
+3. Push the rollback.
+4. Confirm Vercel redeploy.
+5. Re-test production prediction.
+
+This is simpler and clearer than `git revert` because the rollback is a one-line change.
+
+Use `git revert` only if there is a specific reason to preserve an exact revert history.
+
+### Do not do
+
+* Do not commit `.claude/`.
+* Do not commit `kompari-factor-check` files.
+* Do not display `.env.local` values.
+* Do not display API keys.
+* Do not run broad node process kills.
+* Do not run unnecessary real API calls.
+
+---
+
 # Kompari MVP TODO
 
 **スコープ: 競馬のみ・手動運用（管理者がイベント作成・結果入力）**  
