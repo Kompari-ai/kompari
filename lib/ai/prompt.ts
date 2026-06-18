@@ -1,7 +1,7 @@
 import type { PredictionInput } from "./types";
 import { getFactorKeysForCategory, getFactorLabel } from "../factors";
 
-const includeFactors = false;
+const includeFactors = true;
 
 function buildFactorInstruction(category: string): string {
   const keys = getFactorKeysForCategory(category);
