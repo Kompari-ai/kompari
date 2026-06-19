@@ -17,7 +17,7 @@ export async function callAnthropic(
 
   const message = await client.messages.create({
     model: modelId,
-    max_tokens: 1024,
+    max_tokens: 2048,
     system,
     messages: [{ role: "user", content: user }],
   });

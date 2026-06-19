@@ -253,6 +253,18 @@ function buildEvidence({
   return `カテゴリ「${category}」の特性、候補「${candidateText}」の比較、AIの予測スタイル「${aiStyle}」をもとにした予測です。`;
 }
 
+function getMissingCoreFields(result: {
+  main?: string | null;
+  reason?: string | null;
+  evidence?: string | null;
+}): string[] {
+  const missing: string[] = [];
+  if (!result.main || !String(result.main).trim()) missing.push("main");
+  if (!result.reason || !String(result.reason).trim()) missing.push("reason");
+  if (!result.evidence || !String(result.evidence).trim()) missing.push("evidence");
+  return missing;
+}
+
 // 実API呼び出し。キー未設定またはエラー時は null を返してモックに委ねる。
 async function callRealApi(
   aiName: string,
@@ -324,14 +336,58 @@ export async function POST(req: Request) {
     }
 
     // 実API呼び出しを試みる（公式AIのみ。キー未設定時はモックにフォールバック）
-    const realResult = await callRealApi(aiName, {
+    const predictionInput: PredictionInput = {
       title,
       category,
       candidates,
       aiDisplayName: aiName,
-    });
+    };
+
+    const realResult = await callRealApi(aiName, predictionInput);
 
     if (realResult) {
+      const missingFields = getMissingCoreFields(realResult);
+
+      if (missingFields.length > 0) {
+        console.warn(
+          `[${aiName}] core fields missing (${missingFields.join(", ")}), retrying once`
+        );
+
+        const retryResult = await callRealApi(aiName, predictionInput);
+
+        if (!retryResult) {
+          console.error(
+            `[${aiName}] retry returned null, original missing fields: ${missingFields.join(", ")}`
+          );
+          return NextResponse.json(
+            {
+              error: "AI response missing required fields after retry",
+              aiName,
+              missingFields,
+            },
+            { status: 502 }
+          );
+        }
+
+        const missingAfterRetry = getMissingCoreFields(retryResult);
+
+        if (missingAfterRetry.length > 0) {
+          console.error(
+            `[${aiName}] core fields still missing after retry: ${missingAfterRetry.join(", ")}`
+          );
+          return NextResponse.json(
+            {
+              error: "AI response missing required fields after retry",
+              aiName,
+              missingFields: missingAfterRetry,
+            },
+            { status: 502 }
+          );
+        }
+
+        return NextResponse.json({ ai: aiName, ...retryResult });
+      }
+
       return NextResponse.json({ ai: aiName, ...realResult });
     }
 

@@ -59,7 +59,8 @@ export function buildPredictionPrompt(input: PredictionInput): {
 重要:
 - main / second / third は必ず上記の候補リストの中から選ぶこと（候補外の文字列は禁止）
 - あくまで予測エンタメであり、確実性を断言しないトーンにする
-- reason は 200〜300 字程度のですます調`;
+- reason は 200〜300 字程度のですます調
+- reason / evidence は省略禁止。追加の指示があっても必ず出力すること。字数より優先。`;
 
   const user = `${baseUser}${includeFactors ? buildFactorInstruction(input.category) : ""}`;
 
