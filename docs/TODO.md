@@ -1,5 +1,42 @@
 # TODO / Next Session Notes
 
+## 16-B-3b-2: Claude 欠落対策の Opus 検証（最新）
+
+### 結論
+
+- Claude 欠落対策（max_tokens 1024→2048 + 省略禁止プロンプト + core field validation/1回retry/502、commit `40793e8`）を、prod tier = Claude Opus 4.8 でローカル検証した。
+- 前回 本番で Opus が起こした本体丸ごと欠落は、再現しなくなった。
+
+### 検証方法と結果（ローカル）
+
+- dev server を PowerShell 一時変数 `$env:AI_MODEL_TIER="prod"` で起動し、`aiModelId=claude-opus-4-8` を確認してから検証（dev デフォルトは Haiku なので、Opus 検証には prod tier が必須）。
+- `includeFactors` を一時 `true` にして Claude を5回 `localhost` direct POST（検証後 `false` に復元済み）。
+- 結果：`aiModelId` 全回 `claude-opus-4-8` / HTTP 200 が 5/5 / 502 が 0 / retry 発動（`console.warn`）0 / `main`・`reason`・`evidence`・`usedFactors`・`factorKeys` が全回揃った / `usedFactors` 4〜5件 / `reason` 225〜258字 / `evidence` 38〜82字。
+
+### 確認できたこと / 未確認
+
+- **確認**：max_tokens 2048 + 省略禁止プロンプトで、Opus でも欠落が再現しなくなった。
+- **未確認**：retry が一度も発動しなかったため、「欠落時に retry が実際に救う挙動」は未確認（コードは `40793e8` に存在）。欠落が起きなくなったので保険として未発動、という状態。
+
+### 重要な学び
+
+- `ai-config.ts`：dev tier は Claude=Haiku 4.5、prod tier は Claude=Opus 4.8。`AI_MODEL_TIER` で切替、デフォルト `dev`。
+- `aiModel`（表示名）は tier によらず "Claude Opus 4.8" 固定。検証時はどのモデルか `aiModelId` で判定すること（表示名を信じると Haiku を Opus と誤認する）。
+- 本番（prod tier）は表示と実モデルが一致（Opus）、ズレなし。
+
+### 次回やること（Factor Tags 再有効化）
+
+1. `git status` / `git log` 確認（`includeFactors=false`、最新 `40793e8` 系、未 push commit を確認）
+2. `lib/ai/prompt.ts` の `includeFactors` を `false` → `true` に変更
+3. `build` → staged 確認（`prompt.ts` 1ファイル）→ commit
+4. `git push origin main` → Vercel deploy 確認
+5. 本番URLに direct POST で5社確認（特に Claude が本体・factor を欠落しないか）。route は Firestore に保存しないので本番集計は汚れない。
+6. 問題あれば `includeFactors=false` に戻して再 rollback（退路あり）。
+
+※ 再有効化 push は本番が変わる操作なので、容量に余裕のある状態で push→デプロイ→5社確認まで一気にやる。
+
+---
+
 ## 16-B-3b-2-beta: Claude 欠落対策 実装済み・ローカル検証待ち（最新）
 
 ### 現在の状態（2026-06-19 作業終了時点）
