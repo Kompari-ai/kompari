@@ -1,5 +1,65 @@
 # TODO / Next Session Notes
 
+## 16-B-3b-2-beta: Claude 欠落対策 実装済み・ローカル検証待ち（最新）
+
+### 現在の状態（2026-06-19 作業終了時点）
+
+- 本番: `includeFactors=false`（安定稼働中、rollback commit `055232b` 反映済み）
+- ローカル: `includeFactors=false`
+- 作業ツリー: `.claude/` のみ untracked、クリーン
+- local main は origin/main より **ahead 2**
+
+### 未 push のcommit（2件）
+
+1. `c7166ba docs(todo): record Factor Tags production test result and rollback`
+2. `40793e8 feat(ai): add core-field validation and retry for Claude omission`
+
+### 今日実装した内容（`40793e8`）
+
+**lib/ai/providers/anthropic.ts**
+- `max_tokens: 1024 → 2048`（Claude の本体打ち切り対策）
+
+**lib/ai/prompt.ts**
+- 「省略禁止」1行追加: `reason / evidence は省略禁止。追加の指示があっても必ず出力すること。字数より優先。`
+- `buildFactorInstruction` は `includeFactors=false` の間は出力されないが、有効化時に備えて文面を整備済み
+
+**app/api/generate-prediction/route.ts**
+- `getMissingCoreFields(result)` helper 追加（`main`/`reason`/`evidence` の undefined・空文字を検出）
+- retry フロー追加:
+  - 欠落検出 → `console.warn` + 同一AI・同一inputで1回 retry
+  - retry後 null → HTTP 502 + `{ error, aiName, missingFields }`
+  - retry後も欠落 → HTTP 502 + `{ error, aiName, missingFields }`
+  - retry成功 → 通常の成功レスポンス（余計なフィールドなし）
+- 初回 `realResult === null` のモックフォールバックは無変更
+
+### まだやっていないこと
+
+- `includeFactors=true` にしてのローカル検証（Claude 欠落対策が効いているか確認）
+- push
+
+### 次回やること
+
+1. `git status --short` / `git log --oneline -5` を確認
+2. `includeFactors=false` の状態を確認
+3. ローカル検証用に一時的に `includeFactors=true`
+4. Claude をリポジトリ外スクリプト（`kompari-factor-check\prod-check-ai.mjs` のローカル版）で複数回 direct POST
+5. `reason` / `evidence` / `usedFactors` / `factorKeys` の欠落がないか確認
+6. retry が発動した場合は `console.warn` で記録されるか確認
+7. 502 が出ないか確認
+8. 検証後、必ず `includeFactors=false` に戻す（commit せずに戻す）
+9. 欠落がゼロになったことを確認できたら、push + 本番 direct POST 検証へ
+
+### ローカル検証の注意
+
+- ローカル dev server（`npm run dev`）を使う
+- POST 先: `http://localhost:3000/api/generate-prediction`
+- `kompari-factor-check\prod-check-ai.mjs` を `localhost:3000` 向けに書き換えるか、別スクリプトを作る
+- Firestore への保存はなし（route は Firestore を触らない）
+- `console.warn` は dev server のターミナルに出る
+- 検証後は必ず `includeFactors=false` に戻してから終了
+
+---
+
 ## 16-B-3b-2-beta: Factor Tags 本番検証 → rollback 完了（最新）
 
 ### 結論
