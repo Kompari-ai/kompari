@@ -1,5 +1,91 @@
 # TODO / Next Session Notes
 
+## 16-B-3b-2-beta: Factor Tags 本番検証 → rollback 完了（最新）
+
+### 結論
+
+- Factor Tags プロンプト命令を本番に出して検証し、Claude の本体欠落事象を発見した。
+- その後、rollback して本番を安定状態（`includeFactors=false`）に戻した。
+- これは失敗ではなく、「本番で機能が動くことを確認し、Claude の弱点を発見して安全に巻き戻した」検証成功。
+- Factor Tags 機能自体は捨てない。Claude 欠落対策を入れてから再有効化する。
+
+### 本番検証でやったこと（2026-06-19）
+
+- `657ddb6`（`includeFactors=true`）と `32d1bb0`（docs）を push。Vercel production deploy 成功。
+- 本番URL `https://kompari.vercel.app/api/generate-prediction` に direct POST で 5社を検証。
+- route は Firestore を import せず保存しないため、本番集計を汚さない。
+- Firebase Console の `races` コレクションで、2026-06-18〜2026-06-19 のテストデータが無いことも目視確認済み。
+
+### 5社の本番検証結果
+
+- ChatGPT: PASS（usedFactors 5件、本体正常、GPT-5.5 実API）
+- Claude: 初回 FAIL（`reason` / `evidence` / `usedFactors` / `factorKeys` が丸ごと欠落。`main` / `second` / `third` のみ返却。実APIパス Claude Opus 4.8、mock ではない）
+- Claude retry-1: PASS（usedFactors 5件、本体正常）
+- Gemini: PASS（usedFactors 4件、本体正常、Gemini 2.5 Pro）
+- DeepSeek: PASS（usedFactors 4件、本体正常、DeepSeek V4 Pro）
+- Grok: PASS（usedFactors 4件、本体正常、Grok 4.3）
+
+### 切り分け
+
+- Factor Tags 全体の問題ではない。ChatGPT / Gemini / DeepSeek / Grok が初回1発 PASS。プロンプト・parse・Factor Tags の基本設計は機能している。
+- Claude 単独の問題。プロンプトが長くなると、Claude が本体（`reason` 以降）を丸ごと欠落させることがある。retry で解消するが、現時点の本番には自動 retry が無い。
+- Kompari の核心は予測根拠の読み比べであり、「理由なし予測」が本番ユーザーに出るのは看過できないため、rollback を選択した。
+
+### rollback（2026-06-19）
+
+- `includeFactors` を `true` → `false` に戻した。
+- rollback commit: `055232b fix(ai): disable Factor Tags prompt after Claude production omission`
+- push 済み。Vercel production deploy 成功（`055232b` が Production・Ready）。
+- 現在の本番は `includeFactors=false`。Factor Tags は無効化され、従来通りの予測で稼働中。
+
+### 現在の状態
+
+- 本番: `includeFactors=false`（安定、factor 無し）
+- ローカル: `includeFactors=false`（`055232b` で反映済み）
+- 作業ツリー: `.claude/` 以外はクリーン
+- Factor Tags のコード一式は残っている
+  - `lib/factors.ts`
+  - `parse.ts` の `extractUsedFactors`
+  - `prompt.ts` の `buildFactorInstruction`
+  - category 接続
+- フラグを `true` にすれば、再び factor が出る状態
+
+### 次回の課題: Claude 本体欠落対策
+
+これを入れてから Factor Tags を再有効化する。
+
+対策候補:
+
+- (a) 応答バリデーション + 自動 retry: parse 後に `reason` / `evidence` が空なら同じAIで1回だけ再生成する（Claude に限らず全社の安全網にもなる）
+- (b) Claude だけ `max_tokens` を増やす（本体打ち切り対策）
+- (c) Claude 向けにプロンプト調整（`main` / `reason` / `evidence` を最優先する指示を強める、factor 指示を本体出力の後ろに置く等）
+- (d) 上記の組み合わせ
+
+進め方:
+
+1. Claude 欠落対策を設計・実装
+2. ローカルで Claude を複数回 direct/route 検証（欠落が再現しないか）
+3. 本番 direct POST で再検証
+4. 問題なければ `includeFactors=true` で再 push
+
+検証用スクリプトはリポジトリ外に残っている:
+
+```text
+C:\Users\toriniku\Desktop\kompari-factor-check\
+  prod-check-ai.mjs
+  prod-check-*-result.json
+  run-before-after.mjs 等
+```
+
+### 検証ファイル（リポジトリ外、git に入れない）
+
+- `kompari-factor-check\before.json` / `after.json`
+- `kompari-factor-check\deepseek-retry-1.json` / `deepseek-retry-2.json`
+- `kompari-factor-check\prod-check-*.mjs`
+- `kompari-factor-check\prod-check-*-result.json`
+
+---
+
 ## 16-B-3b-2-beta: Factor Tags prompt instruction rollout
 
 ### Current status
