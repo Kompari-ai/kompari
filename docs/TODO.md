@@ -1,5 +1,30 @@
 # TODO / Next Session Notes
 
+## 16-B-3b-2-beta retry: Factor Tags 再有効化成功（本番反映済み）
+
+### 結論
+
+- `6c14eeb`（`includeFactors=true`）を push し、本番5社 direct POST で全社 13/13 PASS（65/65 checks）。
+- Claude も `aiModelId=claude-opus-4-8` で本体・factor 欠落なし。前回の Claude 欠落は `max_tokens 2048` + 省略禁止プロンプト + retry/502 で解消済み。
+- **現在の本番: `includeFactors=true`、Factor Tags 5社稼働。**
+
+### 本番確認結果（2026-06-23）
+
+| AI | HTTP | main | reason | evidence | usedFactors | factorKeys | aiModelId | 判定 |
+|---|---|---|---|---|---|---|---|---|
+| ChatGPT | 200 | ✅ | ✅ | ✅ | 4件 | 4件 | gpt-5.5 | **PASS** |
+| Claude | 200 | ✅ | ✅ | ✅ | 5件 | 5件 | claude-opus-4-8 | **PASS** |
+| Gemini | 200 | ✅ | ✅ | ✅ | 4件 | 4件 | gemini-2.5-pro | **PASS** |
+| DeepSeek | 200 | ✅ | ✅ | ✅ | 5件 | 5件 | deepseek-v4-pro | **PASS** |
+| Grok | 200 | ✅ | ✅ | ✅ | 4件 | 4件 | grok-4.3 | **PASS** |
+
+### 残課題
+
+- **retry の実発動は未確認**: 欠落が起きなくなったため retry が一度も発動していない。安全網として `40793e8` に存在するが、「欠落時に retry が実際に救う挙動」は未検証のまま。
+- **dev=Haiku / 本番=Opus の tier 差に注意**: 表示名は `aiModelId` で判定すること（表示名固定では Haiku を Opus と誤認するリスクあり）。
+
+---
+
 ## 16-B-3b-2: Claude 欠落対策の Opus 検証（最新）
 
 ### 結論
