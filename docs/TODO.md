@@ -1,5 +1,27 @@
 # TODO / Next Session Notes
 
+## 引き継ぎサマリ（新チャット向け・最終更新 2026-06-23）
+
+### 現在地
+
+- **方針16 Factor Tags**: 本番5社で稼働中（`6c14eeb`、`includeFactors=true`、push済み・本番反映済み）。本番5社 direct POST で 65/65 PASS、Claude も `claude-opus-4-8` で欠落なし。
+- **安全網**: `route.ts` に core field validation + 1回 retry + 502（`40793e8`）。`anthropic.ts` `max_tokens 2048`。`prompt.ts` 省略禁止文。
+- **検証スクリプト**: `C:\Users\toriniku\Desktop\kompari-factor-check\prod-check-ai.mjs`（`aiModelId` チェック付き、Claude は `claude-opus-4-8` 期待）。
+- **重要な注意**: dev tier = Claude Haiku 4.5 / prod tier = Claude Opus 4.8。`aiModel` 表示名は tier によらず `"Claude Opus 4.8"` 固定。検証時は必ず `aiModelId` を見る。dev で Opus 検証するには同一セッション内で `$env:AI_MODEL_TIER="prod"; npm run dev`。
+
+### 次の候補（次回どれをやるか決める）
+
+- **A.** races コレクション依存の除去（結果判定ロジックの前提）
+- **B.** 結果判定ロジック（予測の的中/不的中を確定データの取得・整形で判定）
+- **C.** 予測データの独立コレクション移行（races 埋め込み → events/predictions、設計確定済み・6ステップ）
+- **D.** モック汚染対策（`isMock` or `predictionSource` フラグ）
+- **E.** My AI / Custom AI 専用ランキング（公式と分離、Wilson score 等）
+- **（Factor Tags 残）**: retry 実発動の確認、factor の UI 表示、トークンコスト確認
+
+※ races 依存除去 → 結果判定 が MVP 完成の本筋。
+
+---
+
 ## 16-B-3b-2-beta retry: Factor Tags 再有効化成功（本番反映済み）
 
 ### 結論
