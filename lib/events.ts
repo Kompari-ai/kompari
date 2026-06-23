@@ -26,6 +26,21 @@ export type KompariPrediction = {
   usedFactors?: PredictionFactor[];
   // Factor Tags の検索用キー一覧（Firestore array-contains 用）
   factorKeys?: string[];
+
+  // 集計の整合性のための土台フィールド(方針: MVP監査で確定)。
+  // 失敗/欠落/モック予測を、コンセンサスと的中率の母数から正しく扱うために使う。
+  // outcome未確定(undefined)の旧データは、集計側で従来の動的計算にフォールバックする。
+  isMock?: boolean;
+
+  // predictionSource の境界:
+  //   official-ai: Kompari公式AI(ChatGPT/Claude/Gemini/DeepSeek/Grok)
+  //   my-ai:       Kompari内のユーザー所有AI(myAis / myAiId で管理)
+  //   custom-ai:   外部エンドポイント接続。将来の独立プロダクト級。MVPでは凍結
+  //   mock:        API失敗時/開発用のモック予測。商用集計から除外・別扱い
+  //   manual:      管理画面等から人間が手入力・補正した予測
+  predictionSource?: "official-ai" | "my-ai" | "custom-ai" | "mock" | "manual";
+
+  outcome?: "pending" | "hit" | "miss" | "void" | "unknown";
 };
 
 export type KompariEvent = {
