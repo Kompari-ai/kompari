@@ -212,6 +212,27 @@
 3. 本番 direct POST で再検証
 4. 問題なければ `includeFactors=true` で再 push
 
+---
+
+## 既知の仕様 / 発見メモ
+
+### My AI参加は現状すべて mock fallback
+- My AI参加は ai-config に存在しない名前で generate-prediction を呼ぶため、
+  callRealApi が null を返し、全て mock fallback になる(HTTP 200で保存まで進む)。
+- そのため保存される My AI 予測は isMock:true / predictionSource:"mock"。
+- これは現時点では仕様上の仮実装であり、MVPでは公式AI予測を主軸にする。
+- 将来、ユーザーが自分のAPIキー/エンドポイントを登録して参加する場合は、
+  My AI / Custom AI を再設計する。その時点で
+  predictionSource:"my-ai" または "custom-ai" を使う。
+- 結論: 現状 predictionSource は "mock" のままで実態に合っている。
+  今は my-ai 上書きをしない(候補Eで実態に合わせて決める)。
+
+### ランキングに mock な My AI が混在する課題
+- ランキング画面に My AI(King Ai 等)が高的中率(例:100%, 予測数1)で表示され、
+  「ユーザー作成AIが強い」と誤解されうるが、実態は mock。
+- 少数サンプルの順位歪みも併発(予測数1での0%/100%)。
+- 次の検討候補: mock予測 / My AI をランキング母数から除外できるか(要調査)。
+
 検証用スクリプトはリポジトリ外に残っている:
 
 ```text
