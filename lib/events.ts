@@ -86,7 +86,19 @@ export type LegacyRaceData = {
 };
 
 export function normalizeRaceToEvent(race: LegacyRaceData): KompariEvent {
-  const predictions = race.predictions || [];
+  const winner = (race.result?.winner || race.resultWinner || "").trim();
+  const isFinished = !!winner;
+  const predictions = (race.predictions || []).map((p) => {
+    const computedOutcome = !isFinished
+      ? "pending"
+      : p.main?.trim() === winner
+        ? "hit"
+        : "miss";
+    return {
+      ...p,
+      outcome: p.outcome ?? computedOutcome,
+    };
+  });
 
   return {
     id: race.id,
