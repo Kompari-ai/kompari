@@ -385,10 +385,10 @@ export async function POST(req: Request) {
           );
         }
 
-        return NextResponse.json({ ai: aiName, ...retryResult });
+        return NextResponse.json({ ai: aiName, ...retryResult, isMock: false, predictionSource: "official-ai" });
       }
 
-      return NextResponse.json({ ai: aiName, ...realResult });
+      return NextResponse.json({ ai: aiName, ...realResult, isMock: false, predictionSource: "official-ai" });
     }
 
     // モック（フォールバック）
@@ -405,6 +405,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ai: aiName,
+      isMock: true,
+      predictionSource: "mock",
       main: topThree.main,
       second: topThree.second,
       third: topThree.third,
