@@ -136,6 +136,41 @@ export type KompariPredictionDoc = {
   evaluatedAt?: unknown;
 };
 
+export function normalizeEventDocToEvent(
+  doc: KompariEventDoc,
+  predictions: KompariPredictionDoc[]
+): KompariEvent {
+  const winner = (doc.result?.winner ?? "").trim();
+  const isFinished = !!winner;
+
+  const normalizedPredictions: KompariPrediction[] = predictions.map((p) => {
+    // 確定値は上書きしない。pending かつ確定済みのときだけ hit/miss を算出
+    let computedOutcome = p.outcome;
+    if (p.outcome === "pending" && isFinished) {
+      computedOutcome = p.main?.trim() === winner ? "hit" : "miss";
+    }
+    return {
+      ...p,
+      outcome: computedOutcome,
+    };
+  });
+
+  return {
+    id: doc.id,
+    category: doc.category,
+    title: doc.title,
+    candidates: doc.candidates,
+    startsAt: doc.startsAt,
+    participants: [],
+    predictions: normalizedPredictions,
+    result: doc.result,
+    venue: doc.venue ?? "",
+    startsIn: "",
+    resultWinner: doc.result?.winner ?? "",
+    createdAt: doc.createdAt,
+  };
+}
+
 export function normalizeRaceToEvent(race: LegacyRaceData): KompariEvent {
   const winner = (race.result?.winner || race.resultWinner || "").trim();
   const isFinished = !!winner;
