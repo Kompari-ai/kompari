@@ -34,6 +34,20 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // events コレクション(新)
+    // 一般ユーザーは閲覧できる
+    // 作成・編集・削除は管理者だけ
+    match /events/{eventId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      // predictions サブコレクション
+      match /predictions/{predictionId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
     // 上記以外のコレクションはすべて拒否
     match /{document=**} {
       allow read, write: if false;
