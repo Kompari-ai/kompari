@@ -94,6 +94,7 @@ function buildRankings(events: KompariEvent[]) {
     event.predictions.forEach((prediction) => {
       const pick = prediction.main?.trim();
       if (!pick) return;
+      if (prediction.isMock === true) return;
 
       const source = getPredictionSource(prediction);
       const key = getPredictionKey(prediction);

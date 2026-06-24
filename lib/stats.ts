@@ -140,6 +140,7 @@ export function aggregateByBrand(events: KompariEvent[], options?: StatsOptions)
 
       const pick = prediction.main?.trim();
       if (!pick) continue;
+      if (prediction.isMock === true) continue;
 
       const key = getBrandKey(prediction);
 
@@ -201,6 +202,7 @@ export function aggregateByModel(events: KompariEvent[], options?: StatsOptions)
 
       const pick = prediction.main?.trim();
       if (!pick) continue;
+      if (prediction.isMock === true) continue;
 
       const key = getModelKey(prediction);
       if (key === null) continue; // aiModelId/aiModel なし → モデル別集計から除外
