@@ -85,6 +85,57 @@ export type LegacyRaceData = {
   };
 };
 
+// events コレクション(新) 1ドキュメントの型。
+// resultWinner(トップレベル)は新EventDocでは持たない。result.winner に一本化する
+//   (移行スクリプトで旧 resultWinner → result.winner に統合する想定)。
+// predictions 配列も EventDocには持たない(predictions サブコレクションに分離)。
+// startsIn(自由テキスト)も持たない(startsAt のISO8601に一本化)。
+export type KompariEventDoc = {
+  id: string;
+  slug?: string;
+  category: EventCategory;
+  title: string;
+  candidates: string[];
+  venue?: string;
+  startsAt?: string;
+  result?: {
+    winner?: string;
+    second?: string;
+    third?: string;
+  };
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  predictionCount?: number;
+};
+
+// events/{eventId}/predictions サブコレクション(新) 1ドキュメントの型。
+// 既存 KompariPrediction(optional)とは別の新型。新コレクション専用。
+// isMock/predictionSource/outcome は必須にして undefined を作らない方針。
+// confidence は現状の string 混在(72/medium/high)のまま維持。数値化は将来別タスク。
+export type KompariPredictionDoc = {
+  eventId: string;
+  predictionId: string;
+  ai: string;
+  aiProvider?: string;
+  aiModel?: string;
+  aiModelId?: string;
+  main: string;
+  second?: string;
+  third?: string;
+  confidence?: string;
+  reason?: string;
+  evidence?: string;
+  isMock: boolean;
+  predictionSource: "official-ai" | "my-ai" | "custom-ai" | "mock" | "manual";
+  source?: "official" | "user";
+  myAiId?: string;
+  outcome: "pending" | "hit" | "miss" | "void" | "unknown";
+  usedFactors?: PredictionFactor[];
+  factorKeys?: string[];
+  predictedAt?: unknown;
+  evaluatedAt?: unknown;
+};
+
 export function normalizeRaceToEvent(race: LegacyRaceData): KompariEvent {
   const winner = (race.result?.winner || race.resultWinner || "").trim();
   const isFinished = !!winner;
