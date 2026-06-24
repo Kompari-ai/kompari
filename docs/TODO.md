@@ -249,6 +249,31 @@ C:\Users\toriniku\Desktop\kompari-factor-check\
 - `kompari-factor-check\prod-check-*.mjs`
 - `kompari-factor-check\prod-check-*-result.json`
 
+### isMock除外と旧My AIデータの制約(49f4da3で確認)
+- 49f4da3 の isMock除外(lib/stats.ts 2関数 + ranking buildRankings)は
+  正しく動いている。
+- 確認済み: ランキング「公式AI」フィルタは公式5社のみ(of mock除外)、
+  ヘッダー集計は 対象10/的中17/40.5% に変化。公式5社の的中率・予測数は
+  除外前と一致(旧公式予測 isMock:undefined は厳密比較 === true で母数に残り、正しい)。
+- ただし Step2(0694ebe)以前に保存された旧 My AI 予測には isMock フィールドが
+  存在しない(undefined)ため、「すべて」フィルタでは除外されず残る
+  (例: King Ai 100% が「すべて」に表示され続ける)。
+- これはコードバグではなく、=== true 厳密比較の設計どおりの帰結(旧データを残す仕様)。
+- 新規の mock 予測は route.ts 経由で isMock:true が付くため、今後は正しく除外される。
+
+#### 今やらないと決めたこと(設計原則を守るため)
+- Firestoreバックフィル(旧予測に isMock:true 書き戻し) → やらない。本番データ補正は
+  events/predictions移行 or バックフィル設計時にまとめて扱う。
+- myAiId での除外 → やらない。
+- source === "user" での除外 → やらない。
+  (理由: 除外原則は「実推論でないから除外=isMock」で統一する。source基準で切ると
+   将来 My AI が実推論を持ったとき矛盾する。)
+
+#### 将来の対処方針
+- 旧My AIデータの扱いは events/predictions移行 or データ補正フェーズで一括対処。
+- MVP公開前に「すべて」タブの見た目が気になる場合は、データ補正でも除外条件追加でもなく、
+  「すべて」タブを公式AI中心に見せるUI設計で対処する(表示レベルの問題として切り分け)。
+
 ---
 
 ## 16-B-3b-2-beta: Factor Tags prompt instruction rollout
