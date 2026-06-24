@@ -134,6 +134,7 @@ export type KompariPredictionDoc = {
   factorKeys?: string[];
   predictedAt?: unknown;
   evaluatedAt?: unknown;
+  updatedAt?: unknown;
 };
 
 export function normalizeEventDocToEvent(
