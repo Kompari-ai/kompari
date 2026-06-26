@@ -48,6 +48,12 @@ service cloud.firestore {
       }
     }
 
+    // collectionGroup("predictions") 用（読み取りのみ）
+    // 一覧画面が全イベントの予測をまとめて読むために必要
+    match /{path=**}/predictions/{predictionId} {
+      allow read: if true;
+    }
+
     // 上記以外のコレクションはすべて拒否
     match /{document=**} {
       allow read, write: if false;
