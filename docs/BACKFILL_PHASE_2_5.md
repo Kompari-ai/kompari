@@ -86,3 +86,12 @@ My AI予測(source === "user")の扱い:
 
 ## 移行ロードマップ上の位置
 Phase0-2b✓ → Phase2.5(バックフィル・本仕様)← 次 → Phase3(読み取り切替) → Phase4(races廃止)
+
+## 実行結果(2026-06-26 完了)
+- 本番実行成功。races 14件 → events 14件 + predictions 64件
+- 衝突 0件、エラーなし、1バッチ(78操作)で完了
+- 検証済み: events14件(races同一ID)、outcome算出(日本ダービー Gemini=hit等)、
+  公式AIの isMock:false/predictionSource:"official-ai"補完(61件)、My AI素通し(King Ai等3件)、
+  既存画面(races主読み)無影響
+- サービスアカウント鍵は無効化
+- Phase 2.5 正式終了
