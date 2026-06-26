@@ -2,17 +2,18 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, collectionGroup, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
   getResultWinner,
-  normalizeRaceToEvent,
+  normalizeEventDocToEvent,
   type KompariEvent,
+  type KompariEventDoc,
   type KompariPrediction,
-  type LegacyRaceData,
+  type KompariPredictionDoc,
 } from "@/lib/events";
 import { aggregateByModel } from "@/lib/stats";
 
@@ -255,26 +256,39 @@ export default function AiProfilePage({
   const { slug } = use(params);
   const profile = aiProfiles[slug];
 
-  const [events, setEvents] = useState<KompariEvent[]>([]);
+  const [eventDocs, setEventDocs] = useState<KompariEventDoc[] | null>(null);
+  const [predsMap, setPredsMap] = useState<Map<string, KompariPredictionDoc[]> | null>(null);
   const [votes, setVotes] = useState<VoteDoc[]>([]);
 
+  const events = useMemo<KompariEvent[] | null>(() => {
+    if (!eventDocs || !predsMap) return null;
+    return eventDocs.map((doc) => normalizeEventDocToEvent(doc, predsMap.get(doc.id) ?? []));
+  }, [eventDocs, predsMap]);
+
   useEffect(() => {
-    const q = query(collection(db, "races"), orderBy("createdAt", "desc"));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map((document) => {
-        const data = {
-          id: document.id,
-          ...document.data(),
-        } as LegacyRaceData;
-
-        return normalizeRaceToEvent(data);
-      });
-
-      setEvents(list);
-    });
-
-    return () => unsubscribe();
+    const eventsUnsub = onSnapshot(
+      query(collection(db, "events"), orderBy("createdAt", "desc")),
+      (snap) => {
+        setEventDocs(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() } as KompariEventDoc))
+        );
+      }
+    );
+    const predsUnsub = onSnapshot(
+      collectionGroup(db, "predictions"),
+      (snap) => {
+        const map = new Map<string, KompariPredictionDoc[]>();
+        for (const d of snap.docs) {
+          const pred = d.data() as KompariPredictionDoc;
+          const eventId = pred.eventId || d.ref.parent.parent?.id;
+          if (!eventId) continue;
+          if (!map.has(eventId)) map.set(eventId, []);
+          map.get(eventId)!.push(pred);
+        }
+        setPredsMap(map);
+      }
+    );
+    return () => { eventsUnsub(); predsUnsub(); };
   }, []);
 
   useEffect(() => {
@@ -292,6 +306,7 @@ export default function AiProfilePage({
   }, []);
 
   const stats = useMemo(() => {
+    if (!events) return buildStats([], "");
     if (!profile) return buildStats(events, "");
     return buildStats(events, profile.name);
   }, [events, profile]);
@@ -311,11 +326,23 @@ export default function AiProfilePage({
   const categories = useMemo(() => categoryRows(stats), [stats]);
 
   const modelStats = useMemo(() => {
-    if (!profile) return [];
+    if (!events || !profile) return [];
     return aggregateByModel(events, { source: "official" }).filter(
       (m) => m.brandKey === profile.name
     );
   }, [events, profile]);
+
+  if (events === null) {
+    return (
+      <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
+        <TopBar />
+        <div className="mx-auto max-w-[430px] px-4 py-10 text-center text-sm font-bold text-gray-400">
+          読み込み中...
+        </div>
+        <BottomNav />
+      </main>
+    );
+  }
 
   if (!profile) {
     return (

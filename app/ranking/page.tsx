@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, collectionGroup, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
@@ -15,10 +15,11 @@ import {
 import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   getResultWinner,
-  normalizeRaceToEvent,
+  normalizeEventDocToEvent,
   type KompariEvent,
+  type KompariEventDoc,
   type KompariPrediction,
-  type LegacyRaceData,
+  type KompariPredictionDoc,
 } from "@/lib/events";
 import {
   aggregateByBrand,
@@ -221,37 +222,45 @@ function AiAvatar({ aiName, source }: { aiName: string; source: "official" | "us
 }
 
 export default function RankingPage() {
-  const [events, setEvents] = useState<KompariEvent[]>([]);
+  const [eventDocs, setEventDocs] = useState<KompariEventDoc[] | null>(null);
+  const [predsMap, setPredsMap] = useState<Map<string, KompariPredictionDoc[]> | null>(null);
   const [aggregationMode, setAggregationMode] = useState<AggregationMode>("ai");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
 
+  const events = useMemo<KompariEvent[] | null>(() => {
+    if (!eventDocs || !predsMap) return null;
+    return eventDocs.map((doc) => normalizeEventDocToEvent(doc, predsMap.get(doc.id) ?? []));
+  }, [eventDocs, predsMap]);
+
   useEffect(() => {
-    const q = query(collection(db, "races"), orderBy("createdAt", "desc"));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list = snapshot.docs.map((document) => {
-          const data = {
-            id: document.id,
-            ...document.data(),
-          } as LegacyRaceData;
-
-          return normalizeRaceToEvent(data);
-        });
-
-        setEvents(list);
-      },
-      (error) => {
-        console.error(error);
+    const eventsUnsub = onSnapshot(
+      query(collection(db, "events"), orderBy("createdAt", "desc")),
+      (snap) => {
+        setEventDocs(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() } as KompariEventDoc))
+        );
       }
     );
-
-    return () => unsubscribe();
+    const predsUnsub = onSnapshot(
+      collectionGroup(db, "predictions"),
+      (snap) => {
+        const map = new Map<string, KompariPredictionDoc[]>();
+        for (const d of snap.docs) {
+          const pred = d.data() as KompariPredictionDoc;
+          const eventId = pred.eventId || d.ref.parent.parent?.id;
+          if (!eventId) continue;
+          if (!map.has(eventId)) map.set(eventId, []);
+          map.get(eventId)!.push(pred);
+        }
+        setPredsMap(map);
+      }
+    );
+    return () => { eventsUnsub(); predsUnsub(); };
   }, []);
 
   const finishedEvents = useMemo(() => {
+    if (!events) return [];
     return events.filter((event) => !!getResultWinner(event));
   }, [events]);
 
@@ -274,11 +283,13 @@ export default function RankingPage() {
 
   // "brand" モード: 公式AIのみ対象、category/source フィルタ無効
   const brandCards = useMemo(() => {
+    if (!events) return [];
     return aggregateByBrand(events, { source: "official" }).map(brandToCard);
   }, [events]);
 
   // "model" モード: 公式AIのみ・aiModel/aiModelId 有りのデータのみ対象
   const modelCards = useMemo(() => {
+    if (!events) return [];
     return aggregateByModel(events, { source: "official" }).map(modelToCard);
   }, [events]);
 
@@ -310,6 +321,18 @@ export default function RankingPage() {
       : aggregationMode === "brand"
       ? `${activeCards.length} ブランド`
       : `${activeCards.length} モデル`;
+
+  if (events === null) {
+    return (
+      <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
+        <TopBar />
+        <div className="mx-auto max-w-[430px] px-4 py-10 text-center text-sm font-bold text-gray-400">
+          読み込み中...
+        </div>
+        <BottomNav />
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
