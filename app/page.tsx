@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, collectionGroup, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
@@ -12,9 +12,10 @@ import {
   formatStartsAt,
   getConsensusChip,
   getResultWinner,
-  normalizeRaceToEvent,
+  normalizeEventDocToEvent,
   type KompariEvent,
-  type LegacyRaceData,
+  type KompariEventDoc,
+  type KompariPredictionDoc,
 } from "@/lib/events";
 
 function statusLabel(event: KompariEvent) {
@@ -168,40 +169,74 @@ function EventCard({ event }: { event: KompariEvent }) {
 }
 
 export default function HomePage() {
-  const [events, setEvents] = useState<KompariEvent[]>([]);
+  const [eventDocs, setEventDocs] = useState<KompariEventDoc[] | null>(null);
+  const [predsMap, setPredsMap] = useState<Map<string, KompariPredictionDoc[]> | null>(null);
+
+  const events = useMemo<KompariEvent[] | null>(() => {
+    if (!eventDocs || !predsMap) return null;
+    return eventDocs.map((doc) =>
+      normalizeEventDocToEvent(doc, predsMap.get(doc.id) ?? [])
+    );
+  }, [eventDocs, predsMap]);
 
   useEffect(() => {
-    const q = query(collection(db, "races"), orderBy("createdAt", "desc"));
+    // ① events 本体(createdAt降順)
+    const eventsUnsub = onSnapshot(
+      query(collection(db, "events"), orderBy("createdAt", "desc")),
+      (snap) => {
+        setEventDocs(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() } as KompariEventDoc))
+        );
+      }
+    );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map((document) => {
-        const data = {
-          id: document.id,
-          ...document.data(),
-        } as LegacyRaceData;
+    // ② predictions を collectionGroup で全件(フィルタなし→インデックス不要)
+    const predsUnsub = onSnapshot(
+      collectionGroup(db, "predictions"),
+      (snap) => {
+        const map = new Map<string, KompariPredictionDoc[]>();
+        for (const d of snap.docs) {
+          const pred = d.data() as KompariPredictionDoc;
+          const eid = pred.eventId;
+          if (!eid) continue;
+          if (!map.has(eid)) map.set(eid, []);
+          map.get(eid)!.push(pred);
+        }
+        setPredsMap(map);
+      }
+    );
 
-        return normalizeRaceToEvent(data);
-      });
-
-      setEvents(list);
-    });
-
-    return () => unsubscribe();
+    return () => { eventsUnsub(); predsUnsub(); };
   }, []);
 
-  const featuredEvent = events[0] || null;
+  const featuredEvent = events ? (events[0] || null) : null;
 
   const pendingEvents = useMemo(() => {
+    if (!events) return [];
     return events.filter((event) => !getResultWinner(event));
   }, [events]);
 
   const finishedEvents = useMemo(() => {
+    if (!events) return [];
     return events.filter((event) => getResultWinner(event));
   }, [events]);
 
   const totalPredictions = useMemo(() => {
+    if (!events) return 0;
     return events.reduce((sum, event) => sum + event.predictions.length, 0);
   }, [events]);
+
+  if (events === null) {
+    return (
+      <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
+        <TopBar />
+        <div className="mx-auto max-w-[430px] px-4 py-10 text-center text-sm font-bold text-gray-400">
+          読み込み中...
+        </div>
+        <BottomNav />
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
