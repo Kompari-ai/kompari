@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, collectionGroup, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
@@ -16,9 +16,10 @@ import {
   formatStartsAt,
   getConsensusChip,
   getResultWinner,
-  normalizeRaceToEvent,
+  normalizeEventDocToEvent,
   type KompariEvent,
-  type LegacyRaceData,
+  type KompariEventDoc,
+  type KompariPredictionDoc,
 } from "@/lib/events";
 
 type StatusFilter = "all" | "open" | "finished";
@@ -184,31 +185,47 @@ function EventCard({ event }: { event: KompariEvent }) {
 }
 
 export default function RacesPage() {
-  const [events, setEvents] = useState<KompariEvent[]>([]);
+  const [eventDocs, setEventDocs] = useState<KompariEventDoc[] | null>(null);
+  const [predsMap, setPredsMap] = useState<Map<string, KompariPredictionDoc[]> | null>(null);
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
+  const events = useMemo<KompariEvent[] | null>(() => {
+    if (!eventDocs || !predsMap) return null;
+    return eventDocs.map((doc) =>
+      normalizeEventDocToEvent(doc, predsMap.get(doc.id) ?? [])
+    );
+  }, [eventDocs, predsMap]);
+
   useEffect(() => {
-    const q = query(collection(db, "races"), orderBy("createdAt", "desc"));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map((document) => {
-        const data = {
-          id: document.id,
-          ...document.data(),
-        } as LegacyRaceData;
-
-        return normalizeRaceToEvent(data);
-      });
-
-      setEvents(list);
-    });
-
-    return () => unsubscribe();
+    const eventsUnsub = onSnapshot(
+      query(collection(db, "events"), orderBy("createdAt", "desc")),
+      (snap) => {
+        setEventDocs(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() } as KompariEventDoc))
+        );
+      }
+    );
+    const predsUnsub = onSnapshot(
+      collectionGroup(db, "predictions"),
+      (snap) => {
+        const map = new Map<string, KompariPredictionDoc[]>();
+        for (const d of snap.docs) {
+          const pred = d.data() as KompariPredictionDoc;
+          const eid = pred.eventId;
+          if (!eid) continue;
+          if (!map.has(eid)) map.set(eid, []);
+          map.get(eid)!.push(pred);
+        }
+        setPredsMap(map);
+      }
+    );
+    return () => { eventsUnsub(); predsUnsub(); };
   }, []);
 
   const filteredEvents = useMemo(() => {
+    if (!events) return [];
     const normalizedKeyword = keyword.trim().toLowerCase();
 
     return events.filter((event) => {
@@ -242,8 +259,20 @@ export default function RacesPage() {
     });
   }, [categoryFilter, events, keyword, statusFilter]);
 
-  const openCount = events.filter((event) => getStatus(event) === "open").length;
-  const finishedCount = events.filter((event) => getStatus(event) === "finished").length;
+  const openCount = (events ?? []).filter((event) => getStatus(event) === "open").length;
+  const finishedCount = (events ?? []).filter((event) => getStatus(event) === "finished").length;
+
+  if (events === null) {
+    return (
+      <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
+        <TopBar />
+        <div className="mx-auto max-w-[430px] px-4 py-10 text-center text-sm font-bold text-gray-400">
+          読み込み中...
+        </div>
+        <BottomNav />
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
