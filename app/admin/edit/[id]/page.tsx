@@ -401,6 +401,11 @@ export default function AdminEditPage({
     );
   }
 
+  // Phase 3-4c: deleteEvent currently deletes only races/{id}, leaving events/{id}
+  // and events/{id}/predictions orphaned.
+  // Keep the delete UI disabled until Phase 4 defines the final delete strategy.
+  const DELETE_DISABLED_DURING_EVENTS_MIGRATION = true;
+
   return (
     <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
       <TopBar />
@@ -665,11 +670,16 @@ export default function AdminEditPage({
           <button
             type="button"
             onClick={deleteEvent}
-            disabled={saving || !!generatingAi}
+            disabled={saving || !!generatingAi || DELETE_DISABLED_DURING_EVENTS_MIGRATION}
             className="w-full rounded-2xl bg-red-50 py-4 font-bold text-red-700 disabled:text-gray-300"
           >
             イベントを削除
           </button>
+          {DELETE_DISABLED_DURING_EVENTS_MIGRATION && (
+            <p className="mt-2 text-center text-sm text-gray-400">
+              削除は移行完了まで一時停止中です
+            </p>
+          )}
         </div>
       </div>
 
