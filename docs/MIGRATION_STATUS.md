@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-27
+最終更新: 2026-06-27（Phase 3-4c 完了）
 
 ## 完了フェーズ
 
@@ -55,6 +55,19 @@
     races.predictions[]とevents/{id}/predictions/ChatGPT 両方が新予測に更新(main:ウィザーズ→ブルズ、outcome:pending)、
     マイケル・ジョーダンAI(My AI, source=="user")が events/races 両方で保持されることを Firestore Console で確認。
     編集画面(events読み)に再生成結果が反映、フォーム保持も正常
+- [x] Phase 3-4c: deleteEvent 方針決定 + 削除導線の移行期間中一時無効化
+  - 方針: C採用。events側は残置し、正式な削除方式と孤立データ整理は Phase 4 に統合する
+  - 理由: 現在の deleteEvent は races/{id} のみ deleteDoc し、events/{id} と events/{id}/predictions を削除しない。
+    そのまま使うと events 側に孤立データが残り「削除したはずのイベントが events 読み画面に表示される」事故が起きる
+  - 実装: app/admin/edit/[id]/page.tsx に DELETE_DISABLED_DURING_EVENTS_MIGRATION = true を追加
+    - 削除ボタン disabled 条件に DELETE_DISABLED_DURING_EVENTS_MIGRATION を OR 追加
+    - 補足テキスト「削除は移行完了まで一時停止中です」を削除ボタン直下に表示
+    - deleteEvent 関数本体・onClick は未変更(Phase 4 で正式な削除方式実装時に使う)
+    - 実削除・soft delete・events サブコレクション削除処理は今回実装しない
+  - commit: 3de5496 fix(admin): disable delete during events migration
+  - 本番検証済み: 3de5496 / Production / Ready を Vercel Dashboard で確認。
+    admin/edit で削除ボタン非活性 + 補足テキスト表示を目視確認。
+    「イベントを更新」「AI再生成」ボタンには無効化が波及していないことを確認
 
 ## 現在の Source of Truth
 
@@ -62,7 +75,8 @@ writes:
 
 - races: 全書き込み
 - events: 二重化済み = 作成(2b) + 結果入力(3-4a) + 編集メタ(3-4b-1) + 予測再生成(3-4b-2)
-  - 未対応: deleteEvent(削除)はまだ races のみ
+  - deleteEvent: races/{id} のみ deleteDoc。正式な削除方式は Phase 4 で扱う
+  - admin/edit の削除導線は Phase 3-4c で一時無効化済み(DELETE_DISABLED_DURING_EVENTS_MIGRATION)
 
 reads:
 
@@ -71,12 +85,6 @@ reads:
 
 ## 次のフェーズ
 
-Phase 3-4c: deleteEvent の方針決定
-
-- 現状 races のみ deleteDoc。events本体 + predictions サブコレクションが孤立
-- 選択肢: A.明示削除(サブコレクション逐次delete) / B.soft delete / C.残置しPhase4で一括クリーンアップ
-- 暫定方針: C(残置)が有力。設計判断が主で実装は軽い見込み
-
 Phase 3-5: race/[slug] の events read切替
 
 - MVP方針では My AI は非表示・非訴求
@@ -84,7 +92,11 @@ Phase 3-5: race/[slug] の events read切替
 - MVPでは My AI 書き込み移行を優先しない。必要なら導線非表示または凍結を検討
 - まずは race/[slug] の現状調査を行い、events read切替と My AI導線の扱いを分けて設計する
 
-Phase 4: races 読み取りの完全廃止(LegacyRaceData / normalizeRaceToEvent 削除、孤立データ一括クリーンアップ)
+Phase 4: races 読み取りの完全廃止
+
+- LegacyRaceData / normalizeRaceToEvent 削除
+- deleteEvent の正式方式決定(races + events + events/{id}/predictions の完全削除)
+- 孤立データがあれば一括クリーンアップ
 
 ## メモ
 
