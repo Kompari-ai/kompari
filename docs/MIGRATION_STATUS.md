@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-28（Phase 3-5b-1 完了）
+最終更新: 2026-06-28（Phase 3-5b-2 完了）
 
 ## 完了フェーズ
 
@@ -112,9 +112,23 @@
     - ranking タブが「公式AI」一択、カードに My AI 出ない(AI別/ブランド別/モデル別すべて公式のみ)
     - /my-ai 直URL は生存(一覧3件・作成/削除フォーム表示)、通常ナビから到達不可
   - 既知の課題(今回スコープ外・別フェーズ候補):
-    - ranking ヒーロー集計の単位不一致: 「対象」=イベント数 vs 「的中」=全AI的中数合計で
-      的中が対象を上回って見える。d950b43 以前からの既存設計で今回起因ではない
-    - モデル別ランキングの予測数が少ない: 既存予測データに aiModel/aiModelId 未付与のため
+    - モデル別ランキングの予測数が少ない: 既存予測データに aiModel/aiModelId 未付与のため(Phase 3-5b-2 以降で対応)
+
+- [x] Phase 3-5b-2: ranking ヒーロー集計の単位統一（B案）
+  - 問題: ヒーロー「対象」=イベント数 vs「的中」=全AI的中数合計 で単位がズレ、
+    「対象11・的中16」と的中が対象を上回って見えた（d950b43 以前からの既存課題）
+  - 方針: B案。ヒーロー3数値を全て「公式AIの確定予測数」単位に揃える
+  - 実装(app/ranking/page.tsx のみ、+3/-6):
+    - headerTarget(イベント数)の const 定義を削除
+    - ヒーロー1枚目を headerFinished に差し替え、ラベル「対象」→「確定予測」
+    - ヒーロー2枚目 headerHits のラベル「的中」→「的中予測」
+    - 的中率(headerHits/headerFinished)は無変更（内部的に元から一貫）
+  - 触っていない: buildRankings / aggregateByBrand / aggregateByModel / lib/stats.ts /
+    targetEvents・finishedEvents 本体 / sourceFilter・My AI非表示ロジック / Firestoreデータ
+  - commit: f848923 fix(ranking): unify hero stats to official-AI prediction units
+  - 本番検証済み:
+    - AI別=確定47/的中16/率34%、モデル別=確定12/的中3/率25% で単位が揃い、
+      的中が母数を超えない表示に。ランキングカード本体・全集計軸切替は従来どおり
 
 ## 現在の Source of Truth
 
@@ -136,10 +150,9 @@ My AI データ・/my-ai ページ・作成削除機能は保全(非表示のみ
 
 ## 次のフェーズ
 
-Phase 3-5b-2 以降の候補:
+Phase 3-5b-3 以降の候補:
 
-- ranking ヒーロー集計の単位整理(対象=イベント数 vs 的中=全AI的中数合計の不一致を修正するか判断)
-- aiModel/aiModelId バックフィル(既存予測データへの付与 → モデル別ランキングの充実)
+- aiModel/aiModelId バックフィル(既存予測データへの付与 → モデル別ランキングの充実、Firestore書き込みを伴う)
 
 Phase 4: races 読み取りの完全廃止
 
