@@ -312,9 +312,6 @@ export default function RankingPage() {
       ? Math.round((headerHits / headerFinished) * 1000) / 10
       : null;
 
-  const headerTarget =
-    aggregationMode === "ai" ? targetEvents.length : finishedEvents.length;
-
   const badgeLabel =
     aggregationMode === "ai"
       ? `${activeCards.length} AI`
@@ -369,13 +366,13 @@ export default function RankingPage() {
 
             <div className="mt-5 grid grid-cols-3 gap-3 text-center">
               <div className="rounded-[12px] bg-white/10 p-2.5">
-                <div className="text-[10px] text-white/65">対象</div>
+                <div className="text-[10px] text-white/65">確定予測</div>
                 <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">
-                  {headerTarget}
+                  {headerFinished}
                 </div>
               </div>
               <div className="rounded-[12px] bg-white/10 p-2.5">
-                <div className="text-[10px] text-white/65">的中</div>
+                <div className="text-[10px] text-white/65">的中予測</div>
                 <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">
                   {headerHits}
                 </div>
