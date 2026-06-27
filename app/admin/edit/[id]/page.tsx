@@ -3,7 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { deleteDoc, doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { deleteDoc, doc, onSnapshot, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
@@ -144,19 +144,30 @@ export default function AdminEditPage({
     try {
       setSaving(true);
 
-      await updateDoc(doc(db, "races", id), {
+      const trimmedTitle = title.trim();
+      const trimmedVenue = venue.trim();
+      const trimmedResultWinner = resultWinner.trim();
+      const resultValue = trimmedResultWinner ? { winner: trimmedResultWinner } : null;
+      const batch = writeBatch(db);
+      batch.update(doc(db, "races", id), {
         category,
-        title: title.trim(),
-        venue: venue.trim(),
+        title: trimmedTitle,
+        venue: trimmedVenue,
         startsAt: startsAt || null,
         candidates,
-        resultWinner: resultWinner.trim(),
-        result: resultWinner.trim()
-          ? {
-              winner: resultWinner.trim(),
-            }
-          : null,
+        resultWinner: trimmedResultWinner,
+        result: resultValue,
       });
+      batch.update(doc(db, "events", id), {
+        category,
+        title: trimmedTitle,
+        venue: trimmedVenue,
+        startsAt: startsAt || null,
+        candidates,
+        result: resultValue,
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
 
       alert("イベントを更新しました");
     } catch (error) {
