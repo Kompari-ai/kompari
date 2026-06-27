@@ -2,38 +2,38 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import {
+  collection,
+  collectionGroup,
+  onSnapshot,
+  orderBy,
+  query,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
   getResultWinner,
-  normalizeRaceToEvent,
+  normalizeEventDocToEvent,
   type KompariEvent,
-  type LegacyRaceData,
+  type KompariEventDoc,
+  type KompariPredictionDoc,
 } from "@/lib/events";
 
-function topPrediction(event: KompariEvent) {
-  const counts: Record<string, number> = {};
-
-  event.predictions.forEach((prediction) => {
-    if (!prediction.main) return;
-    counts[prediction.main] = (counts[prediction.main] || 0) + 1;
-  });
-
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-
-  if (sorted.length === 0) return null;
-
-  return {
-    name: sorted[0][0],
-    count: sorted[0][1],
-  };
-}
-
 function NotificationCard({ event }: { event: KompariEvent }) {
-  const top = topPrediction(event);
+  const officialPreds = event.predictions.filter(
+    (p) => p.source !== "user" && !p.myAiId
+  );
+
+  const counts: Record<string, number> = {};
+  officialPreds.forEach((p) => {
+    if (!p.main) return;
+    counts[p.main] = (counts[p.main] || 0) + 1;
+  });
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const top =
+    sorted.length > 0 ? { name: sorted[0][0], count: sorted[0][1] } : null;
 
   return (
     <div className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm">
@@ -66,7 +66,7 @@ function NotificationCard({ event }: { event: KompariEvent }) {
           </div>
 
           <div className="text-xs font-bold text-blue-700">
-            {top ? `${top.count}/${event.predictions.length}` : "-"}
+            {top ? `${top.count}/${officialPreds.length}` : "-"}
           </div>
         </div>
       </div>
@@ -84,43 +84,92 @@ function NotificationCard({ event }: { event: KompariEvent }) {
 }
 
 export default function NotificationsPage() {
-  const [events, setEvents] = useState<KompariEvent[]>([]);
+  const [eventDocs, setEventDocs] = useState<KompariEventDoc[] | null>(null);
+  const [predsMap, setPredsMap] = useState<Map<
+    string,
+    KompariPredictionDoc[]
+  > | null>(null);
+
+  const events = useMemo<KompariEvent[] | null>(() => {
+    if (!eventDocs || !predsMap) return null;
+    return eventDocs.map((doc) =>
+      normalizeEventDocToEvent(doc, predsMap.get(doc.id) ?? [])
+    );
+  }, [eventDocs, predsMap]);
 
   useEffect(() => {
-    const q = query(collection(db, "races"), orderBy("createdAt", "desc"));
+    const eventsUnsub = onSnapshot(
+      query(collection(db, "events"), orderBy("createdAt", "desc")),
+      (snap) => {
+        setEventDocs(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() } as KompariEventDoc))
+        );
+      }
+    );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map((document) => {
-        const data = {
-          id: document.id,
-          ...document.data(),
-        } as LegacyRaceData;
+    const predsUnsub = onSnapshot(
+      collectionGroup(db, "predictions"),
+      (snap) => {
+        const map = new Map<string, KompariPredictionDoc[]>();
+        for (const d of snap.docs) {
+          const pred = d.data() as KompariPredictionDoc;
+          const eid = pred.eventId || d.ref.parent.parent?.id;
+          if (!eid) continue;
+          if (!map.has(eid)) map.set(eid, []);
+          map.get(eid)!.push(pred);
+        }
+        setPredsMap(map);
+      }
+    );
 
-        return normalizeRaceToEvent(data);
-      });
-
-      setEvents(list);
-    });
-
-    return () => unsubscribe();
+    return () => {
+      eventsUnsub();
+      predsUnsub();
+    };
   }, []);
 
   const pendingResultEvents = useMemo(() => {
+    if (!events) return [];
     return events.filter((event) => {
-      const hasPredictions = event.predictions.length > 0;
-      const hasResult = !!getResultWinner(event);
-
-      return hasPredictions && !hasResult;
+      const officialPreds = event.predictions.filter(
+        (p) => p.source !== "user" && !p.myAiId
+      );
+      return officialPreds.length > 0 && !getResultWinner(event);
     });
   }, [events]);
 
   const finishedEvents = useMemo(() => {
-    return events.filter((event) => getResultWinner(event));
+    if (!events) return [];
+    return events.filter((event) => {
+      const officialPreds = event.predictions.filter(
+        (p) => p.source !== "user" && !p.myAiId
+      );
+      return officialPreds.length > 0 && !!getResultWinner(event);
+    });
   }, [events]);
 
   const totalPredictions = useMemo(() => {
-    return events.reduce((sum, event) => sum + event.predictions.length, 0);
+    if (!events) return 0;
+    return events.reduce(
+      (sum, event) =>
+        sum +
+        event.predictions.filter((p) => p.source !== "user" && !p.myAiId)
+          .length,
+      0
+    );
   }, [events]);
+
+  if (events === null) {
+    return (
+      <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
+        <TopBar />
+        <div className="mx-auto max-w-[430px] px-4 py-10 text-center text-sm font-bold text-gray-400">
+          読み込み中...
+        </div>
+        <BottomNav />
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
