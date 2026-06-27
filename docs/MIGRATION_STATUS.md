@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-27（Phase 3-4c 完了）
+最終更新: 2026-06-27（Phase 3-5a 完了）
 
 ## 完了フェーズ
 
@@ -17,7 +17,7 @@
 - [x] Phase 3-3: ranking(app/ranking/page.tsx) と ai/[slug](app/ai/[slug]/page.tsx)を events読みに切り替え(collectionGroup)
   - stats.ts / lib/events.ts は無変更
   - outcome フィールドは ranking/ai の集計では使われず、prediction.main === getResultWinner(event) の動的判定で的中を計算することを確認(パターンA)
-  - 本番で数値照合済み: AI別/ブランド別/モデル別/My AI/ai[slug] すべて races読み時と完全一致(予測数・的中数・的中率・順位・ヘッダー集計)
+  - 本番で数値照合済み: AI別/ブランド別/モデル別/My AI/ai/[slug] すべて races読み時と完全一致(予測数・的中数・的中率・順位・ヘッダー集計)
   - collectionGroup購読に eventId fallback(pred.eventId || d.ref.parent.parent?.id)を追加
 - [x] Phase 3-4a: admin結果入力(app/admin/results/page.tsx)を events読みに切替 + 結果の二重書き
   - read: races読み → events + collectionGroup(predictions)読み(確立パターン)
@@ -68,6 +68,25 @@
   - 本番検証済み: 3de5496 / Production / Ready を Vercel Dashboard で確認。
     admin/edit で削除ボタン非活性 + 補足テキスト表示を目視確認。
     「イベントを更新」「AI再生成」ボタンには無効化が波及していないことを確認
+- [x] Phase 3-5a: race/[slug](app/race/[slug]/page.tsx) の read を races → events に切替
+  - read切替のみ。My AI 導線整理は対象外(Phase 3-5b 以降)
+  - 実装: app/race/[slug]/page.tsx のみ
+    - onSnapshot(doc(db,"races",slug)) を削除
+    - onSnapshot(doc(db,"events",slug)) を追加
+    - onSnapshot(collection(db,"events",slug,"predictions")) を追加
+    - 単一イベントページなので collectionGroup は使わず events/{id}/predictions を直接購読
+    - 両 snapshot が揃ったら normalizeEventDocToEvent で setEvent(tryNormalize パターン)
+    - snapshot 到着順に依存しない構造(admin/edit の教訓を踏襲)
+    - normalizeRaceToEvent / LegacyRaceData import を削除
+    - normalizeEventDocToEvent / KompariEventDoc / KompariPredictionDoc に差し替え
+  - 触っていない: myAis購読 / joinMyAi関数本体 / コメントアウト済み My AI 投稿UI / My AIバッジ・プレースホルダー
+  - 注意: joinMyAi 内の races updateDoc は、現在UIから呼ばれない死んだ導線として残置。
+    My AI 導線整理は Phase 3-5b 以降で扱う
+  - commit: 5868f3b feat(race): switch detail read to events subcollection
+  - 本番検証済み:
+    - ウィザーズVSブルズ(結果入力済み・予測5件・My AI含む)正常表示、判定バッジ正常
+    - 皐月賞(競馬・結果未入力・予測4件)正常表示、判定待ち表示正常
+    - コンセンサス・予測カード・レイアウトに問題なし
 
 ## 現在の Source of Truth
 
@@ -77,20 +96,20 @@ writes:
 - events: 二重化済み = 作成(2b) + 結果入力(3-4a) + 編集メタ(3-4b-1) + 予測再生成(3-4b-2)
   - deleteEvent: races/{id} のみ deleteDoc。正式な削除方式は Phase 4 で扱う
   - admin/edit の削除導線は Phase 3-4c で一時無効化済み(DELETE_DISABLED_DURING_EVENTS_MIGRATION)
+  - joinMyAi: races のみ updateDoc だが、現在 UI から呼ばれない死んだ導線。Phase 3-5b 以降で整理
 
 reads:
 
-- events: home / races一覧 / ranking / ai[slug] / admin結果入力 / admin編集
-- races: race[slug] / notifications はまだ races読み
+- events: home / races一覧 / ranking / ai/[slug] / admin結果入力 / admin編集 / race/[slug]
+- races: notifications など未確認箇所のみ残り
 
 ## 次のフェーズ
 
-Phase 3-5: race/[slug] の events read切替
+Phase 3-5b: My AI 導線整理
 
+- race/[slug] の myAis購読、joinMyAi、コメントアウト投稿UI、My AIバッジ、プレースホルダーの扱いを確認
 - MVP方針では My AI は非表示・非訴求
-- race/[slug] に My AI 表示/投稿導線/書き込み処理が残っている場合は、read切替前に扱いを確認する
-- MVPでは My AI 書き込み移行を優先しない。必要なら導線非表示または凍結を検討
-- まずは race/[slug] の現状調査を行い、events read切替と My AI導線の扱いを分けて設計する
+- 必要に応じて導線非表示・凍結・将来実装扱いに整理
 
 Phase 4: races 読み取りの完全廃止
 
