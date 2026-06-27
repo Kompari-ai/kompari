@@ -14,6 +14,11 @@
   - 本番で home の AIカード / split meter / consensus / prediction 表示を確認済み
 - [x] Phase 3-2: races一覧(app/races/page.tsx)を events読みに切り替え(collectionGroup)
   - フィルタ/検索(カテゴリ/キーワード/ステータス)が events読みで動作することを本番確認済み
+- [x] Phase 3-3: ranking(app/ranking/page.tsx) と ai/[slug](app/ai/[slug]/page.tsx)を events読みに切り替え(collectionGroup)
+  - stats.ts / lib/events.ts は無変更
+  - outcome フィールドは ranking/ai の集計では使われず、prediction.main === getResultWinner(event) の動的判定で的中を計算することを確認(パターンA)
+  - 本番で数値照合済み: AI別/ブランド別/モデル別/My AI/ai[slug] すべて races読み時と完全一致(予測数・的中数・的中率・順位・ヘッダー集計)
+  - collectionGroup購読に eventId fallback(pred.eventId || d.ref.parent.parent?.id)を追加
 
 ## 現在の Source of Truth
 
@@ -24,18 +29,17 @@ writes:
 
 reads:
 
-- events: home(app/page.tsx) + races一覧(app/races/page.tsx) ← Phase 3-1 / Phase 3-2 で切替済み
-- races: 残りの画面(ranking / ai / admin / race[slug] / notifications等)はまだ races読み
+- events: home / races一覧 / ranking / ai[slug] ← Phase 3-1〜3-3 で切替済み
+- races: 残り(admin / race[slug] / notifications)はまだ races読み
 
 ## 次のフェーズ
 
-Phase 3-3: ranking(app/ranking/page.tsx) と ai/[slug](app/ai/[slug]/page.tsx)を events読みに切り替え
+Phase 3-4: admin(結果入力/編集)を events読み + 書き込み二重化
 
-- 同じ「2本購読 + useMemo合成 + nullローディング」パターンを使う
-- 【注意】ranking/ai は統計集計(的中率/AI別成績)が絡む「赤信号」画面
-- stats.ts が KompariEvent[] に対して動くので集計ロジック自体は無変更のはず
-- ただし切替後に集計結果(的中率の数値)が races読み時と一致するか本番で慎重に検証する
-- 残り順序: ranking/ai → admin(read/write同時、書き込み二重化が必要) → race[slug](My AI書き込み)
+- 現状 admin/results と admin/edit は races のみ書き込み(Phase 2b は作成時のみ二重化)
+- read切替 と write二重化 の両方が必要。delete時の events サブコレクション削除の扱いも論点
+
+Phase 3-5: race/[slug] read切替 + My AI参加の書き込み移行(配列push → subcollection addDoc + 一般ユーザーのcreate権限rules)
 
 Phase 4: races 読み取りの完全廃止(LegacyRaceData / normalizeRaceToEvent 削除)
 
@@ -51,3 +55,5 @@ Phase 4: races 読み取りの完全廃止(LegacyRaceData / normalizeRaceToEvent
 - 読み取り切替パターンを home(3-1)・races一覧(3-2)で確立
   - フィルタ/検索も events読みで動作確認済み
   - lib/hooks/useEvents への切り出しは Phase 3-3 以降で検討する
+- ai/[slug] カテゴリ別成績で「競馬」が2行に分裂して表示される箇所あり(表記揺れ起因の可能性)
+  - events読み/races読みで同じ表示のため移行とは無関係。ダミーデータ/表記揺れ cleanup の候補として記録
