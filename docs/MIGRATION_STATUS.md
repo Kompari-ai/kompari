@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-27（Phase 3-5a 完了）
+最終更新: 2026-06-28（Phase 3-5b-1 完了）
 
 ## 完了フェーズ
 
@@ -87,6 +87,34 @@
     - ウィザーズVSブルズ(結果入力済み・予測5件・My AI含む)正常表示、判定バッジ正常
     - 皐月賞(競馬・結果未入力・予測4件)正常表示、判定待ち表示正常
     - コンセンサス・予測カード・レイアウトに問題なし
+- [x] Phase 3-5b-1: My AI を公開UIから非表示（データ・機能は保全）
+  - 方針: MVPでは My AI を利用者に見せない。削除ではなく filter/hide。
+    「preservation does not mean display」= データ・作成削除機能・/my-ai ページは保全し、
+    公開UIから表示・訴求・集計混入を除外する
+  - 実装(6ファイル):
+    - app/page.tsx: topPrediction/split meter/アバター/ヒーロー予測総数を officialPreds に、
+      My AI CTA 削除、CTA grid-cols-2 → grid-cols-3
+    - app/races/page.tsx: topPrediction/split meter/予測数/分母を officialPreds に
+    - app/race/[slug]/page.tsx: buildConsensus/buildPodiumData/予測カード一覧/候補支持率分母/
+      ヘッダーAI予測数を officialPreds に、My AI参加プレースホルダー削除(コメントアウト済みUIは残置)
+    - app/ranking/page.tsx: sourceFilter 初期値 "official"、「すべて」「My AI」タブ削除(公式AI一択)、
+      myAiId 公開リンク削除
+    - components/TopBar.tsx: My AI メニュー項目・説明文から除去
+    - components/BottomNav.tsx: My AI 項目削除、grid-cols-4 → grid-cols-3
+  - filter 式統一: p.source !== "user" && !p.myAiId
+  - 触っていない(保全): /my-ai 本体・/my-ai/[id]・createMyAi/deleteMyAi・joinMyAi関数本体・
+    race/[slug]コメントアウトUI・My AIバッジ定義・SourceFilter型・buildRankings本体・lib/stats.ts
+  - commit: d950b43 feat(ui): hide My AI from public UI (nav/CTA/consensus/ranking)
+  - 本番検証済み:
+    - TopBar/BottomNav から My AI 消失、BottomNav 3タブ表示崩れなし
+    - Home/races/race詳細のコンセンサス・split meter・予測数・ヒーロー予測総数が公式AIのみ
+    - race詳細の予測カードに My AI(マイケル・ジョーダンAI)が出ない
+    - ranking タブが「公式AI」一択、カードに My AI 出ない(AI別/ブランド別/モデル別すべて公式のみ)
+    - /my-ai 直URL は生存(一覧3件・作成/削除フォーム表示)、通常ナビから到達不可
+  - 既知の課題(今回スコープ外・別フェーズ候補):
+    - ranking ヒーロー集計の単位不一致: 「対象」=イベント数 vs 「的中」=全AI的中数合計で
+      的中が対象を上回って見える。d950b43 以前からの既存設計で今回起因ではない
+    - モデル別ランキングの予測数が少ない: 既存予測データに aiModel/aiModelId 未付与のため
 
 ## 現在の Source of Truth
 
@@ -103,13 +131,15 @@ reads:
 - events: home / races一覧 / ranking / ai/[slug] / admin結果入力 / admin編集 / race/[slug]
 - races: notifications など未確認箇所のみ残り
 
+公開UIの予測表示・集計・コンセンサス・ランキングは officialPreds(source!=="user" && !myAiId)基準に統一済み(Phase 3-5b-1)
+My AI データ・/my-ai ページ・作成削除機能は保全(非表示のみ)
+
 ## 次のフェーズ
 
-Phase 3-5b: My AI 導線整理
+Phase 3-5b-2 以降の候補:
 
-- race/[slug] の myAis購読、joinMyAi、コメントアウト投稿UI、My AIバッジ、プレースホルダーの扱いを確認
-- MVP方針では My AI は非表示・非訴求
-- 必要に応じて導線非表示・凍結・将来実装扱いに整理
+- ranking ヒーロー集計の単位整理(対象=イベント数 vs 的中=全AI的中数合計の不一致を修正するか判断)
+- aiModel/aiModelId バックフィル(既存予測データへの付与 → モデル別ランキングの充実)
 
 Phase 4: races 読み取りの完全廃止
 
