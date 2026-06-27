@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   collection,
+  collectionGroup,
   doc,
   onSnapshot,
   orderBy,
   query,
-  updateDoc,
+  serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
@@ -19,9 +21,10 @@ import {
 } from "@/lib/categories";
 import {
   getResultWinner,
-  normalizeRaceToEvent,
+  normalizeEventDocToEvent,
   type KompariEvent,
-  type LegacyRaceData,
+  type KompariEventDoc,
+  type KompariPredictionDoc,
 } from "@/lib/events";
 
 type StatusFilter = "all" | "open" | "finished";
@@ -64,32 +67,46 @@ function getConsensus(event: KompariEvent) {
 }
 
 export default function AdminResultsPage() {
-  const [events, setEvents] = useState<KompariEvent[]>([]);
+  const [eventDocs, setEventDocs] = useState<KompariEventDoc[] | null>(null);
+  const [predsMap, setPredsMap] = useState<Map<string, KompariPredictionDoc[]> | null>(null);
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [savingId, setSavingId] = useState("");
 
+  const events = useMemo<KompariEvent[] | null>(() => {
+    if (!eventDocs || !predsMap) return null;
+    return eventDocs.map((d) => normalizeEventDocToEvent(d, predsMap.get(d.id) ?? []));
+  }, [eventDocs, predsMap]);
+
   useEffect(() => {
-    const q = query(collection(db, "races"), orderBy("createdAt", "desc"));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map((document) => {
-        const data = {
-          id: document.id,
-          ...document.data(),
-        } as LegacyRaceData;
-
-        return normalizeRaceToEvent(data);
-      });
-
-      setEvents(list);
-    });
-
-    return () => unsubscribe();
+    const eventsUnsub = onSnapshot(
+      query(collection(db, "events"), orderBy("createdAt", "desc")),
+      (snap) => {
+        setEventDocs(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() } as KompariEventDoc))
+        );
+      }
+    );
+    const predsUnsub = onSnapshot(
+      collectionGroup(db, "predictions"),
+      (snap) => {
+        const map = new Map<string, KompariPredictionDoc[]>();
+        for (const d of snap.docs) {
+          const pred = d.data() as KompariPredictionDoc;
+          const eventId = pred.eventId || d.ref.parent.parent?.id;
+          if (!eventId) continue;
+          if (!map.has(eventId)) map.set(eventId, []);
+          map.get(eventId)!.push(pred);
+        }
+        setPredsMap(map);
+      }
+    );
+    return () => { eventsUnsub(); predsUnsub(); };
   }, []);
 
   const filteredEvents = useMemo(() => {
+    if (!events) return [];
     return events.filter((event) => {
       const resultWinner = getResultWinner(event);
       const finished = !!resultWinner;
@@ -120,17 +137,25 @@ export default function AdminResultsPage() {
     });
   }, [events, keyword, statusFilter, categoryFilter]);
 
-  const openCount = events.filter((event) => !isFinished(event)).length;
-  const finishedCount = events.filter((event) => isFinished(event)).length;
+  const openCount = (events ?? []).filter((event) => !isFinished(event)).length;
+  const finishedCount = (events ?? []).filter((event) => isFinished(event)).length;
 
   const saveResult = async (event: KompariEvent, winner: string) => {
     try {
       setSavingId(event.id);
 
-      await updateDoc(doc(db, "races", event.id), {
-        resultWinner: winner,
-        result: winner ? { winner } : null,
+      const trimmedWinner = winner.trim();
+      const resultValue = trimmedWinner ? { winner: trimmedWinner } : null;
+      const batch = writeBatch(db);
+      batch.update(doc(db, "races", event.id), {
+        resultWinner: trimmedWinner,
+        result: resultValue,
       });
+      batch.update(doc(db, "events", event.id), {
+        result: resultValue,
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
     } catch (error) {
       console.error(error);
       alert(
@@ -144,6 +169,18 @@ export default function AdminResultsPage() {
   const clearResult = async (event: KompariEvent) => {
     await saveResult(event, "");
   };
+
+  if (events === null) {
+    return (
+      <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
+        <TopBar />
+        <div className="mx-auto max-w-[430px] px-4 py-10 text-center text-sm font-bold text-gray-400">
+          読み込み中...
+        </div>
+        <BottomNav />
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
