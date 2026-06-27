@@ -19,25 +19,45 @@
   - outcome フィールドは ranking/ai の集計では使われず、prediction.main === getResultWinner(event) の動的判定で的中を計算することを確認(パターンA)
   - 本番で数値照合済み: AI別/ブランド別/モデル別/My AI/ai[slug] すべて races読み時と完全一致(予測数・的中数・的中率・順位・ヘッダー集計)
   - collectionGroup購読に eventId fallback(pred.eventId || d.ref.parent.parent?.id)を追加
+- [x] Phase 3-4a: admin結果入力(app/admin/results/page.tsx)を events読みに切替 + 結果の二重書き
+  - read: races読み → events + collectionGroup(predictions)読み(確立パターン)
+  - write: saveResult を writeBatch で races + events を atomic更新
+    (races: resultWinner + result / events: result + updatedAt。events側 top-level resultWinner は持たない)
+  - 【重要】Phase 2b の作成時二重化はベストエフォートだったが、admin/results 自体が events読みに
+    なるため atomic(writeBatch)にした(races成功・events失敗の不整合=「保存したのに反映されない」を防止)
+  - events/{id}/predictions の outcome は更新しない(app全体で .outcome を読む箇所がゼロ、動的判定のため)
+  - 本番検証済み: ベルギーVSエジプトに結果「引き分け」を入力
+    - Firestore Console で races/events 両方に同じ result.winner が書かれたことを確認(races側は resultWinner も更新)
+    - admin/results が events読みのまま「入力済み」に変わることを本番画面で確認
+    - ranking 集計に反映されることを本番画面で確認
 
 ## 現在の Source of Truth
 
 writes:
 
-- races(従来どおり)
-- events + events/{id}/predictions(Phase 2b の二重書き + Phase 2.5 バックフィル済み)
+- races: 従来どおり(作成 / 結果入力 / 編集 / 削除)
+- events: 作成時(Phase 2b) + 結果入力時(Phase 3-4a writeBatch)に二重化
+  - 未対応の書き込み: 編集(saveEvent / generatePrediction) / 削除(deleteEvent)はまだ races のみ
 
 reads:
 
-- events: home / races一覧 / ranking / ai[slug] ← Phase 3-1〜3-3 で切替済み
-- races: 残り(admin / race[slug] / notifications)はまだ races読み
+- events: home / races一覧 / ranking / ai[slug] / admin結果入力 ← 切替済み
+- races: 残り(admin編集 / race[slug] / notifications)はまだ races読み
 
 ## 次のフェーズ
 
-Phase 3-4: admin(結果入力/編集)を events読み + 書き込み二重化
+Phase 3-4b: admin編集(app/admin/edit/[id]/page.tsx)を events読み + 書き込み二重化
 
-- 現状 admin/results と admin/edit は races のみ書き込み(Phase 2b は作成時のみ二重化)
-- read切替 と write二重化 の両方が必要。delete時の events サブコレクション削除の扱いも論点
+- saveEvent(メタ情報+result更新)の二重化
+- generatePrediction(races.predictions[] 配列を上書き)の二重化が難所:
+  配列 ↔ events/{id}/predictions サブコレクション の構造差を埋める設計が必要
+  (該当AIの prediction ドキュメントを update or 再作成)
+
+Phase 3-4c(または Phase4に統合): 削除(deleteEvent)の方針決定
+
+- 現状 races のみ deleteDoc。events本体 + predictions サブコレクションが残置(孤立)
+- 選択肢: A.明示削除(サブコレクション逐次delete) / B.soft delete / C.残置しPhase4で一括クリーンアップ
+- 現時点の暫定方針: C(残置)を有力候補とし、3-4b完了後に判断
 
 Phase 3-5: race/[slug] read切替 + My AI参加の書き込み移行(配列push → subcollection addDoc + 一般ユーザーのcreate権限rules)
 
