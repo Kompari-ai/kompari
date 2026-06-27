@@ -112,6 +112,7 @@ export default function AdminEditPage({
     // undefined = not yet received first snapshot; null = doc does not exist
     let eventDocData: KompariEventDoc | null | undefined = undefined;
     let predictionsData: KompariPredictionDoc[] | undefined = undefined;
+    let formInitialized = false;
 
     function tryNormalize(fromEventDoc: boolean) {
       if (eventDocData === undefined || predictionsData === undefined) return;
@@ -125,8 +126,8 @@ export default function AdminEditPage({
       const normalized = normalizeEventDocToEvent(eventDocData, predictionsData);
       setEvent(normalized);
 
-      // Form values only reset when the event doc itself changes, not on predictions-only updates
-      if (fromEventDoc) {
+      // Initialize form on first full load; re-init if event doc changes after that
+      if (!formInitialized || fromEventDoc) {
         setCategory(normalized.category);
         setTitle(normalized.title);
         setVenue(normalized.venue || "");
@@ -135,6 +136,7 @@ export default function AdminEditPage({
         setResultWinner(
           normalized.result?.winner || normalized.resultWinner || ""
         );
+        formInitialized = true;
       }
 
       setLoaded(true);
