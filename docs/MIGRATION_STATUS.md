@@ -37,42 +37,54 @@
     read切替は generatePrediction 二重化(3-4b-2)と同時に行う
   - generatePrediction / deleteEvent は今回未変更(races のまま)
   - 本番検証済み: ベルギーVSエジプトの title を編集 → races/events 両方に反映、events側 updatedAt 更新を Firestore Console で確認。既存の result.winner も保持
+- [x] Phase 3-4b-2: admin編集の read切替 + generatePrediction の events二重化(同時実装)
+  - read: doc(db,"events",id) + collection(db,"events",id,"predictions") の単一doc+サブコレクション直接購読(collectionGroup 不使用)
+  - generatePrediction: races.predictions[] 上書き + events/{id}/predictions/{predictionId} を writeBatch で atomic二重化
+    - predictionId = sanitize(pred.myAiId || pred.ai)。公式AIは AI名そのままで既存doc IDと一致(検証済み)
+    - set で丸ごと置換。removeUndefinedFields で undefined 除去(モック時の aiProvider/aiModel/aiModelId は補完しない)
+    - outcome:"pending" リセット、predictedAt/updatedAt 更新、predictionCount 不変
+    - My AI(source=="user"/myAiId)は触らない(races配列も events サブコレクションも保持)
+  - 【hotfix(commit 7dc7a62)】read切替の useEffect で onSnapshot 2本購読の到着順レースにより、
+    event doc が先に届くとフォーム初期化(カテゴリ/タイトル/候補/結果)がスキップされるバグが本番で発生。
+    フォーム初期化条件を if (fromEventDoc) → if (!formInitialized || fromEventDoc) に修正。
+    本番検証(再生成)の段階で発見・修正(本番データは無傷のまま)
+    ※教訓: onSnapshot 2本購読では片方の snapshot 到着時に early return した後、もう片方の callback で
+      初回 normalize されることがある。フォーム初期化等の副作用を fromEventDoc だけに閉じ込めると初回同期が抜ける。
+      今後 race/[slug] や他の編集画面で同じパターンを使う際の注意点
+  - 本番検証済み(ウィザーズVSブルズ): ChatGPT 1つ再生成 →
+    races.predictions[]とevents/{id}/predictions/ChatGPT 両方が新予測に更新(main:ウィザーズ→ブルズ、outcome:pending)、
+    マイケル・ジョーダンAI(My AI, source=="user")が events/races 両方で保持されることを Firestore Console で確認。
+    編集画面(events読み)に再生成結果が反映、フォーム保持も正常
 
 ## 現在の Source of Truth
 
 writes:
 
-- races: 全書き込み(作成 / 結果入力 / 編集メタ / AI予測再生成 / 削除)
-- events: 二重化済み = 作成(2b) + 結果入力(3-4a) + 編集メタ(3-4b-1)
-  - 未対応: generatePrediction(AI予測再生成) / deleteEvent(削除)はまだ races のみ
+- races: 全書き込み
+- events: 二重化済み = 作成(2b) + 結果入力(3-4a) + 編集メタ(3-4b-1) + 予測再生成(3-4b-2)
+  - 未対応: deleteEvent(削除)はまだ races のみ
 
 reads:
 
-- events: home / races一覧 / ranking / ai[slug] / admin結果入力
-- races: admin編集(3-4b-2で切替予定) / race[slug] / notifications
+- events: home / races一覧 / ranking / ai[slug] / admin結果入力 / admin編集
+- races: race[slug] / notifications はまだ races読み
 
 ## 次のフェーズ
 
-Phase 3-4b-2: admin編集の read切替 + generatePrediction の events二重化(同時実装)
+Phase 3-4c: deleteEvent の方針決定
 
-- read: doc(db,"events",id) + collection(db,"events",id,"predictions") の単一doc+サブコレクション直接購読
-  (単一イベント編集なので collectionGroup でなく直接購読。eventId fallback 不要)
-- generatePrediction: races.predictions[] 上書き + events/{id}/predictions/{predictionId} を set で二重化
-  - predictionId = sanitize(pred.ai)。公式AI名はそのまま("ChatGPT"等)で既存ドキュメントIDと完全一致(検証済み)
-  - set(merge:false)で丸ごと置換(再生成はフィールド増減ありうるため)。outcome:"pending"リセット、predictedAt/updatedAt 更新
-  - My AI(source==="user")は触らない。predictionCount 不変
-  - read切替と同時に行う理由: 中間状態(read=events だが generatePrediction が races のみ)を作らないため
-- makePredictionId ヘルパーを admin/edit 内に local定義(規則の手書き散在を避ける)
-
-Phase 3-4c(または Phase4に統合): 削除(deleteEvent)の方針決定
-
-- 現状 races のみ deleteDoc。events本体 + predictions サブコレクションが残置(孤立)
+- 現状 races のみ deleteDoc。events本体 + predictions サブコレクションが孤立
 - 選択肢: A.明示削除(サブコレクション逐次delete) / B.soft delete / C.残置しPhase4で一括クリーンアップ
-- 現時点の暫定方針: C(残置)を有力候補とし、3-4b完了後に判断
+- 暫定方針: C(残置)が有力。設計判断が主で実装は軽い見込み
 
-Phase 3-5: race/[slug] read切替 + My AI参加の書き込み移行(配列push → subcollection addDoc + 一般ユーザーのcreate権限rules)
+Phase 3-5: race/[slug] の events read切替
 
-Phase 4: races 読み取りの完全廃止(LegacyRaceData / normalizeRaceToEvent 削除)
+- MVP方針では My AI は非表示・非訴求
+- race/[slug] に My AI 表示/投稿導線/書き込み処理が残っている場合は、read切替前に扱いを確認する
+- MVPでは My AI 書き込み移行を優先しない。必要なら導線非表示または凍結を検討
+- まずは race/[slug] の現状調査を行い、events read切替と My AI導線の扱いを分けて設計する
+
+Phase 4: races 読み取りの完全廃止(LegacyRaceData / normalizeRaceToEvent 削除、孤立データ一括クリーンアップ)
 
 ## メモ
 
