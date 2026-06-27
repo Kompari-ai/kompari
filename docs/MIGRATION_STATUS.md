@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-28（Phase 4-a-1 完了）
+最終更新: 2026-06-28（Phase 4-a-2 完了）
 
 ## 完了フェーズ
 
@@ -141,6 +141,20 @@
   - commit: 510113a
   - 本番検証: notifications 正常表示、分母が公式AIのみ(ホームと一致)、欠落なし
 
+- [x] Phase 4-a-2: TopBar の通知バッジ簡略化・races read 削除（公開面の races read 完全消滅）
+  - 方針: TopBar の動的バッジを events に移行せず、バッジ数字を廃止して races read を削除。
+    全ページ共通コンポーネントに collectionGroup 2本購読を載せる過剰投資を避け、
+    公開面の races read を消すことを優先（MVP の信頼性・軽さ優先）
+  - 実装(components/TopBar.tsx のみ、+2/-45):
+    - races 購読の useEffect 全体・pendingCount useState・バッジ表示ブロックを削除
+    - helper(hasPredictions/hasResult)・型(RaceDoc)・Firestore import(collection/onSnapshot/db)・
+      useEffect import を削除（useState は open state で残す）
+    - 🔔 アイコン・/notifications リンク・ハンバーガー通知項目は残す
+    - events + collectionGroup は載せない（バッジ復活せず）
+  - commit: e5bbf3e
+  - 本番検証: 全ページでバッジ消失・🔔残存・通知導線2箇所生存・崩れなし
+  - 結果: TopBar の Firestore read がゼロ。公開面の races read が完全消滅
+
 ## 現在の Source of Truth
 
 writes:
@@ -154,11 +168,18 @@ writes:
 reads:
 
 - events: home / races一覧 / ranking / ai/[slug] / admin結果入力 / admin編集 / race/[slug] / notifications
-- races: My AI 専用(app/my-ai/page.tsx・app/my-ai/[id]/page.tsx) と TopBar 通知バッジのみ残り
+- races: My AI 専用(app/my-ai/page.tsx・app/my-ai/[id]/page.tsx) のみ残り（意図的残置）
   - My AI は MVP モック・将来作り直し前提につき events 移行しない（下記 My AI 方針参照）
-  - TopBar は Phase 4-a-2 で移行予定
+  - 公開面の races read は Phase 4-a-2 完了により完全消滅
 
 公開UIの予測表示・集計・コンセンサス・ランキング・通知は officialPreds(source!=="user" && !myAiId)基準に統一済み(Phase 3-5b-1 / 4-a-1)
+TopBar の Firestore read がゼロに。🔔 アイコン・通知導線は残存（件数はバッジなし、/notifications で確認）
+
+#### TopBar バッジ将来復活の展望
+TopBar バッジを将来復活させるなら、events に集計済みフィールド
+(officialPredictionCount / hasOfficialPredictions / resultStatus 等)を信頼できる形で持たせてから、
+events 本体のみ軽く読む（理想は siteStats のような1ドキュメント read）。
+現 predictionCount は generatePrediction 時に更新されず信頼できないため、今は復活させない。
 My AI データ・/my-ai ページ・作成削除機能は保全(非表示のみ)
 
 ### My AI 方針（誤着手防止）
@@ -176,10 +197,6 @@ Phase 3-5b-3 以降の候補:
 
 Phase 4: races 読み取りの完全廃止
 
-- Phase 4-a-2: TopBar 通知バッジの races read → events 移行
-  - events の predictionCount は信頼できない(admin/edit の generatePrediction が predictionCount を更新しないため)
-  - collectionGroup("predictions") 併用が必要
-  - 全ページ共通コンポーネントで2本購読を載せる負荷を見ながら実装
 - Phase 4-c: deleteEvent 正式方式
   - deleteDoc(races/{id}) + deleteDoc(events/{id}) + events/{id}/predictions 全件 batch.delete の3段階処理
   - DELETE_DISABLED_DURING_EVENTS_MIGRATION フラグを外してボタン有効化
@@ -192,6 +209,7 @@ Phase 4: races 読み取りの完全廃止
 保留:
 - My AI / LegacyRaceData 削除 → MVP 後・将来のAPI連携実装時
 - aiModel / aiModelId バックフィル → Firestore 書き込みを伴う別フェーズ
+- TopBar バッジ復活 → events に信頼できる集計フィールドを持たせてから（上記「将来復活の展望」参照）
 
 ## メモ
 
