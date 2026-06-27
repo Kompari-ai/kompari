@@ -3,16 +3,24 @@
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { deleteDoc, doc, onSnapshot, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  writeBatch,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { eventCategories } from "@/lib/categories";
 import {
-  normalizeRaceToEvent,
+  normalizeEventDocToEvent,
   type KompariEvent,
+  type KompariEventDoc,
   type KompariPrediction,
-  type LegacyRaceData,
+  type KompariPredictionDoc,
 } from "@/lib/events";
 
 const officialAis = ["ChatGPT", "Claude", "Gemini", "DeepSeek", "Grok"];
@@ -64,6 +72,21 @@ function isOfficialPrediction(prediction: KompariPrediction, aiName: string) {
   );
 }
 
+type PredictionIdInput = { ai?: string | null; myAiId?: string | null };
+
+function makePredictionId(pred: PredictionIdInput): string {
+  const rawId = pred.myAiId || pred.ai || "unknown";
+  return String(rawId).replace(/\//g, "_").trim() || "unknown";
+}
+
+function removeUndefinedFields<T extends Record<string, unknown>>(
+  obj: T
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined)
+  );
+}
+
 export default function AdminEditPage({
   params,
 }: {
@@ -86,18 +109,24 @@ export default function AdminEditPage({
   const [generatingAi, setGeneratingAi] = useState("");
 
   useEffect(() => {
-    const ref = doc(db, "races", id);
+    // undefined = not yet received first snapshot; null = doc does not exist
+    let eventDocData: KompariEventDoc | null | undefined = undefined;
+    let predictionsData: KompariPredictionDoc[] | undefined = undefined;
 
-    const unsubscribe = onSnapshot(ref, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = {
-          id: snapshot.id,
-          ...snapshot.data(),
-        } as LegacyRaceData;
+    function tryNormalize(fromEventDoc: boolean) {
+      if (eventDocData === undefined || predictionsData === undefined) return;
 
-        const normalized = normalizeRaceToEvent(data);
+      if (eventDocData === null) {
+        setEvent(null);
+        setLoaded(true);
+        return;
+      }
 
-        setEvent(normalized);
+      const normalized = normalizeEventDocToEvent(eventDocData, predictionsData);
+      setEvent(normalized);
+
+      // Form values only reset when the event doc itself changes, not on predictions-only updates
+      if (fromEventDoc) {
         setCategory(normalized.category);
         setTitle(normalized.title);
         setVenue(normalized.venue || "");
@@ -106,14 +135,38 @@ export default function AdminEditPage({
         setResultWinner(
           normalized.result?.winner || normalized.resultWinner || ""
         );
-      } else {
-        setEvent(null);
       }
 
       setLoaded(true);
+    }
+
+    const unsubEvent = onSnapshot(doc(db, "events", id), (snapshot) => {
+      if (snapshot.exists()) {
+        eventDocData = {
+          id: snapshot.id,
+          ...snapshot.data(),
+        } as KompariEventDoc;
+      } else {
+        eventDocData = null;
+      }
+      tryNormalize(true);
     });
 
-    return () => unsubscribe();
+    const unsubPredictions = onSnapshot(
+      collection(db, "events", id, "predictions"),
+      (snapshot) => {
+        predictionsData = snapshot.docs.map((d) => ({
+          ...d.data(),
+          predictionId: d.id,
+        })) as KompariPredictionDoc[];
+        tryNormalize(false);
+      }
+    );
+
+    return () => {
+      unsubEvent();
+      unsubPredictions();
+    };
   }, [id]);
 
   const candidates = useMemo(() => parseCandidates(candidateText), [
@@ -223,7 +276,11 @@ export default function AdminEditPage({
         (prediction) => !isOfficialPrediction(prediction, aiName)
       );
 
-      await updateDoc(doc(db, "races", id), {
+      const predictionId = makePredictionId(nextPrediction);
+      const batch = writeBatch(db);
+
+      // races: maintain existing full update (meta + predictions array)
+      batch.update(doc(db, "races", id), {
         category,
         title: title.trim(),
         venue: venue.trim(),
@@ -231,6 +288,32 @@ export default function AdminEditPage({
         candidates,
         predictions: [...preservedPredictions, nextPrediction],
       });
+
+      // events predictions subcollection: full replace (set, not update) to clean stale fields
+      const predDoc: Record<string, unknown> = {
+        ...nextPrediction,
+        eventId: id,
+        predictionId,
+        outcome: "pending",
+        predictedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      batch.set(
+        doc(db, "events", id, "predictions", predictionId),
+        removeUndefinedFields(predDoc)
+      );
+
+      // events doc: sync meta fields (no top-level resultWinner, no predictions array)
+      batch.update(doc(db, "events", id), {
+        category,
+        title: title.trim(),
+        venue: venue.trim(),
+        startsAt: startsAt || null,
+        candidates,
+        updatedAt: serverTimestamp(),
+      });
+
+      await batch.commit();
 
       if (!silent) {
         alert(`${aiName}の予測を再生成しました`);
