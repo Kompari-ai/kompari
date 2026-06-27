@@ -13,10 +13,11 @@ import {
   formatStartsAt,
   getConsensusChip,
   getResultWinner,
-  normalizeRaceToEvent,
+  normalizeEventDocToEvent,
   type KompariEvent,
+  type KompariEventDoc,
   type KompariPrediction,
-  type LegacyRaceData,
+  type KompariPredictionDoc,
 } from "@/lib/events";
 
 type MyAi = {
@@ -375,24 +376,44 @@ export default function RaceDetailPage({
   const [joining, setJoining] = useState(false);
 
   useEffect(() => {
-    const ref = doc(db, "races", slug);
+    let eventDocData: KompariEventDoc | null | undefined = undefined;
+    let predictionsData: KompariPredictionDoc[] | undefined = undefined;
 
-    const unsubscribe = onSnapshot(ref, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = {
-          id: snapshot.id,
-          ...snapshot.data(),
-        } as LegacyRaceData;
-
-        setEvent(normalizeRaceToEvent(data));
-      } else {
+    function tryNormalize() {
+      if (eventDocData === undefined || predictionsData === undefined) return;
+      if (eventDocData === null) {
         setEvent(null);
+        setLoaded(true);
+        return;
       }
-
+      setEvent(normalizeEventDocToEvent(eventDocData, predictionsData));
       setLoaded(true);
+    }
+
+    const unsubEvent = onSnapshot(doc(db, "events", slug), (snapshot) => {
+      if (snapshot.exists()) {
+        eventDocData = { id: snapshot.id, ...snapshot.data() } as KompariEventDoc;
+      } else {
+        eventDocData = null;
+      }
+      tryNormalize();
     });
 
-    return () => unsubscribe();
+    const unsubPredictions = onSnapshot(
+      collection(db, "events", slug, "predictions"),
+      (snapshot) => {
+        predictionsData = snapshot.docs.map((d) => ({
+          ...d.data(),
+          predictionId: d.id,
+        })) as KompariPredictionDoc[];
+        tryNormalize();
+      }
+    );
+
+    return () => {
+      unsubEvent();
+      unsubPredictions();
+    };
   }, [slug]);
 
   useEffect(() => {
