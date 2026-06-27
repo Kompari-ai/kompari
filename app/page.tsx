@@ -26,6 +26,7 @@ function topPrediction(event: KompariEvent) {
   const counts: Record<string, number> = {};
 
   event.predictions.forEach((prediction) => {
+    if (prediction.source === "user" || prediction.myAiId) return;
     if (!prediction.main) return;
     counts[prediction.main] = (counts[prediction.main] || 0) + 1;
   });
@@ -39,6 +40,9 @@ function topPrediction(event: KompariEvent) {
 
 function EventCard({ event }: { event: KompariEvent }) {
   const resultWinner = getResultWinner(event);
+  const officialPreds = event.predictions.filter(
+    (p) => p.source !== "user" && !p.myAiId
+  );
   const top = topPrediction(event);
   const chip = getConsensusChip(event.predictions);
 
@@ -98,17 +102,17 @@ function EventCard({ event }: { event: KompariEvent }) {
           <div className="flex items-center justify-between gap-2">
             <div className="font-extrabold text-blue-700 text-[13px]">{top.name}</div>
             <div className="text-[11px] font-bold text-blue-700">
-              {top.count}/{event.predictions.length}
+              {top.count}/{officialPreds.length}
             </div>
           </div>
         </div>
       )}
 
       {/* Split meter */}
-      {event.predictions.length > 0 && (
+      {officialPreds.length > 0 && (
         <div className="mt-3">
           <div className="h-[8px] rounded-full overflow-hidden flex gap-[2px]">
-            {event.predictions.map((p, i) => (
+            {officialPreds.map((p, i) => (
               <div
                 key={`${p.ai}-${i}`}
                 className="flex-1 h-full"
@@ -117,7 +121,7 @@ function EventCard({ event }: { event: KompariEvent }) {
             ))}
           </div>
           <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5">
-            {event.predictions.slice(0, 4).map((p, i) => (
+            {officialPreds.slice(0, 4).map((p, i) => (
               <span
                 key={`leg-${p.ai}-${i}`}
                 className="text-[10px] text-gray-400 font-semibold flex items-center gap-1"
@@ -129,9 +133,9 @@ function EventCard({ event }: { event: KompariEvent }) {
                 {p.ai}
               </span>
             ))}
-            {event.predictions.length > 4 && (
+            {officialPreds.length > 4 && (
               <span className="text-[10px] text-gray-400 font-semibold">
-                +{event.predictions.length - 4}
+                +{officialPreds.length - 4}
               </span>
             )}
           </div>
@@ -146,7 +150,7 @@ function EventCard({ event }: { event: KompariEvent }) {
 
       <div className="mt-3 flex items-center justify-between">
         <div className="flex -space-x-1.5">
-          {event.predictions.slice(0, 5).map((p, i) => (
+          {officialPreds.slice(0, 5).map((p, i) => (
             <div
               key={`av-${p.ai}-${i}`}
               className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-[9px] font-extrabold text-white"
@@ -155,7 +159,7 @@ function EventCard({ event }: { event: KompariEvent }) {
               {getAiInitial(p.ai)}
             </div>
           ))}
-          {event.predictions.length === 0 && (
+          {officialPreds.length === 0 && (
             <span className="text-[11px] font-bold text-gray-400">AI予測なし</span>
           )}
         </div>
@@ -223,7 +227,13 @@ export default function HomePage() {
 
   const totalPredictions = useMemo(() => {
     if (!events) return 0;
-    return events.reduce((sum, event) => sum + event.predictions.length, 0);
+    return events.reduce(
+      (sum, event) =>
+        sum +
+        event.predictions.filter((p) => p.source !== "user" && !p.myAiId)
+          .length,
+      0
+    );
   }, [events]);
 
   if (events === null) {
@@ -304,7 +314,7 @@ export default function HomePage() {
         <section className="mb-5 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
           <h2 className="mb-3 text-[15.5px] font-bold">すぐ使う</h2>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Link
               href="/races"
               className="rounded-[12px] bg-blue-700 py-3.5 text-center text-[13px] font-bold text-white"
@@ -316,12 +326,6 @@ export default function HomePage() {
               className="rounded-[12px] bg-gray-100 py-3.5 text-center text-[13px] font-bold text-gray-700"
             >
               ランキング
-            </Link>
-            <Link
-              href="/my-ai"
-              className="rounded-[12px] bg-gray-100 py-3.5 text-center text-[13px] font-bold text-gray-700"
-            >
-              My AI
             </Link>
             <Link
               href="/notifications"

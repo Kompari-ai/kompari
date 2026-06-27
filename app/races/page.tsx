@@ -32,6 +32,7 @@ function topPrediction(event: KompariEvent) {
   const counts: Record<string, number> = {};
 
   event.predictions.forEach((prediction) => {
+    if (prediction.source === "user" || prediction.myAiId) return;
     if (!prediction.main) return;
     counts[prediction.main] = (counts[prediction.main] || 0) + 1;
   });
@@ -46,6 +47,9 @@ function topPrediction(event: KompariEvent) {
 function EventCard({ event }: { event: KompariEvent }) {
   const resultWinner = getResultWinner(event);
   const status = getStatus(event);
+  const officialPreds = event.predictions.filter(
+    (p) => p.source !== "user" && !p.myAiId
+  );
   const top = topPrediction(event);
   const chip = getConsensusChip(event.predictions);
 
@@ -103,7 +107,7 @@ function EventCard({ event }: { event: KompariEvent }) {
         <div className="rounded-[10px] bg-gray-50 p-2.5">
           <div className="text-[10px] font-bold text-gray-400">AI予測</div>
           <div className="mt-0.5 text-base font-extrabold">
-            {event.predictions.length}
+            {officialPreds.length}
           </div>
         </div>
         <div className="rounded-[10px] bg-gray-50 p-2.5">
@@ -121,17 +125,17 @@ function EventCard({ event }: { event: KompariEvent }) {
           <div className="mt-1 flex items-center justify-between gap-2">
             <div className="truncate font-extrabold text-blue-700 text-[13px]">{top.name}</div>
             <div className="shrink-0 text-[11px] font-bold text-blue-700">
-              {top.count}/{event.predictions.length}
+              {top.count}/{officialPreds.length}
             </div>
           </div>
         </div>
       )}
 
       {/* Split meter */}
-      {event.predictions.length > 0 && (
+      {officialPreds.length > 0 && (
         <div className="mt-3">
           <div className="h-[7px] rounded-full overflow-hidden flex gap-[2px]">
-            {event.predictions.map((p, i) => (
+            {officialPreds.map((p, i) => (
               <div
                 key={`${p.ai}-${i}`}
                 className="flex-1 h-full"
@@ -140,7 +144,7 @@ function EventCard({ event }: { event: KompariEvent }) {
             ))}
           </div>
           <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5">
-            {event.predictions.slice(0, 4).map((p, i) => (
+            {officialPreds.slice(0, 4).map((p, i) => (
               <span
                 key={`leg-${p.ai}-${i}`}
                 className="text-[10px] text-gray-400 font-semibold flex items-center gap-1"
@@ -169,7 +173,7 @@ function EventCard({ event }: { event: KompariEvent }) {
         </span>
 
         <div className="flex -space-x-1.5">
-          {event.predictions.slice(0, 4).map((p, i) => (
+          {officialPreds.slice(0, 4).map((p, i) => (
             <div
               key={`av-${p.ai}-${i}`}
               className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white text-[8px] font-extrabold text-white"

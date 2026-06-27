@@ -19,11 +19,6 @@ const navItems = [
     href: "/ranking",
     icon: "♕",
   },
-  {
-    label: "My AI",
-    href: "/my-ai",
-    icon: "○",
-  },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -47,7 +42,7 @@ export function BottomNav() {
         maxWidth: "430px",
       }}
     >
-      <div className="grid h-[76px] w-full grid-cols-4 bg-white">
+      <div className="grid h-[76px] w-full grid-cols-3 bg-white">
         {navItems.map((item) => {
           const active = isActive(pathname, item.href);
 

@@ -226,7 +226,7 @@ export default function RankingPage() {
   const [predsMap, setPredsMap] = useState<Map<string, KompariPredictionDoc[]> | null>(null);
   const [aggregationMode, setAggregationMode] = useState<AggregationMode>("ai");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("official");
 
   const events = useMemo<KompariEvent[] | null>(() => {
     if (!eventDocs || !predsMap) return null;
@@ -431,9 +431,7 @@ export default function RankingPage() {
 
               <div className="flex bg-[#E7EBF2] rounded-[12px] p-[3px] mb-3">
                 {[
-                  { value: "all", label: "すべて" },
                   { value: "official", label: "公式AI" },
-                  { value: "user", label: "My AI" },
                 ].map((item) => (
                   <button
                     key={item.value}
@@ -514,14 +512,6 @@ export default function RankingPage() {
                       <h3 className="text-[15px] font-extrabold leading-tight">
                         {card.displayName}
                       </h3>
-                      {card.myAiId && (
-                        <Link
-                          href={`/my-ai/${card.myAiId}`}
-                          className="text-[11px] font-extrabold text-blue-700"
-                        >
-                          詳細
-                        </Link>
-                      )}
                     </div>
                   </div>
 

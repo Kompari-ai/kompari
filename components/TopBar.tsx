@@ -23,11 +23,6 @@ const menuItems = [
     description: "AI成績",
   },
   {
-    label: "My AI",
-    href: "/my-ai",
-    description: "自分のAI",
-  },
-  {
     label: "通知",
     href: "/notifications",
     description: "未入力確認",
@@ -46,7 +41,7 @@ const menuItems = [
     label: "利用規約",
     href: "/terms",
     description: "ルール",
-  },
+  },
 ];
 
 type RaceDoc = {
@@ -203,7 +198,7 @@ export function TopBar() {
                   </h2>
 
                   <p className="mt-1 text-xs font-semibold leading-5 text-blue-50">
-                    予測イベント、ランキング、My AI、通知、利用規約などを確認できます。
+                    予測イベント、ランキング、通知、利用規約などを確認できます。
                   </p>
                 </section>
 

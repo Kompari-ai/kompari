@@ -52,8 +52,11 @@ function getCandidateList(event: KompariEvent) {
 
 function buildConsensus(event: KompariEvent) {
   const counts: Record<string, number> = {};
+  const officialPreds = event.predictions.filter(
+    (p) => p.source !== "user" && !p.myAiId
+  );
 
-  event.predictions.forEach((prediction) => {
+  officialPreds.forEach((prediction) => {
     if (!prediction.main) return;
 
     counts[prediction.main] = (counts[prediction.main] || 0) + 1;
@@ -64,8 +67,8 @@ function buildConsensus(event: KompariEvent) {
       name,
       count,
       rate:
-        event.predictions.length > 0
-          ? Math.round((count / event.predictions.length) * 100)
+        officialPreds.length > 0
+          ? Math.round((count / officialPreds.length) * 100)
           : 0,
     }))
     .sort((a, b) => b.count - a.count);
@@ -74,8 +77,11 @@ function buildConsensus(event: KompariEvent) {
 function buildPodiumData(event: KompariEvent) {
   const mainCounts: Record<string, number> = {};
   const secondCounts: Record<string, number> = {};
+  const officialPreds = event.predictions.filter(
+    (p) => p.source !== "user" && !p.myAiId
+  );
 
-  event.predictions.forEach((p) => {
+  officialPreds.forEach((p) => {
     if (p.main) mainCounts[p.main] = (mainCounts[p.main] || 0) + 1;
     if (p.second) secondCounts[p.second] = (secondCounts[p.second] || 0) + 1;
   });
@@ -586,6 +592,10 @@ export default function RaceDetailPage({
     );
   }
 
+  const officialPreds = event.predictions.filter(
+    (p) => p.source !== "user" && !p.myAiId
+  );
+
   return (
     <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
       <TopBar />
@@ -633,7 +643,7 @@ export default function RaceDetailPage({
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">AI予測</div>
                 <div className="mt-0.5 text-xl font-extrabold">
-                  {event.predictions.length}
+                  {officialPreds.length}
                 </div>
               </div>
 
@@ -699,10 +709,10 @@ export default function RaceDetailPage({
           )}
 
           {/* Split meter */}
-          {event.predictions.length > 0 ? (
+          {officialPreds.length > 0 ? (
             <>
               <div className="h-[10px] rounded-full overflow-hidden flex gap-[2px]">
-                {event.predictions.map((p, i) => (
+                {officialPreds.map((p, i) => (
                   <div
                     key={`seg-${p.ai}-${i}`}
                     className="flex-1 h-full"
@@ -711,7 +721,7 @@ export default function RaceDetailPage({
                 ))}
               </div>
               <div className="flex flex-wrap gap-x-[10px] gap-y-[5px] mt-[7px]">
-                {event.predictions.map((p, i) => (
+                {officialPreds.map((p, i) => (
                   <span
                     key={`leg-${p.ai}-${i}`}
                     className="text-[10.5px] text-[#64748B] font-semibold inline-flex items-center gap-1 whitespace-nowrap"
@@ -800,9 +810,9 @@ export default function RaceDetailPage({
 
         {tab === "predictions" && (
           <section className="space-y-3">
-            {event.predictions.map((prediction, index) => (
+            {officialPreds.map((prediction, index) => (
               <PredictionCard
-                key={`${prediction.ai}-${prediction.myAiId || index}`}
+                key={`${prediction.ai}-${index}`}
                 eventId={event.id}
                 prediction={prediction}
                 resultWinner={resultWinner}
@@ -810,7 +820,7 @@ export default function RaceDetailPage({
               />
             ))}
 
-            {event.predictions.length === 0 && (
+            {officialPreds.length === 0 && (
               <div className="rounded-[18px] border border-[#E8ECF2] bg-white p-6 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
                 <div className="text-3xl">🤖</div>
                 <div className="mt-3 text-sm font-bold text-gray-500">
@@ -818,22 +828,6 @@ export default function RaceDetailPage({
                 </div>
               </div>
             )}
-
-            {/* My AI参加プレースホルダー */}
-            <div className="rounded-[18px] border border-dashed border-blue-200 bg-blue-50/40 p-4 text-center">
-              <b className="text-[13.5px] font-extrabold text-blue-700">
-                ＋ あなたのAIを参加させる
-              </b>
-              <p className="mt-1 text-[11px] text-gray-500">
-                My AIを作成してこのイベントに予測参加できます
-              </p>
-              <Link
-                href="/my-ai"
-                className="mt-3 inline-block rounded-[10px] bg-blue-700 px-4 py-2 text-xs font-extrabold text-white"
-              >
-                My AIを作成する
-              </Link>
-            </div>
           </section>
         )}
 
@@ -845,7 +839,7 @@ export default function RaceDetailPage({
                 candidate={candidate}
                 index={index}
                 consensusCount={consensusMap[candidate] || 0}
-                totalPredictions={event.predictions.length}
+                totalPredictions={officialPreds.length}
                 resultWinner={resultWinner}
               />
             ))}
