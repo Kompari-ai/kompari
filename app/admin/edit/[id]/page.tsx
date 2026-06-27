@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   collection,
-  deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   serverTimestamp,
   writeBatch,
@@ -337,23 +337,49 @@ export default function AdminEditPage({
   };
 
   const deleteEvent = async () => {
-    const ok = confirm(
-      "このイベントを削除しますか？\n削除すると、AI予測・結果・ランキング集計からも消えます。"
-    );
-
-    if (!ok) return;
+    // votes are intentionally NOT deleted in Phase 4-c.
+    // Orphan vote cleanup is deferred to a later cleanup phase.
+    setSaving(true);
 
     try {
-      setSaving(true);
+      const predictionsRef = collection(db, "events", id, "predictions");
+      const predictionsSnapshot = await getDocs(predictionsRef);
 
-      await deleteDoc(doc(db, "races", id));
+      if (predictionsSnapshot.size > 450) {
+        alert("AI予測が多すぎるため、安全のため削除を中止しました。");
+        setSaving(false);
+        return;
+      }
 
-      alert("イベントを削除しました");
+      const confirmed = confirm(
+        `このイベントを完全削除します。\n\n` +
+          `・AI予測 ${predictionsSnapshot.size} 件を削除します\n` +
+          `・イベント本体を削除します\n` +
+          `・旧 races データも削除します\n` +
+          `・削除後は元に戻せません\n\n` +
+          `本当に削除しますか？`
+      );
+
+      if (!confirmed) {
+        setSaving(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+
+      predictionsSnapshot.forEach((predictionDoc) => {
+        batch.delete(predictionDoc.ref);
+      });
+
+      batch.delete(doc(db, "events", id));
+      batch.delete(doc(db, "races", id));
+
+      await batch.commit();
+
       router.push("/admin/results");
-    } catch (error) {
-      console.error(error);
+    } catch (e) {
+      console.error(e);
       alert("イベント削除に失敗しました");
-    } finally {
       setSaving(false);
     }
   };
@@ -400,11 +426,6 @@ export default function AdminEditPage({
       </main>
     );
   }
-
-  // Phase 3-4c: deleteEvent currently deletes only races/{id}, leaving events/{id}
-  // and events/{id}/predictions orphaned.
-  // Keep the delete UI disabled until Phase 4 defines the final delete strategy.
-  const DELETE_DISABLED_DURING_EVENTS_MIGRATION = true;
 
   return (
     <main className="min-h-screen bg-[#f5f5f7] text-[#111827]">
@@ -670,16 +691,11 @@ export default function AdminEditPage({
           <button
             type="button"
             onClick={deleteEvent}
-            disabled={saving || !!generatingAi || DELETE_DISABLED_DURING_EVENTS_MIGRATION}
+            disabled={saving || !!generatingAi}
             className="w-full rounded-2xl bg-red-50 py-4 font-bold text-red-700 disabled:text-gray-300"
           >
             イベントを削除
           </button>
-          {DELETE_DISABLED_DURING_EVENTS_MIGRATION && (
-            <p className="mt-2 text-center text-sm text-gray-400">
-              削除は移行完了まで一時停止中です
-            </p>
-          )}
         </div>
       </div>
 
