@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-28（Phase 3-5b-2 完了）
+最終更新: 2026-06-28（Phase 4-a-1 完了）
 
 ## 完了フェーズ
 
@@ -130,6 +130,17 @@
     - AI別=確定47/的中16/率34%、モデル別=確定12/的中3/率25% で単位が揃い、
       的中が母数を超えない表示に。ランキングカード本体・全集計軸切替は従来どおり
 
+- [x] Phase 4-a-1: notifications の races read → events read 移行（公開面の races read 廃止 第1弾）
+  - 方針: 公開面の races read を優先廃止。読み取りソースを events に移し、集計対象は公式AIのみ
+  - 実装(app/notifications/page.tsx のみ):
+    - collection(db,"races") onSnapshot を削除 → events 本体 onSnapshot + collectionGroup("predictions") の2本購読(eventId fallback)
+    - normalizeRaceToEvent/LegacyRaceData の使用を外し normalizeEventDocToEvent に差し替え
+    - pendingResultEvents/finishedEvents/totalPredictions/カード分母を officialPreds (source!=="user" && !myAiId) 基準に絞り、My AI 予測しかないイベントは通知に出さない
+  - 触っていない(保全): my-ai/page.tsx・my-ai/[id]/page.tsx・race/[slug]・TopBar・admin
+  - LegacyRaceData/normalizeRaceToEvent は lib/events.ts に残置（My AI 互換層）
+  - commit: 510113a
+  - 本番検証: notifications 正常表示、分母が公式AIのみ(ホームと一致)、欠落なし
+
 ## 現在の Source of Truth
 
 writes:
@@ -142,11 +153,20 @@ writes:
 
 reads:
 
-- events: home / races一覧 / ranking / ai/[slug] / admin結果入力 / admin編集 / race/[slug]
-- races: notifications など未確認箇所のみ残り
+- events: home / races一覧 / ranking / ai/[slug] / admin結果入力 / admin編集 / race/[slug] / notifications
+- races: My AI 専用(app/my-ai/page.tsx・app/my-ai/[id]/page.tsx) と TopBar 通知バッジのみ残り
+  - My AI は MVP モック・将来作り直し前提につき events 移行しない（下記 My AI 方針参照）
+  - TopBar は Phase 4-a-2 で移行予定
 
-公開UIの予測表示・集計・コンセンサス・ランキングは officialPreds(source!=="user" && !myAiId)基準に統一済み(Phase 3-5b-1)
+公開UIの予測表示・集計・コンセンサス・ランキング・通知は officialPreds(source!=="user" && !myAiId)基準に統一済み(Phase 3-5b-1 / 4-a-1)
 My AI データ・/my-ai ページ・作成削除機能は保全(非表示のみ)
+
+### My AI 方針（誤着手防止）
+
+My AI データは MVP 時点ではモックであり、将来は利用者APIベースで作り直す前提。
+本格対応は MVP 後、サッカー / NFL などの展開後。
+そのため現時点では my-ai の events 移行は行わない。
+my-ai は races read のまま据え置き、LegacyRaceData / normalizeRaceToEvent は My AI 互換層として残置する。
 
 ## 次のフェーズ
 
@@ -156,9 +176,22 @@ Phase 3-5b-3 以降の候補:
 
 Phase 4: races 読み取りの完全廃止
 
-- LegacyRaceData / normalizeRaceToEvent 削除
-- deleteEvent の正式方式決定(races + events + events/{id}/predictions の完全削除)
-- 孤立データがあれば一括クリーンアップ
+- Phase 4-a-2: TopBar 通知バッジの races read → events 移行
+  - events の predictionCount は信頼できない(admin/edit の generatePrediction が predictionCount を更新しないため)
+  - collectionGroup("predictions") 併用が必要
+  - 全ページ共通コンポーネントで2本購読を載せる負荷を見ながら実装
+- Phase 4-c: deleteEvent 正式方式
+  - deleteDoc(races/{id}) + deleteDoc(events/{id}) + events/{id}/predictions 全件 batch.delete の3段階処理
+  - DELETE_DISABLED_DURING_EVENTS_MIGRATION フラグを外してボタン有効化
+  - 本番削除を伴うため独立セッション
+- Phase 4-d: races write 廃止 / orphan cleanup
+  - addDoc(races) / batch.update(races) を廃止、events のみに書く
+  - 本番DB件数照合(races件数 vs events件数)が前提
+  - races Firestore rules を read-only または全拒否に変更
+
+保留:
+- My AI / LegacyRaceData 削除 → MVP 後・将来のAPI連携実装時
+- aiModel / aiModelId バックフィル → Firestore 書き込みを伴う別フェーズ
 
 ## メモ
 
