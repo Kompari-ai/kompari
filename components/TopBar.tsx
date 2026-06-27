@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { collection, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 
 const menuItems = [
   {
@@ -44,14 +42,6 @@ const menuItems = [
   },
 ];
 
-type RaceDoc = {
-  predictions?: unknown[];
-  resultWinner?: string;
-  result?: {
-    winner?: string;
-  } | null;
-};
-
 function isActive(pathname: string, href: string) {
   if (href === "/") {
     return pathname === "/";
@@ -60,38 +50,11 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function hasResult(data: RaceDoc) {
-  return !!(data.resultWinner || data.result?.winner);
-}
-
-function hasPredictions(data: RaceDoc) {
-  return Array.isArray(data.predictions) && data.predictions.length > 0;
-}
-
 export function TopBar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
 
   const isAdminPage = pathname.startsWith("/admin");
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "races"), (snapshot) => {
-      let count = 0;
-
-      snapshot.docs.forEach((document) => {
-        const data = document.data() as RaceDoc;
-
-        if (hasPredictions(data) && !hasResult(data)) {
-          count += 1;
-        }
-      });
-
-      setPendingCount(count);
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   const adminLogout = () => {
     localStorage.removeItem("kompari-admin-unlocked");
@@ -134,12 +97,6 @@ export function TopBar() {
             aria-label="通知"
           >
             🔔
-
-            {pendingCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold leading-none text-white">
-                {pendingCount > 9 ? "9+" : pendingCount}
-              </span>
-            )}
           </Link>
         </div>
       </header>
