@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-28（Phase 4-d 完了）
+最終更新: 2026-06-29（Phase 5-b-1 完了）
 
 ## 完了フェーズ
 
@@ -266,6 +266,33 @@
     - 公開ページ（ホーム/race詳細/ランキング）正常
     - 全機能無傷
 
+- [x] Phase 5-b-1: ranking/stats の countable prediction 判定を isCountablePrediction() に集約
+  - commit: 7dadb62 refactor(stats): centralize countable prediction guard
+  - 背景: 結果判定ロジック調査で、ranking は Pattern A 動的計算・prediction.outcome は未使用・isMock===true で分母除外、と判明。isMock 未付与の旧データや mock 予測が miss 扱いで混入する理論上のリスクを確認したが、API保証(isMock と predictionSource は常にペア)・バックフィル仕様・本番数値照合の3証拠から「現時点の実害なし」と判定。よって予防的堅牢化として実施。
+  - 変更:
+    - lib/events.ts に isCountablePrediction(prediction) を追加（getResultWinner の直後）
+    - lib/stats.ts の集計ガード（aggregateByBrand / aggregateByModel）を helper 化
+    - app/ranking/page.tsx の buildRankings 集計ガードを helper 化
+  - helper の判定方針:
+    - isMock === true は除外
+    - predictionSource === "mock" は除外（多層防御。isMock の補助ガード）
+    - main 空は除外
+    - isMock missing / predictionSource missing だけでは除外しない（旧公式AIデータを落とさない）
+    - 将来 status が failed/skipped/omitted の除外はコメントで明示（status 未導入のため未実装）
+  - 維持:
+    - source filter（source!=="user" && !myAiId）は helper 外で維持
+    - isFinished / if(!winner)return を維持
+    - Pattern A 動的計算（pick===winner）を維持
+    - prediction.outcome 参照なし
+    - Firestore 書き込みなし
+  - 本番確認: ランキング数値が前回と完全一致（確定予測52・的中17・的中率32.7%、ChatGPT41.7% / DeepSeek41.7% / Gemini33.3% / Claude16.7% / Grok25%、順位）。予防的堅牢化成功。
+  - 対象外（今回触らない）:
+    - race詳細 / notifications / normalize の判定共通化（5-b-2 候補）
+    - stored outcome 書き戻し
+    - status 新規
+    - backfill
+    - Firestore操作
+
 ## 現在の Source of Truth
 
 writes:
@@ -328,8 +355,15 @@ Phase 4: races 読み取りの完全廃止
 races に残るのは read（My AI legacy）と delete（deleteEvent cleanup）のみ。
 events が全 write を受け、公開面は events 読みで完結。
 
+Phase 5: 集計堅牢化
+
+- [x] Phase 5-b-1: isCountablePrediction() 集約（commit 7dadb62、上記「完了フェーズ」参照）
+- 5-b-2（候補）: race詳細 / notifications / normalize の hit/miss 判定を共通 helper に寄せる。読み取り調査から開始する。
+
 保留:
 - My AI(将来作り直し) / LegacyRaceData削除 / aiModelバックフィル / TopBarバッジ復活
+- status 設計（候補）: failed / skipped / omitted を prediction.status として明示管理し、将来的にランキング分母から除外できるようにする。
+- stored outcome/settlement 永続化: 中長期では有効だが、MVP では ranking/UI の正本を Pattern A 動的計算に維持する。events.result.winner と prediction.outcome の二重管理によるズレを避けるため、学習DB開始時または post-MVP で再検討する（捨てたのではなく意図的に後送り）。
 
 改善候補:
 - firebase-tools 未セットアップのため Phase 4-d-5 の rules deploy は Firebase Console 手動だった。
