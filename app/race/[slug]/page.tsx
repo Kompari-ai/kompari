@@ -2,7 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
@@ -378,8 +378,6 @@ export default function RaceDetailPage({
   const [loaded, setLoaded] = useState(false);
   const [myAis, setMyAis] = useState<MyAi[]>([]);
   const [tab, setTab] = useState<Tab>("predictions");
-  const [selectedMyAiId, setSelectedMyAiId] = useState("");
-  const [joining, setJoining] = useState(false);
 
   useEffect(() => {
     let eventDocData: KompariEventDoc | null | undefined = undefined;
@@ -432,14 +430,10 @@ export default function RaceDetailPage({
       });
 
       setMyAis(list);
-
-      if (!selectedMyAiId && list.length > 0) {
-        setSelectedMyAiId(list[0].id);
-      }
     });
 
     return () => unsubscribe();
-  }, [selectedMyAiId]);
+  }, []);
 
   const candidates = useMemo(() => {
     if (!event) return [];
@@ -472,82 +466,6 @@ export default function RaceDetailPage({
 
     return map;
   }, [consensus]);
-
-  const selectedMyAi = useMemo(() => {
-    return myAis.find((myAi) => myAi.id === selectedMyAiId) || null;
-  }, [myAis, selectedMyAiId]);
-
-  const selectedMyAiAlreadyJoined = useMemo(() => {
-    if (!event || !selectedMyAi) return false;
-
-    return event.predictions.some((prediction) => {
-      if (prediction.myAiId === selectedMyAi.id) return true;
-      return prediction.ai === selectedMyAi.name;
-    });
-  }, [event, selectedMyAi]);
-
-  const joinMyAi = async () => {
-    if (!event) return;
-
-    if (!selectedMyAi) {
-      alert("参加させるMy AIを選んでください");
-      return;
-    }
-
-    if (candidates.length < 2) {
-      alert("候補が2つ以上必要です");
-      return;
-    }
-
-    if (selectedMyAiAlreadyJoined) {
-      alert("このMy AIはすでに参加しています");
-      return;
-    }
-
-    try {
-      setJoining(true);
-
-      const response = await fetch("/api/generate-prediction", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: event.title,
-          category: event.category,
-          aiName: selectedMyAi.name,
-          aiStyle: selectedMyAi.style,
-          aiDescription: selectedMyAi.description,
-          strengthCategory: selectedMyAi.strengthCategory,
-          candidates,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("My AI予測の生成に失敗しました");
-      }
-
-      const data = (await response.json()) as KompariPrediction;
-
-      const nextPrediction: KompariPrediction = {
-        ...data,
-        ai: selectedMyAi.name,
-        source: "user",
-        myAiId: selectedMyAi.id,
-      };
-
-      await updateDoc(doc(db, "races", slug), {
-        predictions: [...event.predictions, nextPrediction],
-      });
-
-      alert(`${selectedMyAi.name}を参加させました`);
-    } catch (error) {
-      console.error(error);
-      alert("My AIの参加に失敗しました");
-    } finally {
-      setJoining(false);
-    }
-  };
 
   if (!loaded) {
     return (
@@ -741,45 +659,6 @@ export default function RaceDetailPage({
             </div>
           )}
         </section>
-
-        {/* 将来対応: My AI参加機能 — Firestoreルール修正後に有効化 (see docs/AUDIT.md T-01)
-        <section className="mb-4 rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">My AIを参加させる</h2>
-            <Link href="/my-ai" className="text-xs font-extrabold text-blue-700">
-              作成する
-            </Link>
-          </div>
-          {myAis.length > 0 ? (
-            <div className="space-y-3">
-              <select
-                value={selectedMyAiId}
-                onChange={(e) => setSelectedMyAiId(e.target.value)}
-                className="w-full rounded-[12px] border border-[#E8ECF2] bg-white px-4 py-3 text-sm font-bold outline-none"
-              >
-                {myAis.map((myAi) => (
-                  <option key={myAi.id} value={myAi.id}>{myAi.name}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={joinMyAi}
-                disabled={joining || selectedMyAiAlreadyJoined}
-                className="w-full rounded-[12px] bg-blue-700 py-4 text-sm font-extrabold text-white disabled:bg-gray-300"
-              >
-                {joining ? "参加中..." : selectedMyAiAlreadyJoined ? "このMy AIは参加済み" : "このイベントに参加させる"}
-              </button>
-            </div>
-          ) : (
-            <div className="rounded-[12px] bg-gray-50 p-4 text-center">
-              <div className="text-sm font-bold text-gray-500">まだMy AIがありません</div>
-              <Link href="/my-ai" className="mt-3 block rounded-[12px] bg-blue-700 py-3 text-sm font-bold text-white">
-                My AIを作成する
-              </Link>
-            </div>
-          )}
-        </section>
-        */}
 
         {/* Tab switcher */}
         <section className="mb-4 flex bg-[#E7EBF2] rounded-[12px] p-[3px]">
