@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-28（Phase 4-c 完了）
+最終更新: 2026-06-28（Phase 4-d-2 完了）
 
 ## 完了フェーズ
 
@@ -178,15 +178,67 @@
     - /admin/results の件数が結果待ち3→2、総数14→13に減少
     - 他イベント無傷、新規孤立なし
 
+- [x] Phase 4-d-1: admin create の races 新規作成廃止（events 起点に変更）
+  - commit: eb973fe feat(admin): drop races write from event creation, generate id from events
+  - 対象: app/admin/page.tsx
+  - 内容:
+    - addDoc(collection(db, "races")) を廃止。races doc を作成しなくなった
+    - id 生成を doc(collection(db, "events")) 起点に変更。eventRef.id を使用
+    - events/{id} と events/{id}/predictions/* を writeBatch で atomic に作成（Phase 2b のベストエフォートから完全 atomic へ）
+    - races/{id} は作成されなくなった
+  - 本番検証:
+    - テストイベント(id: 4aOeWvsWOHb8Oq61CGpq)を作成
+    - events/{id} 作成・events/{id}/predictions/* 作成を Firestore Console で確認
+    - races/{id} が作成されないことを Firestore Console で確認
+    - /race/{id} の表示が正常であることを確認
+    - deleteEvent で削除。races が存在しないイベントでも deleteEvent が壊れないことを確認
+    - 検証後 DB は events/races 各13件に復帰
+
+- [x] Phase 4-d-2: admin edit/results の races update 廃止（deleteEvent の races delete は維持）
+  - commit: f106a05 feat(admin): drop races write from edit/results (keep deleteEvent races delete)
+  - 対象:
+    - app/admin/edit/[id]/page.tsx
+    - app/admin/results/page.tsx
+  - 内容:
+    - saveEvent の batch.update(races) 削除（resultWinner/result/meta を races に書くのを廃止）
+    - generatePrediction の batch.update(races) 削除（races.predictions[] 配列更新を廃止）
+    - generatePrediction の preservedPredictions 変数を削除（races.predictions 配列更新専用につき不要）
+    - saveResult の batch.update(races) 削除（races 側 resultWinner/result を廃止）
+    - deleteEvent の batch.delete(doc(db, "races", id)) は意図的に維持
+  - ⚠️ deleteEvent の batch.delete(doc(db, "races", id)) は意図的に維持する。削除しない。
+    理由:
+    これは write(set/update) ではなく delete。
+    races doc を削除するために必要な Phase 4-c の正式方式。
+    「races write 全廃」と「races delete 維持」は両立する。
+    4-d-5 で firestore.rules を閉じる際も、races の create/update は拒否するが、
+    delete は isAdmin で残す必要がある。deleteEvent が legacy races doc を削除するため。
+  - 機械確認:
+    - races set/update/addDoc/setDoc = 0件（admin/edit・admin/results 両ファイル）
+    - deleteEvent races delete = 1件（app/admin/edit/[id]/page.tsx L352）
+    - preservedPredictions = 0件
+  - 本番検証:
+    - saveEvent: 阪神vs巨人で venue/startsAt 編集 → events のみ更新、races は未更新
+    - saveResult: 皐月賞で結果「ロブチェン」入力 → events.result.winner のみ更新、races は未更新
+    - generatePrediction: 阪神vs巨人で Grok 生成 → events/{id}/predictions に Grok 追加、他AI predictions 無傷、races.predictions は未更新
+    - 公開UIは events 読みで正常表示
+  - 判定:
+    - 4-d-1 / 4-d-2 完了
+    - admin create/edit/results/generatePrediction の races write は廃止済み
+    - 残る races 操作は deleteEvent の batch.delete(races/{id}) のみ
+    - deleteEvent の races delete は意図的に維持
+    - DB は検証後も整合状態
+
 ## 現在の Source of Truth
 
 writes:
 
-- races: 全書き込み（Phase 4-d で廃止予定）
-- events: 二重化済み = 作成(2b) + 結果入力(3-4a) + 編集メタ(3-4b-1) + 予測再生成(3-4b-2)
-  - deleteEvent: races のみ deleteDoc から、events/{id}/predictions/* + events/{id} + races/{id} の writeBatch 削除へ移行済み(Phase 4-c)
+- races: admin write 廃止済み（Phase 4-d-1 / 4-d-2 完了）。残る操作は deleteEvent の batch.delete(races/{id}) のみ（意図的維持）
+- events: 全 admin write が events のみに集約済み
+  - 作成(4-d-1 atomic writeBatch) + 結果入力(3-4a→4-d-2) + 編集メタ(3-4b-1→4-d-2) + 予測再生成(3-4b-2→4-d-2)
+  - deleteEvent: events/{id}/predictions/* + events/{id} + races/{id} の writeBatch アトミック削除（Phase 4-c）
+    - races/{id} の delete は legacy races doc を消すために維持（write ではなく delete）
   - Phase 3-4c の削除一時停止フラグは解除済み
-  - joinMyAi: races のみ updateDoc だが、現在 UI から呼ばれない死んだ導線。Phase 4-d で整理
+  - joinMyAi: races のみ updateDoc だが、現在 UI から呼ばれない死んだ導線。Phase 4-d-3 で整理
 
 reads:
 
@@ -220,11 +272,14 @@ Phase 3-5b-3 以降の候補:
 
 Phase 4: races 読み取りの完全廃止
 
-- Phase 4-d: races write 廃止(admin create/edit/results・race[slug] My AI参加) + orphan cleanup(votes含む)
-  - 本番DB件数照合(events/races 件数一致・孤立有無)が前提
-  - addDoc(races) / batch.update(races) を廃止、events のみに書く
-  - races Firestore rules を read-only または全拒否に変更
-  - votes orphan cleanup もここで扱う
+- [x] Phase 4-d-1 / 4-d-2: races write 廃止完了（上記「完了フェーズ」参照）
+- Phase 4-d-3: app/race/[slug]/page.tsx の joinMyAi 死んだ導線整理
+  - My AI legacy ページ(my-ai/page.tsx・my-ai/[id]/page.tsx)の races read はまだ残す
+- Phase 4-d-4: votes orphan cleanup
+- Phase 4-d-5: firestore.rules で races の create/update を拒否
+  - races の read は My AI 用に残す
+  - races の delete は isAdmin で残す（deleteEvent が legacy races doc を削除するため）
+- Phase 4-d-6: 必要に応じて最終 docs 整理
 
 保留:
 - My AI(将来作り直し) / LegacyRaceData削除 / aiModelバックフィル / TopBarバッジ復活
