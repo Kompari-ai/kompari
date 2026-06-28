@@ -204,15 +204,6 @@ export default function AdminEditPage({
       const trimmedResultWinner = resultWinner.trim();
       const resultValue = trimmedResultWinner ? { winner: trimmedResultWinner } : null;
       const batch = writeBatch(db);
-      batch.update(doc(db, "races", id), {
-        category,
-        title: trimmedTitle,
-        venue: trimmedVenue,
-        startsAt: startsAt || null,
-        candidates,
-        resultWinner: trimmedResultWinner,
-        result: resultValue,
-      });
       batch.update(doc(db, "events", id), {
         category,
         title: trimmedTitle,
@@ -274,22 +265,8 @@ export default function AdminEditPage({
         source: "official",
       };
 
-      const preservedPredictions = currentPredictions.filter(
-        (prediction) => !isOfficialPrediction(prediction, aiName)
-      );
-
       const predictionId = makePredictionId(nextPrediction);
       const batch = writeBatch(db);
-
-      // races: maintain existing full update (meta + predictions array)
-      batch.update(doc(db, "races", id), {
-        category,
-        title: title.trim(),
-        venue: venue.trim(),
-        startsAt: startsAt || null,
-        candidates,
-        predictions: [...preservedPredictions, nextPrediction],
-      });
 
       // events predictions subcollection: full replace (set, not update) to clean stale fields
       const predDoc: Record<string, unknown> = {

@@ -147,10 +147,6 @@ export default function AdminResultsPage() {
       const trimmedWinner = winner.trim();
       const resultValue = trimmedWinner ? { winner: trimmedWinner } : null;
       const batch = writeBatch(db);
-      batch.update(doc(db, "races", event.id), {
-        resultWinner: trimmedWinner,
-        result: resultValue,
-      });
       batch.update(doc(db, "events", event.id), {
         result: resultValue,
         updatedAt: serverTimestamp(),
