@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-28（Phase 4-d-2 完了）
+最終更新: 2026-06-28（Phase 4-d 完了）
 
 ## 完了フェーズ
 
@@ -228,17 +228,60 @@
     - deleteEvent の races delete は意図的に維持
     - DB は検証後も整合状態
 
+- [x] Phase 4-d-3: race/[slug] の joinMyAi 死んだ導線削除・races write 完全消滅
+  - commit: f0b4c1d refactor(race): remove dead joinMyAi path and races write from race detail
+  - 対象: app/race/[slug]/page.tsx のみ（-123/+2）
+  - 内容:
+    - joinMyAi 関数本体（updateDoc(doc(db,"races",slug)) 含む）を削除
+    - selectedMyAiId / joining state を削除
+    - selectedMyAi / selectedMyAiAlreadyJoined useMemo を削除
+    - myAis useEffect 内の selectedMyAiId 参照・setSelectedMyAiId 呼び出しを削除、dep [] に修正
+    - updateDoc import を削除
+    - コメントアウト済み My AI 参加 UI ブロック（37行）を削除
+    - myAis state・onSnapshot(collection(db,"myAis"))・myAis prop・isMyAiPrediction 等の表示ロジックは維持
+    - my-ai/page.tsx・my-ai/[id]/page.tsx の races read は据え置き（My AI legacy 層）
+  - 効果: race/[slug] から races への write（updateDoc）が消滅。コード全体で races write がゼロに
+
+- [x] Phase 4-d-4: votes orphan cleanup 確認
+  - 削除済みイベント 2件の orphan vote を votes コレクションで確認
+    - YKrijBuDCwSqEVy5zKFt（東京都知事選、Phase 4-c で削除済み）
+    - 4aOeWvsWOHb8Oq61CGpq（テストイベント、Phase 4-d-1 検証後削除済み）
+  - 調査結果: 両イベントとも votes コレクションに orphan doc なし
+  - 削除実施なし。votes は表示被害なし。コード変更なし・commit なし
+
+- [x] Phase 4-d-5: firestore.rules の races ブロックを create/update 拒否に変更
+  - commit: fecd5ae feat(rules): deny races create/update, keep read and admin delete
+  - 対象: firestore.rules（races ブロックのみ）
+  - 変更内容:
+    - before: `allow create, update, delete: if isAdmin();`
+    - after:
+      - `allow read: if true;`（維持・My AI legacy read 用）
+      - `allow create, update: if false;`（拒否・races は write 先ではない）
+      - `allow delete: if isAdmin();`（維持・deleteEvent の races doc cleanup 用）
+  - events / votes / myAis / predictions / isAdmin 関数は無変更
+  - deploy: Firebase Console から手動反映済み（firebase-tools 未セットアップのため Console paste）
+    - Git の firestore.rules と本番 Console の内容が一致していることを確認済み
+  - 本番確認:
+    - /my-ai・/my-ai/[id] 正常表示（races read 維持）
+    - 公開ページ（ホーム/race詳細/ランキング）正常
+    - 全機能無傷
+
 ## 現在の Source of Truth
 
 writes:
 
-- races: admin write 廃止済み（Phase 4-d-1 / 4-d-2 完了）。残る操作は deleteEvent の batch.delete(races/{id}) のみ（意図的維持）
+- races: admin write 全廃（4-d-1/4-d-2）+ race/[slug] joinMyAi 廃止（4-d-3）。rules でも create/update 拒否（4-d-5）。
+  残る races 操作は deleteEvent の batch.delete(races/{id}) のみ（コード・rules とも意図的維持）
 - events: 全 admin write が events のみに集約済み
   - 作成(4-d-1 atomic writeBatch) + 結果入力(3-4a→4-d-2) + 編集メタ(3-4b-1→4-d-2) + 予測再生成(3-4b-2→4-d-2)
   - deleteEvent: events/{id}/predictions/* + events/{id} + races/{id} の writeBatch アトミック削除（Phase 4-c）
     - races/{id} の delete は legacy races doc を消すために維持（write ではなく delete）
   - Phase 3-4c の削除一時停止フラグは解除済み
-  - joinMyAi: races のみ updateDoc だが、現在 UI から呼ばれない死んだ導線。Phase 4-d-3 で整理
+
+rules（races ブロック現状）:
+- `allow read: if true;`（My AI legacy read 用に維持）
+- `allow create, update: if false;`（4-d-5 で拒否。コードからの write がゼロのため）
+- `allow delete: if isAdmin();`（deleteEvent の races doc cleanup 用に維持）
 
 reads:
 
@@ -273,16 +316,25 @@ Phase 3-5b-3 以降の候補:
 Phase 4: races 読み取りの完全廃止
 
 - [x] Phase 4-d-1 / 4-d-2: races write 廃止完了（上記「完了フェーズ」参照）
-- Phase 4-d-3: app/race/[slug]/page.tsx の joinMyAi 死んだ導線整理
-  - My AI legacy ページ(my-ai/page.tsx・my-ai/[id]/page.tsx)の races read はまだ残す
-- Phase 4-d-4: votes orphan cleanup
-- Phase 4-d-5: firestore.rules で races の create/update を拒否
+- [x] Phase 4-d-3: race/[slug] joinMyAi 死んだ導線削除・races write 消滅（commit f0b4c1d）
+  - My AI legacy ページ(my-ai/page.tsx・my-ai/[id]/page.tsx)の races read は据え置き
+- [x] Phase 4-d-4: votes orphan cleanup 確認（orphan なし・削除なし）
+- [x] Phase 4-d-5: firestore.rules で races の create/update を拒否（commit fecd5ae）
   - races の read は My AI 用に残す
   - races の delete は isAdmin で残す（deleteEvent が legacy races doc を削除するため）
-- Phase 4-d-6: 必要に応じて最終 docs 整理
+- [x] Phase 4-d-6: 最終 docs 整理（本 commit）
+
+**Phase 4-d 完了**: races collection への新規 write は全廃（コード + rules 両面）。
+races に残るのは read（My AI legacy）と delete（deleteEvent cleanup）のみ。
+events が全 write を受け、公開面は events 読みで完結。
 
 保留:
 - My AI(将来作り直し) / LegacyRaceData削除 / aiModelバックフィル / TopBarバッジ復活
+
+改善候補:
+- firebase-tools 未セットアップのため Phase 4-d-5 の rules deploy は Firebase Console 手動だった。
+  将来の rules 変更のため `npm install -g firebase-tools` + `firebase login` + `firebase use <project-id>` を整えると、
+  Git 正本のまま `firebase deploy --only firestore:rules` で反映でき、Console 手動反映のズレリスクが消える
 
 ## メモ
 
