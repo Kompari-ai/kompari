@@ -15,6 +15,7 @@ import {
 import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   getResultWinner,
+  isCountablePrediction,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -93,10 +94,9 @@ function buildRankings(events: KompariEvent[]) {
     if (!winner) return;
 
     event.predictions.forEach((prediction) => {
-      const pick = prediction.main?.trim();
-      if (!pick) return;
-      if (prediction.isMock === true) return;
+      if (!isCountablePrediction(prediction)) return;
 
+      const pick = prediction.main.trim();
       const source = getPredictionSource(prediction);
       const key = getPredictionKey(prediction);
 

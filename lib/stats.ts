@@ -1,5 +1,5 @@
 import type { KompariEvent, KompariPrediction } from "@/lib/events";
-import { getResultWinner } from "@/lib/events";
+import { getResultWinner, isCountablePrediction } from "@/lib/events";
 import type { EventCategory } from "@/lib/categories";
 
 export type StatsSourceFilter = "official" | "user" | "all";
@@ -137,11 +137,9 @@ export function aggregateByBrand(events: KompariEvent[], options?: StatsOptions)
 
     for (const prediction of event.predictions) {
       if (sourceFilter !== "all" && getPredictionSource(prediction) !== sourceFilter) continue;
+      if (!isCountablePrediction(prediction)) continue;
 
-      const pick = prediction.main?.trim();
-      if (!pick) continue;
-      if (prediction.isMock === true) continue;
-
+      const pick = prediction.main.trim();
       const key = getBrandKey(prediction);
 
       if (!map.has(key)) {
@@ -199,11 +197,9 @@ export function aggregateByModel(events: KompariEvent[], options?: StatsOptions)
 
     for (const prediction of event.predictions) {
       if (sourceFilter !== "all" && getPredictionSource(prediction) !== sourceFilter) continue;
+      if (!isCountablePrediction(prediction)) continue;
 
-      const pick = prediction.main?.trim();
-      if (!pick) continue;
-      if (prediction.isMock === true) continue;
-
+      const pick = prediction.main.trim();
       const key = getModelKey(prediction);
       if (key === null) continue; // aiModelId/aiModel なし → モデル別集計から除外
 

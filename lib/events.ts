@@ -215,6 +215,22 @@ export function getResultWinner(event: KompariEvent): string {
   return (event.result?.winner || event.resultWinner || "").trim();
 }
 
+// ランキング集計の分母に入れてよい予測かを判定する。
+// 明示的に mock と分かるものだけ除外する。
+// isMock/predictionSource が missing(undefined)の旧公式AIデータは除外しない。
+// source filter（My AI除外）は別軸なので、この helper には含めない。
+export function isCountablePrediction(prediction: KompariPrediction): boolean {
+  if (prediction.isMock === true) return false;
+  if (prediction.predictionSource === "mock") return false;
+
+  const pick = (prediction.main || "").trim();
+  if (!pick) return false;
+
+  // 将来: status が "failed" | "skipped" | "omitted" の場合も除外する。
+  // 現時点では status 未導入のため未実装。
+  return true;
+}
+
 export function getConsensusChip(
   predictions: KompariPrediction[]
 ): { type: "unan" | "lean" | "split"; label: string } | null {
