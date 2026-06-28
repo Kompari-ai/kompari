@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { addDoc, collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
@@ -130,60 +130,44 @@ export default function AdminPage() {
           ? predictions
           : await createPredictionsBeforeSave();
 
-      const docRef = await addDoc(collection(db, "races"), {
+      const eventRef = doc(collection(db, "events"));
+      const eventId = eventRef.id;
+
+      const batch = writeBatch(db);
+
+      // events 本体
+      batch.set(eventRef, {
+        slug: eventId,
         category,
         title: title.trim(),
+        candidates,
         venue: venue.trim(),
         startsAt: startsAt || null,
-        candidates,
-        resultWinner: resultWinner || "",
         result: resultWinner ? { winner: resultWinner } : null,
-        predictions: finalPredictions,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        predictionCount: finalPredictions.length,
       });
 
-      // events への二重書き(ベストエフォート。失敗してもracesは成功扱い)
-      try {
-        const batch = writeBatch(db);
-        const eventId = docRef.id;  // races と同一ID
-
-        // events 本体
-        batch.set(doc(db, "events", eventId), {
-          slug: eventId,
-          category,
-          title: title.trim(),
-          candidates,
-          venue: venue.trim(),
-          startsAt: startsAt || null,
-          result: resultWinner ? { winner: resultWinner } : null,
-          createdAt: serverTimestamp(),
+      // predictions サブコレクション
+      for (const pred of finalPredictions) {
+        const rawId = pred.myAiId || pred.ai || "unknown";
+        const predictionId = String(rawId).replace(/\//g, "_").trim() || "unknown";
+        batch.set(doc(db, "events", eventId, "predictions", predictionId), {
+          ...pred,                       // isMock/predictionSource/ai/main/aiModel等を流用
+          eventId,
+          predictionId,
+          outcome: "pending",            // 作成時は常に pending
+          predictedAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
-          predictionCount: finalPredictions.length,
+          // createdAt は入れない(predictedAtと重複するため)
         });
-
-        // predictions サブコレクション
-        for (const pred of finalPredictions) {
-          const rawId = pred.myAiId || pred.ai || "unknown";
-          const predictionId = String(rawId).replace(/\//g, "_").trim() || "unknown";
-          batch.set(doc(db, "events", eventId, "predictions", predictionId), {
-            ...pred,                       // isMock/predictionSource/ai/main/aiModel等を流用
-            eventId,
-            predictionId,
-            outcome: "pending",            // 作成時は常に pending
-            predictedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            // createdAt は入れない(predictedAtと重複するため)
-          });
-        }
-
-        await batch.commit();
-      } catch (e) {
-        console.error("[Phase2b] events dual-write failed (races OK):", e);
-        // ベストエフォート: ユーザーにはエラーを出さない。races は成功している
       }
 
+      await batch.commit();
+
       alert("イベントを作成しました");
-      router.push(`/race/${docRef.id}`);
+      router.push(`/race/${eventId}`);
     } catch (error) {
       console.error(error);
       alert(
