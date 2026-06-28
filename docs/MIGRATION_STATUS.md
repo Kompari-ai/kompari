@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-28（Phase 4-a-2 完了）
+最終更新: 2026-06-28（Phase 4-c 完了）
 
 ## 完了フェーズ
 
@@ -155,15 +155,38 @@
   - 本番検証: 全ページでバッジ消失・🔔残存・通知導線2箇所生存・崩れなし
   - 結果: TopBar の Firestore read がゼロ。公開面の races read が完全消滅
 
+- [x] Phase 4-c: deleteEvent 正式方式（events/predictions/races のアトミック削除）
+  - 方針: 一時無効化を解除し、events/{id}/predictions/* + events/{id} + races/{id} を writeBatch でアトミック削除
+  - 実装(app/admin/edit/[id]/page.tsx のみ):
+    - getDocs(events/{id}/predictions) で件数取得
+    - predictionsSnapshot.size > 450 の安全ガード
+    - confirm に「AI予測 N 件」を動的表示
+    - writeBatch で predictions / events / races を delete
+    - DELETE_DISABLED_DURING_EVENTS_MIGRATION フラグと一時停止テキストを削除
+    - getDocs を import 追加、未使用化した deleteDoc を削除
+  - votes は意図的に削除対象外
+    - orphan は表示被害なしと判断し、cleanup フェーズに回す
+    - コードコメントにも明記
+  - 実装上の教訓:
+    - 初回の部分置換で古いコード（冒頭confirm / await deleteDoc断片 / 二重catch / 二重setSaving）が混在しかけたため、deleteEvent 関数を丸ごと確定版に置換して一本化した
+  - commit: e8c18a8
+  - 本番検証:
+    - 東京都知事選(id: YKrijBuDCwSqEVy5zKFt)を削除
+    - confirm に「AI予測 4 件」を表示
+    - Firebase Console で races/{id} と events/{id} の消滅を確認
+    - events/{id}/predictions/* は writeBatch の delete 対象に含め、batch commit 成功を確認
+    - /admin/results の件数が結果待ち3→2、総数14→13に減少
+    - 他イベント無傷、新規孤立なし
+
 ## 現在の Source of Truth
 
 writes:
 
-- races: 全書き込み
+- races: 全書き込み（Phase 4-d で廃止予定）
 - events: 二重化済み = 作成(2b) + 結果入力(3-4a) + 編集メタ(3-4b-1) + 予測再生成(3-4b-2)
-  - deleteEvent: races/{id} のみ deleteDoc。正式な削除方式は Phase 4 で扱う
-  - admin/edit の削除導線は Phase 3-4c で一時無効化済み(DELETE_DISABLED_DURING_EVENTS_MIGRATION)
-  - joinMyAi: races のみ updateDoc だが、現在 UI から呼ばれない死んだ導線。Phase 3-5b 以降で整理
+  - deleteEvent: races のみ deleteDoc から、events/{id}/predictions/* + events/{id} + races/{id} の writeBatch 削除へ移行済み(Phase 4-c)
+  - Phase 3-4c の削除一時停止フラグは解除済み
+  - joinMyAi: races のみ updateDoc だが、現在 UI から呼ばれない死んだ導線。Phase 4-d で整理
 
 reads:
 
@@ -197,19 +220,14 @@ Phase 3-5b-3 以降の候補:
 
 Phase 4: races 読み取りの完全廃止
 
-- Phase 4-c: deleteEvent 正式方式
-  - deleteDoc(races/{id}) + deleteDoc(events/{id}) + events/{id}/predictions 全件 batch.delete の3段階処理
-  - DELETE_DISABLED_DURING_EVENTS_MIGRATION フラグを外してボタン有効化
-  - 本番削除を伴うため独立セッション
-- Phase 4-d: races write 廃止 / orphan cleanup
+- Phase 4-d: races write 廃止(admin create/edit/results・race[slug] My AI参加) + orphan cleanup(votes含む)
+  - 本番DB件数照合(events/races 件数一致・孤立有無)が前提
   - addDoc(races) / batch.update(races) を廃止、events のみに書く
-  - 本番DB件数照合(races件数 vs events件数)が前提
   - races Firestore rules を read-only または全拒否に変更
+  - votes orphan cleanup もここで扱う
 
 保留:
-- My AI / LegacyRaceData 削除 → MVP 後・将来のAPI連携実装時
-- aiModel / aiModelId バックフィル → Firestore 書き込みを伴う別フェーズ
-- TopBar バッジ復活 → events に信頼できる集計フィールドを持たせてから（上記「将来復活の展望」参照）
+- My AI(将来作り直し) / LegacyRaceData削除 / aiModelバックフィル / TopBarバッジ復活
 
 ## メモ
 
@@ -225,3 +243,5 @@ Phase 4: races 読み取りの完全廃止
   - lib/hooks/useEvents への切り出しは Phase 3-3 以降で検討する
 - ai/[slug] カテゴリ別成績で「競馬」が2行に分裂して表示される箇所あり(表記揺れ起因の可能性)
   - events読み/races読みで同じ表示のため移行とは無関係。ダミーデータ/表記揺れ cleanup の候補として記録
+- votes: Phase 4-c では削除対象外。イベント削除後 orphan になりうるため、Phase 4-d cleanup で扱う
+- テストレース(id: lm8bFnPWFM6DGvfQMsOX) は events/races に現存。将来の削除テストまたは cleanup 候補として記録
