@@ -8,6 +8,7 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
+  getPredictionStatus,
   getResultWinner,
   normalizeEventDocToEvent,
   type KompariEvent,
@@ -151,8 +152,9 @@ function buildStats(events: KompariEvent[], aiName: string): AiStats {
     if (!prediction) return;
 
     const resultWinner = getResultWinner(event);
-    const isFinished = !!resultWinner;
-    const hit = isFinished ? prediction.main === resultWinner : null;
+    const status = getPredictionStatus(prediction, resultWinner);
+    const isFinished = status !== "pending";
+    const hit = isFinished ? status === "hit" : null;
 
     stats.total += 1;
 

@@ -231,6 +231,27 @@ export function isCountablePrediction(prediction: KompariPrediction): boolean {
   return true;
 }
 
+export type PredictionStatus = "hit" | "miss" | "pending";
+
+// 表示用の3値判定。
+// 結果未確定なら pending、結果確定済みなら hit / miss を返す。
+// Pattern A 動的計算を維持する。
+// prediction.main と resultWinner は保存時点で trim 済みだが、
+// helper 単体の安全性のため両側 trim で対称にする。
+// mock / main空 の除外は行わない。
+// ranking 分母用の isCountablePrediction() とは別役割。
+export function getPredictionStatus(
+  prediction: KompariPrediction,
+  resultWinner: string
+): PredictionStatus {
+  const pick = (prediction.main || "").trim();
+  const winner = (resultWinner || "").trim();
+
+  if (!winner) return "pending";
+  if (pick === winner) return "hit";
+  return "miss";
+}
+
 export function getConsensusChip(
   predictions: KompariPrediction[]
 ): { type: "unan" | "lean" | "split"; label: string } | null {

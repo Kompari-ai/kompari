@@ -12,6 +12,7 @@ import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   formatStartsAt,
   getConsensusChip,
+  getPredictionStatus,
   getResultWinner,
   normalizeEventDocToEvent,
   type KompariEvent,
@@ -110,11 +111,13 @@ function getPredictionResult(
   prediction: KompariPrediction,
   resultWinner: string
 ) {
-  if (!resultWinner) {
+  const status = getPredictionStatus(prediction, resultWinner);
+
+  if (status === "pending") {
     return { label: "判定待ち", className: "bg-blue-50 text-blue-700" };
   }
 
-  if (prediction.main === resultWinner) {
+  if (status === "hit") {
     return { label: "的中", className: "bg-green-50 text-green-700" };
   }
 

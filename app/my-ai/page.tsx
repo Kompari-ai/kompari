@@ -21,6 +21,7 @@ import {
   getCategoryLabel,
 } from "@/lib/categories";
 import {
+  getPredictionStatus,
   getResultWinner,
   normalizeRaceToEvent,
   type KompariEvent,
@@ -72,17 +73,15 @@ function buildMyAiStats(events: KompariEvent[], myAi: MyAi): MyAiStats {
     if (!prediction) return;
 
     const resultWinner = getResultWinner(event);
+    const status = getPredictionStatus(prediction, resultWinner);
 
     stats.total += 1;
 
-    if (resultWinner) {
-      stats.finished += 1;
-
-      if (prediction.main === resultWinner) {
-        stats.hit += 1;
-      }
-    } else {
+    if (status === "pending") {
       stats.pending += 1;
+    } else {
+      stats.finished += 1;
+      if (status === "hit") stats.hit += 1;
     }
   });
 
