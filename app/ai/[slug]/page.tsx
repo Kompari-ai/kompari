@@ -10,6 +10,7 @@ import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
   getPredictionStatus,
   getResultWinner,
+  isCountablePrediction,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -150,6 +151,7 @@ function buildStats(events: KompariEvent[], aiName: string): AiStats {
     );
 
     if (!prediction) return;
+    if (!isCountablePrediction(prediction)) return;
 
     const resultWinner = getResultWinner(event);
     const status = getPredictionStatus(prediction, resultWinner);
