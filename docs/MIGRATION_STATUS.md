@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-29（Phase 5-b-1 完了）
+最終更新: 2026-06-29（Phase 5-b-2 完了）
 
 ## 完了フェーズ
 
@@ -293,6 +293,34 @@
     - backfill
     - Firestore操作
 
+- [x] Phase 5-b-2: 表示系 hit/miss/pending 判定を getPredictionStatus() に集約
+  - commit: 4674c05 refactor(display): centralize hit/miss/pending judgment in getPredictionStatus
+  - 背景: 表示系の hit/miss/pending 判定が race詳細/ai/my-ai の4箇所で別々に書かれていた
+    （判定ロジックは全箇所同一、文言のみ画面ごとに差異）。判定ロジックを共通 helper に集約し、
+    散在を解消。文言・mock扱いは各画面従来どおり維持。
+  - 実装:
+    - lib/events.ts に getPredictionStatus(prediction, resultWinner) を追加（isCountablePrediction の直後）
+    - 両側 trim（pick も winner も trim）/ 3値（"hit"|"miss"|"pending"）
+    - mock 除外なし / prediction.outcome 参照なし（Pattern A 動的計算のみ）
+    - 適用: race詳細(getPredictionResult ラッパー内) / ai/[slug](buildStats) /
+      my-ai/[id](buildStats) / my-ai/page(buildMyAiStats)
+    - ai/[slug]・my-ai/[id] は hit:boolean|null 構造を維持するため
+      `status === "pending" ? null : status === "hit"` の変換ブリッジで helper 化（集計本体は不変）
+  - 役割分離: isCountablePrediction()=ranking 分母用(boolean) / getPredictionStatus()=表示用(3値)。混ぜない。
+  - 維持（文言は各画面従来どおり・統一しない）:
+    - ai/[slug] は「予測中 / 的中 / 不的中」のまま
+    - race詳細・my-ai は「判定待ち / 的中 / 外れ」のまま
+    - normalizeEventDocToEvent / normalizeRaceToEvent 変更なし
+    - notifications 変更なし / stored outcome なし / Firestore 書き込みなし / mock 表示変更なし
+  - 本番確認（4画面・表示が従来どおり）:
+    - race詳細（ベルギーVSエジプト）: 5公式AI全員「外れ」表示 正常
+    - ai/[slug]（ChatGPT）: 的中率41.7%・的中5・予測13・確定12、文言「予測中/的中/不的中」維持
+    - my-ai一覧: 作成AI3・予測4・的中1、数値維持
+    - my-ai/[id]（King Ai）: 的中率50%・的中1・予測2、文言「判定待ち/外れ」維持
+  - trim 統一の安全性: main は生成パイプライン（admin create の .trim() / parsePredictionOutput の
+    pickCandidate exact match）で常に trim 済み、winner も saveResult/getResultWinner で trim 済み。
+    両側 trim 統一で表示変化リスクゼロ（事前調査で確認）。
+
 ## 現在の Source of Truth
 
 writes:
@@ -358,10 +386,12 @@ events が全 write を受け、公開面は events 読みで完結。
 Phase 5: 集計堅牢化
 
 - [x] Phase 5-b-1: isCountablePrediction() 集約（commit 7dadb62、上記「完了フェーズ」参照）
-- 5-b-2（候補）: race詳細 / notifications / normalize の hit/miss 判定を共通 helper に寄せる。読み取り調査から開始する。
+- [x] Phase 5-b-2: getPredictionStatus() 集約（commit 4674c05、上記「完了フェーズ」参照）
+- 5-b-3（候補）: mock 予測の表示扱い（現状は結果確定済みなら「外れ」表示。「判定不可/未回答」化）
 
 保留:
 - My AI(将来作り直し) / LegacyRaceData削除 / aiModelバックフィル / TopBarバッジ復活
+- 文言統一（候補）: 「予測中 vs 判定待ち」「不的中 vs 外れ」= UI方針の別決定事項。判定ロジックは 5-b-2 で共通化済み。
 - status 設計（候補）: failed / skipped / omitted を prediction.status として明示管理し、将来的にランキング分母から除外できるようにする。
 - stored outcome/settlement 永続化: 中長期では有効だが、MVP では ranking/UI の正本を Pattern A 動的計算に維持する。events.result.winner と prediction.outcome の二重管理によるズレを避けるため、学習DB開始時または post-MVP で再検討する（捨てたのではなく意図的に後送り）。
 
