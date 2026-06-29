@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-29（Phase 5-b-3 完了）
+最終更新: 2026-06-30（公式AIリスト正本化 完了）
 
 ## 完了フェーズ
 
@@ -376,6 +376,43 @@
     → 使う側が無い型を先に入れるのは over-engineering。
       使う時に型と実装を同時に入れる方針（5-b-1 での outcome 後送りと同じ判断軸）。
 
+- [x] 公式AIリスト正本化: client-safe official AI names source へ一元化
+  - commit: 2960c96 refactor(ai): centralize official AI names in lib/ai/official-ai.ts
+  - 目的:
+    - admin create / edit regenerate / ranking / stats に散らばっていた公式AI名リテラル重複を解消
+    - 将来のAI追加・削除時のズレ事故を防ぐ
+    - omitted 検出設計の前提となる「本来いるべき公式AI一覧」を明確化
+  - 実装:
+    - `lib/ai/official-ai.ts` を新規作成
+    - `OFFICIAL_AI_NAMES` を client-safe な公式AI名・順序の正本として定義
+    - 順序は `ChatGPT → Claude → Gemini → DeepSeek → Grok`
+    - `OfficialAiName` 型を `OFFICIAL_AI_NAMES` から導出
+    - `isOfficialAiName()` を公式AI判定 helper として追加
+    - `OFFICIAL_AI_NAME_SET` は内部実装として非 export
+  - 置換:
+    - `app/admin/page.tsx`: 公式AI生成ループを `OFFICIAL_AI_NAMES` に置換
+    - `app/admin/edit/[id]/page.tsx`: 全AI再生成ループと再生成ボタン表示を `OFFICIAL_AI_NAMES` に置換
+    - `app/ranking/page.tsx`: ローカル `new Set([...])` を削除し `isOfficialAiName()` に置換
+    - `lib/stats.ts`: ローカル `new Set([...])` を削除し `isOfficialAiName()` に置換
+  - client/server 境界:
+    - `lib/ai/ai-config.ts` は server/API 用設定であり、client component から import しない
+    - `ai-config.ts` には `process.env` / API key env名 / provider / baseUrl / modelId が含まれるため、client-safe な `official-ai.ts` に分離
+    - `official-ai.ts` は `process.env` / API key / provider / baseUrl / Node専用 import を含まない純粋な定数ファイル
+  - 挙動不変:
+    - 公式AI名の表記・順序は変更なし
+    - admin create の生成順は変更なし
+    - admin edit の再生成ボタン順は変更なし
+    - ranking / stats の公式AI判定対象は変更なし
+  - 本番確認:
+    - `/ranking`: 確定52 / 的中17 / 的中率32.7% が前回と一致。ChatGPT 41.7% / DeepSeek 41.7% / Gemini 33.3% / Claude 16.7% / Grok 25% が前回と一致
+    - `/admin`: イベント作成画面・AI予測生成UIが正常
+    - `/admin/edit`: 再生成ボタン順が `ChatGPT → Claude → Gemini → DeepSeek → Grok`、AI予測数5件が正常
+    - `/ai/[slug]`: ChatGPT詳細の的中率41.7% / 的中5 / 予測13 / 確定12 が正常
+  - 設計上の注意:
+    - `official-ai.ts` と `ai-config.ts` の `displayName` は手動同期が必要
+    - 今回は `ai-config.ts` から導出しない（理由: client/server 境界を守るため）
+    - 将来さらに厳密に一元化する場合は、server/API設定と client-safe メタ情報の責務分離を再設計する
+
 ## 現在の Source of Truth
 
 writes:
@@ -445,8 +482,8 @@ Phase 5: 集計堅牢化
 - [x] 5-b-3: PredictionRunStatus 設計調査・今は実装しない判断（上記「完了フェーズ」参照）
   - mock/failed の表示変更（「判定不可/未回答」化）は将来の status 実装時に合わせて対応
 - 5-b-3 派生の将来候補（実装する場合の前提順序）:
-  - 前提: 公式AIリストの `lib/ai/ai-config.ts` への正本一元化（admin/ranking/stats のリテラル重複を解消）
-  - その後: omitted 検出設計（Event側メタ or 全AI分 stub prediction doc）→ `PredictionRunStatus` 導入
+  - [x] 前提: 公式AIリストの正本一元化 → `lib/ai/official-ai.ts` に完了（commit 2960c96）
+  - 次: omitted 検出設計（Event側メタ or 全AI分 stub prediction doc）→ `PredictionRunStatus` 導入
 - omitted の本番実在確認（任意・別アクション）:
   Firebase Console で predictions サブコレクションが5件未満のイベントがあるか目視確認。
   あれば公平性の論点として再検討（ただし的中率・表示は欠落があっても壊れない）。
@@ -458,13 +495,16 @@ Phase 5: 集計堅牢化
   - 現時点では `PredictionRunStatus` は実装しない。
   - `isMock` / `predictionSource: "mock"` を当面の分母除外正本として維持。
   - status 実装の前提条件:
-    1. 本番 Firestore で omitted の実在性を確認
-    2. 公式AIリストを `AI_CONFIGS` に一元化（下記「公式AIリスト正本化」参照）
+    1. 本番 Firestore で predictions 件数を確認し、omitted の実在性を確認
+    2. [x] 公式AIリストを `lib/ai/official-ai.ts` に一元化
+       - 完了: commit 2960c96
+       - admin create / edit regenerate / ranking / stats のリテラル重複は解消済み
     3. Event側メタ or stub prediction doc のどちらで omitted を表現するか決定
-- 公式AIリスト正本化（将来候補）:
-  - `lib/ai/ai-config.ts` の `AI_CONFIGS` を正本にする。
-  - admin create / edit 再生成 / ranking / stats のリテラル重複を解消する。
-  - omitted 判定・公式AI数の集計・将来の failure handling の前提。
+- 公式AIリスト正本化:
+  - 完了。`lib/ai/official-ai.ts` を client-safe な公式AI名・順序の正本とする。
+  - admin create / edit 再生成 / ranking / stats のリテラル重複は解消済み。
+  - omitted 検出設計の前提は一段進んだ。
+  - 残る未実装: omitted の本番実在確認 / Event側メタ or stub prediction doc の設計 / PredictionRunStatus の実装 / mock/failed のUI表示変更
 - stored outcome/settlement 永続化: 中長期では有効だが、MVP では ranking/UI の正本を Pattern A 動的計算に維持する。events.result.winner と prediction.outcome の二重管理によるズレを避けるため、学習DB開始時または post-MVP で再検討する（捨てたのではなく意図的に後送り）。
 
 改善候補:
