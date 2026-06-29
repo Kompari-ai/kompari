@@ -22,8 +22,7 @@ import {
   type KompariPrediction,
   type KompariPredictionDoc,
 } from "@/lib/events";
-
-const officialAis = ["ChatGPT", "Claude", "Gemini", "DeepSeek", "Grok"];
+import { OFFICIAL_AI_NAMES } from "@/lib/ai/official-ai";
 
 function parseCandidates(text: string) {
   return text
@@ -306,7 +305,7 @@ export default function AdminEditPage({
   };
 
   const generateAllPredictions = async () => {
-    for (const aiName of officialAis) {
+    for (const aiName of OFFICIAL_AI_NAMES) {
       await generatePrediction(aiName, true);
     }
 
@@ -590,7 +589,7 @@ export default function AdminEditPage({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {officialAis.map((aiName) => {
+            {OFFICIAL_AI_NAMES.map((aiName) => {
               const exists = currentPredictions.some((prediction) =>
                 isOfficialPrediction(prediction, aiName)
               );

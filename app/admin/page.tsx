@@ -13,8 +13,7 @@ import {
   getCategoryLabel,
 } from "@/lib/categories";
 import type { KompariPrediction } from "@/lib/events";
-
-const officialAis = ["ChatGPT", "Claude", "Gemini", "DeepSeek", "Grok"];
+import { OFFICIAL_AI_NAMES } from "@/lib/ai/official-ai";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -47,7 +46,7 @@ export default function AdminPage() {
 
       const generated: KompariPrediction[] = [];
 
-      for (const aiName of officialAis) {
+      for (const aiName of OFFICIAL_AI_NAMES) {
         const response = await fetch("/api/generate-prediction", {
           method: "POST",
           headers: {
@@ -86,7 +85,7 @@ export default function AdminPage() {
   const createPredictionsBeforeSave = async () => {
     const generated: KompariPrediction[] = [];
 
-    for (const aiName of officialAis) {
+    for (const aiName of OFFICIAL_AI_NAMES) {
       const response = await fetch("/api/generate-prediction", {
         method: "POST",
         headers: {
