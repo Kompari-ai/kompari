@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-29（Phase 5-b-2 完了）
+最終更新: 2026-06-29（Phase 5-b-3 完了）
 
 ## 完了フェーズ
 
@@ -321,6 +321,61 @@
     pickCandidate exact match）で常に trim 済み、winner も saveResult/getResultWinner で trim 済み。
     両側 trim 統一で表示変化リスクゼロ（事前調査で確認）。
 
+- [x] Phase 5-b-3: PredictionRunStatus 設計調査・今は実装しない判断
+  - 種別: docs 設計記録のみ。コード変更なし。
+  - 結論:
+    - `PredictionRunStatus` は今すぐ実装しない。
+    - 型追加・生成時 status 付与・UI変更・backfill・Event側メタ追加は行わない。
+    - 現時点では `isMock` / `predictionSource: "mock"` を分母除外の正本として維持する。
+  - 調査で判明した事実:
+    - failed は現状、mock fallback として保存される（`isMock: true` + `predictionSource: "mock"`）。
+    - `isCountablePrediction()` により mock は ranking / stats の分母から除外済み。
+      そのため、分母上の実害は現時点で抑えられている。
+    - ただし Firestore 上では以下を区別できない:
+      API失敗 / timeout / provider throw / APIキー未設定による意図的 mock
+    - 失敗理由は `console.error` に出るだけで、Firestore には保存されない。
+    - omitted（prediction doc 不在）はコード上起こりうる:
+      - admin create の生成ループは `!response.ok` で throw し、以降のAIの prediction doc が作られない可能性がある。
+      - edit 再生成は個別 try/catch のため、一部AIだけ欠落する可能性がある。
+      - 表示・ranking は `forEach` / `find` ベースで、prediction 欠落自体は許容する。
+    - ただし、本番データ上で omitted が実在するか、頻度がどの程度かは未確認。
+    - `prediction.status` / `failedAIs` / `omittedAIs` / `participatedAIs` / `errorReason` / `generatedAt` は現行コードには未実装。
+    - `aiModelId` は既存の prediction 型・保存処理で使用中。
+    - 公式AIは5体: ChatGPT / Claude / Gemini / DeepSeek / Grok
+    - 公式AI設定の正本候補は `lib/ai/ai-config.ts` の `AI_CONFIGS`。
+      ただし、イベント作成・再生成・ranking・stats では公式AIリストがリテラル重複しており、
+      `AI_CONFIGS` から自動導出されていない（同期ズレリスク）。
+  - 設計判断:
+    1. `PredictionRunStatus` は今すぐ実装しない。
+       理由: 現時点では読む側が無く、型だけ追加すると宙に浮くため。
+    2. MVPでは `isMock` / `predictionSource: "mock"` を分母除外の正本として維持する。
+    3. 将来 status を入れる場合は案Bを基本にする:
+       - `isMock` 正本維持。`PredictionRunStatus` は failed/omitted/success を区別する付加情報。
+       - `isCountablePrediction()` の主軸はすぐには変えない。
+    4. 命名は `PredictionRunStatus` とする。
+       5-b-2 の `PredictionStatus = "hit" | "miss" | "pending"` は表示結果用であり、
+       生成ライフサイクル用 status と混同しない。
+    5. omitted は prediction doc 不在ケースなので、Prediction側 status だけでは表現できない。
+       将来的には Event側メタ または 全公式AI分の stub prediction doc のどちらかが必要。
+    6. status 実装より前に、公式AIリストの正本化が必要。
+       `AI_CONFIGS` から公式AI一覧を導出し、リテラル重複を解消することが omitted 判定の前提。
+    7. status に再着手する時の最初の確認は、本番 Firestore で prediction 件数を確認し、
+       omitted の実在性を判定すること。
+  - Event側メタの位置づけ:
+    - `participatedAIs` / `failedAIs` / `omittedAIs` / `consensusTargetCount` / `accuracyTargetCount` は
+      プロジェクト方針ファイル上は候補として存在する。
+    - ただし、現行コード・MIGRATION_STATUS 上では未実装。5-b-3 では実装しない。
+  - 今回行わないこと:
+    - `PredictionRunStatus` 型追加 / prediction doc への status 保存
+    - `status: "success"` の生成時付与 / `status: "failed"` の mock fallback 付与
+    - `isCountablePrediction()` の status 対応 / mock/failed のUI表示変更
+    - backfill / Event側メタ追加 / 公式AIリスト正本化
+  - 判断根拠:
+    分母は `isMock` で既に安全（5-b-1 実証済み）。omitted の本番実在は未確認。
+    status を読む側が今は無い。
+    → 使う側が無い型を先に入れるのは over-engineering。
+      使う時に型と実装を同時に入れる方針（5-b-1 での outcome 後送りと同じ判断軸）。
+
 ## 現在の Source of Truth
 
 writes:
@@ -387,12 +442,29 @@ Phase 5: 集計堅牢化
 
 - [x] Phase 5-b-1: isCountablePrediction() 集約（commit 7dadb62、上記「完了フェーズ」参照）
 - [x] Phase 5-b-2: getPredictionStatus() 集約（commit 4674c05、上記「完了フェーズ」参照）
-- 5-b-3（候補）: mock 予測の表示扱い（現状は結果確定済みなら「外れ」表示。「判定不可/未回答」化）
+- [x] 5-b-3: PredictionRunStatus 設計調査・今は実装しない判断（上記「完了フェーズ」参照）
+  - mock/failed の表示変更（「判定不可/未回答」化）は将来の status 実装時に合わせて対応
+- 5-b-3 派生の将来候補（実装する場合の前提順序）:
+  - 前提: 公式AIリストの `lib/ai/ai-config.ts` への正本一元化（admin/ranking/stats のリテラル重複を解消）
+  - その後: omitted 検出設計（Event側メタ or 全AI分 stub prediction doc）→ `PredictionRunStatus` 導入
+- omitted の本番実在確認（任意・別アクション）:
+  Firebase Console で predictions サブコレクションが5件未満のイベントがあるか目視確認。
+  あれば公平性の論点として再検討（ただし的中率・表示は欠落があっても壊れない）。
 
 保留:
 - My AI(将来作り直し) / LegacyRaceData削除 / aiModelバックフィル / TopBarバッジ復活
 - 文言統一（候補）: 「予測中 vs 判定待ち」「不的中 vs 外れ」= UI方針の別決定事項。判定ロジックは 5-b-2 で共通化済み。
-- status 設計（候補）: failed / skipped / omitted を prediction.status として明示管理し、将来的にランキング分母から除外できるようにする。
+- status / failure / omission handling（5-b-3 調査済み）:
+  - 現時点では `PredictionRunStatus` は実装しない。
+  - `isMock` / `predictionSource: "mock"` を当面の分母除外正本として維持。
+  - status 実装の前提条件:
+    1. 本番 Firestore で omitted の実在性を確認
+    2. 公式AIリストを `AI_CONFIGS` に一元化（下記「公式AIリスト正本化」参照）
+    3. Event側メタ or stub prediction doc のどちらで omitted を表現するか決定
+- 公式AIリスト正本化（将来候補）:
+  - `lib/ai/ai-config.ts` の `AI_CONFIGS` を正本にする。
+  - admin create / edit 再生成 / ranking / stats のリテラル重複を解消する。
+  - omitted 判定・公式AI数の集計・将来の failure handling の前提。
 - stored outcome/settlement 永続化: 中長期では有効だが、MVP では ranking/UI の正本を Pattern A 動的計算に維持する。events.result.winner と prediction.outcome の二重管理によるズレを避けるため、学習DB開始時または post-MVP で再検討する（捨てたのではなく意図的に後送り）。
 
 改善候補:
