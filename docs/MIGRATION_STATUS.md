@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-30（公式AIリスト正本化 完了）
+最終更新: 2026-06-30（mock 表示改善 Step1 完了）
 
 ## 完了フェーズ
 
@@ -413,6 +413,34 @@
     - 今回は `ai-config.ts` から導出しない（理由: client/server 境界を守るため）
     - 将来さらに厳密に一元化する場合は、server/API設定と client-safe メタ情報の責務分離を再設計する
 
+- [x] mock 表示改善 Step1: ai/[slug] 集計の mock 除外
+  - commit: 4091dd0 fix(ai): exclude mock predictions from AI detail stats
+  - 目的:
+    - `app/ai/[slug]/page.tsx` のローカル `buildStats()` に `isCountablePrediction()` を適用
+    - 公式AI fallback mock が AI詳細ページの的中率・的中数・確定数・recent list に混入するのを防ぐ
+    - 5-b-1 で ranking / stats に適用した countable 判定を、AI詳細ページの独自集計にも適用する
+  - 実装:
+    - `app/ai/[slug]/page.tsx` のみ変更（2行追加）
+    - `isCountablePrediction` を `lib/events` から import
+    - `buildStats()` で prediction を stats / recent に入れる前に `isCountablePrediction(prediction)` を確認
+    - false の場合は early return（forEach の return）
+    - `stats.total` / `stats.finished` / `stats.hit` / `stats.categories` / `stats.recent` すべてから mock を除外
+  - 維持したもの:
+    - `getPredictionStatus()` の3値判定は変更なし
+    - `hit: boolean | null` 変換は変更なし
+    - `lib/events.ts` は変更なし
+    - race詳細・My AI系・文言・docs 以外のコードは変更なし
+  - 本番確認:
+    - `ai/[slug]` の ChatGPT 詳細: 的中率 41.7% / 的中 5 / 不的中 7 / 確定 12
+    - ranking の ChatGPT: 的中率 41.7% / 的中 5 / 外れ 7 / 予測数 12
+    - AI詳細ページの的中率・的中数・確定数が ranking の同じ意味の指標と整合
+    - AI詳細ページの総予測数 13 は pending 1件を含むため、ranking の確定 countable 12 と完全一致しなくてよい（設計どおり）
+  - 設計上の注意:
+    - 成功条件は「的中率・的中数・確定数の整合」であり「総予測数の完全一致」ではない
+    - AI詳細ページの `stats.total` は pending を含む設計（`total = finished + pending`）
+    - ranking 側の「予測数」は確定済み countable 件数として扱われる
+    - 本番現データでは mock 実在なし（数値変化なし）。将来 API失敗 fallback mock が発生しても混入しない
+
 ## 現在の Source of Truth
 
 writes:
@@ -484,12 +512,30 @@ Phase 5: 集計堅牢化
 - 5-b-3 派生の将来候補（実装する場合の前提順序）:
   - [x] 前提: 公式AIリストの正本一元化 → `lib/ai/official-ai.ts` に完了（commit 2960c96）
   - 次: omitted 検出設計（Event側メタ or 全AI分 stub prediction doc）→ `PredictionRunStatus` 導入
+- mock 表示改善（5-b-1 の延長）:
+  - [x] Step1: `ai/[slug]` buildStats に `isCountablePrediction()` 適用（commit 4091dd0）
+    - ranking / lib/stats.ts と同じ countable 判定を AI詳細ページの独自集計にも適用
+    - 的中率・的中数・確定数が ranking と整合
+  - Step2（未実装）: race詳細 PredictionCard で mock を「判定不可」グレー表示
+    - `getPredictionDisplayStatus()` 追加または getPredictionResult() での先判定
+    - race詳細 consensus / podium から mock を除外するか要検討
+  - My AI 系（別フェーズ）: `my-ai/[id]` / `my-ai/page` の legacy mock 集計・表示混入
+    - My AI は MVP 非優先・将来機能扱いのため今回対象外
 - omitted の本番実在確認（任意・別アクション）:
   Firebase Console で predictions サブコレクションが5件未満のイベントがあるか目視確認。
   あれば公平性の論点として再検討（ただし的中率・表示は欠落があっても壊れない）。
 
 保留:
 - My AI(将来作り直し) / LegacyRaceData削除 / aiModelバックフィル / TopBarバッジ復活
+- mock 表示改善 Step2（未実装）:
+  - race詳細 PredictionCard で mock 予測を「判定不可」グレー表示に変更する
+    - 現状: 結果確定後に mock が「外れ」（赤）で表示される
+    - 対応案A: `lib/events.ts` に `getPredictionDisplayStatus()` を追加（"unavailable" を含む4値）
+    - 対応案B: `getPredictionResult()` 内で `!isCountablePrediction()` を先判定してグレー返却
+    - race詳細 consensus / podium が mock を含む点も要検討
+  - `my-ai/[id]` / `my-ai/page` の legacy mock 集計・表示混入は別フェーズ
+    - `buildStats()` / `buildMyAiStats()` に `isCountablePrediction()` を追加すれば解決するが
+    - My AI は MVP 非優先・将来機能扱いのため今回対象外
 - 文言統一（候補）: 「予測中 vs 判定待ち」「不的中 vs 外れ」= UI方針の別決定事項。判定ロジックは 5-b-2 で共通化済み。
 - status / failure / omission handling（5-b-3 調査済み）:
   - 現時点では `PredictionRunStatus` は実装しない。
