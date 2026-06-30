@@ -12,8 +12,9 @@ import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   formatStartsAt,
   getConsensusChip,
-  getPredictionStatus,
+  getPredictionDisplayStatus,
   getResultWinner,
+  isCountablePrediction,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -54,7 +55,7 @@ function getCandidateList(event: KompariEvent) {
 function buildConsensus(event: KompariEvent) {
   const counts: Record<string, number> = {};
   const officialPreds = event.predictions.filter(
-    (p) => p.source !== "user" && !p.myAiId
+    (p) => p.source !== "user" && !p.myAiId && isCountablePrediction(p)
   );
 
   officialPreds.forEach((prediction) => {
@@ -79,7 +80,7 @@ function buildPodiumData(event: KompariEvent) {
   const mainCounts: Record<string, number> = {};
   const secondCounts: Record<string, number> = {};
   const officialPreds = event.predictions.filter(
-    (p) => p.source !== "user" && !p.myAiId
+    (p) => p.source !== "user" && !p.myAiId && isCountablePrediction(p)
   );
 
   officialPreds.forEach((p) => {
@@ -111,7 +112,11 @@ function getPredictionResult(
   prediction: KompariPrediction,
   resultWinner: string
 ) {
-  const status = getPredictionStatus(prediction, resultWinner);
+  const status = getPredictionDisplayStatus(prediction, resultWinner);
+
+  if (status === "unavailable") {
+    return { label: "判定不可", className: "bg-gray-100 text-gray-500" };
+  }
 
   if (status === "pending") {
     return { label: "判定待ち", className: "bg-blue-50 text-blue-700" };
@@ -517,6 +522,8 @@ export default function RaceDetailPage({
     (p) => p.source !== "user" && !p.myAiId
   );
 
+  const countableOfficialPreds = officialPreds.filter(isCountablePrediction);
+
   return (
     <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
       <TopBar />
@@ -630,10 +637,10 @@ export default function RaceDetailPage({
           )}
 
           {/* Split meter */}
-          {officialPreds.length > 0 ? (
+          {countableOfficialPreds.length > 0 ? (
             <>
               <div className="h-[10px] rounded-full overflow-hidden flex gap-[2px]">
-                {officialPreds.map((p, i) => (
+                {countableOfficialPreds.map((p, i) => (
                   <div
                     key={`seg-${p.ai}-${i}`}
                     className="flex-1 h-full"
@@ -642,7 +649,7 @@ export default function RaceDetailPage({
                 ))}
               </div>
               <div className="flex flex-wrap gap-x-[10px] gap-y-[5px] mt-[7px]">
-                {officialPreds.map((p, i) => (
+                {countableOfficialPreds.map((p, i) => (
                   <span
                     key={`leg-${p.ai}-${i}`}
                     className="text-[10.5px] text-[#64748B] font-semibold inline-flex items-center gap-1 whitespace-nowrap"
@@ -721,7 +728,7 @@ export default function RaceDetailPage({
                 candidate={candidate}
                 index={index}
                 consensusCount={consensusMap[candidate] || 0}
-                totalPredictions={officialPreds.length}
+                totalPredictions={countableOfficialPreds.length}
                 resultWinner={resultWinner}
               />
             ))}

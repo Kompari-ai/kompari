@@ -252,6 +252,21 @@ export function getPredictionStatus(
   return "miss";
 }
 
+export type PredictionDisplayStatus = PredictionStatus | "unavailable";
+
+// 表示用の4値判定。isCountablePrediction が false なら "unavailable" を返す。
+// getPredictionStatus() の3値設計は維持する。
+export function getPredictionDisplayStatus(
+  prediction: KompariPrediction,
+  resultWinner: string
+): PredictionDisplayStatus {
+  if (!isCountablePrediction(prediction)) {
+    return "unavailable";
+  }
+
+  return getPredictionStatus(prediction, resultWinner);
+}
+
 export function getConsensusChip(
   predictions: KompariPrediction[]
 ): { type: "unan" | "lean" | "split"; label: string } | null {
