@@ -617,3 +617,80 @@ Phase 5: 集計堅牢化
   - events読み/races読みで同じ表示のため移行とは無関係。ダミーデータ/表記揺れ cleanup の候補として記録
 - votes: Phase 4-c では削除対象外。イベント削除後 orphan になりうるため、Phase 4-d cleanup で扱う
 - テストレース(id: lm8bFnPWFM6DGvfQMsOX) は events/races に現存。将来の削除テストまたは cleanup 候補として記録
+
+## 本番欠損パターン調査結果（HEAD=8577647 / 2026-07時点）
+
+### 調査概要
+
+Result Settlement に着手する前に、本番 Firestore（kompari-48dba）の読み取り専用調査を実施した。
+調査スクリプトは `kompari-factor-check/check-predictions-audit.mjs`（リポジトリ外）で Firestore REST API を使用。
+write / delete は一切行っていない。
+
+### 確認した実データ
+
+- events 総数：13件
+- all predictions 総数：61件（events/{id}/predictions サブコレクション合計）
+- AI識別フィールド：`ai`（全61件に存在。`aiName` フィールドは未実在）
+- event 紐付けフィールド：`eventId`（全61件に存在）
+- `outcome` フィールド：全61件に存在（`miss:28 / hit:17 / pending:16`）
+- `predictionSource` フィールド：58件に存在（全て `"official-ai"`）
+- `source` フィールドの値：`"official"` / `"user"`（61件中に混在）
+- `aiProvider` / `aiModel` / `aiModelId`：各19件のみ存在（新規作成分のみ付与、旧データには未付与）
+
+### 欠損パターンの確定
+
+以下の4パターンで切り分けを実施した。
+
+| パターン | 本番実在 | 詳細 |
+|---|---|---|
+| prediction doc 自体が存在しない | **あり（8件）** | 全8件が Grok |
+| `isMock: true` の mock doc として存在 | **なし（0件）** | 本番に isMock: true は0件 |
+| `status: "failed"` / `status: "omitted"` として存在 | **なし（0件）** | `status` フィールド自体が本番未実在 |
+| フィールド名揺れによる見かけ上の欠落 | 一部あり | `aiProvider`/`aiModel`/`aiModelId` は旧データに未付与。ただし AI識別の `ai` フィールドは全61件に存在するため、集計には影響なし |
+
+### 数値についての注記
+
+all predictions 総数（61件）と official missing count（8件）は別概念として扱う。
+61件の内訳（公式 / 非公式 / legacy / My AI 別件数）は本調査では未分解であり、確定していない。
+したがって、`13 × 5 = 65 件が期待値で 65 - 61 = 4` といった単純計算による関連づけは行わない。
+確定している事実は「official missing = 8件、すべてGrok」のみ。
+
+### Grok 欠落 8件の扱い
+
+Grok が欠落している 8 events は以下のとおり（全て prediction doc 不在）：
+
+| event title | eventId | 結果 |
+|---|---|---|
+| サークルインターネット | 7aCBzjFroS3saXfrPB27 | 未確定 |
+| ウィザーズVSブルズ | 8kUrRnIAPuIHfjhSCchK | 未確定 |
+| 日本ダービー | bOA9hyBdbZZILPYVBh8a | 結果済み |
+| 皐月賞 | jloyotwTKe4pL4qaEVaW | 結果済み |
+| テストレース | lm8bFnPWFM6DGvfQMsOX | 結果済み |
+| 日本対アイスランド | r3pibRKQiL0gjmPrG9tg | 未確定 |
+| 日本グランプリ | uPb5FRKeXMR79R9nAPth | 結果済み |
+| 日本ダービー | zTNPut4MyJqoAlKNDHRu | 結果済み |
+
+これらは Grok が公式AIに追加される前に作成されたイベントである。
+
+**後追い再生成は行わない**。
+理由：結果確定済みイベントを含む過去イベントに後から予測を追加すると、「予測は事前に行われた」という Kompari の信頼性を壊すため。
+
+これらのイベントにおいて Grok は、settlement / accuracy / ranking の分母に含めない。
+「外れ」ではなく「prediction doc 不在」として扱う。
+
+### Result Settlement への含意
+
+Result Settlement は、存在する prediction doc のみを対象に hit / miss を確定する。
+
+現時点では以下を新規実装しない：
+
+- mock 用の新規抽象化
+- `status: "failed"` 用の分岐
+- `status: "omitted"` 用の分岐
+- `PredictionRunStatus` の新規導入
+
+理由：本番 Firestore 上に mock / failed / omitted / status 系データが実在しないため、
+これらを扱う実装を先に入れても発動しない死んだコードになる。
+
+既存の `isCountablePrediction()` による mock 除外ガードは維持する。
+Result Settlement 側で mock / status 抽象化を新たに増やさない。
