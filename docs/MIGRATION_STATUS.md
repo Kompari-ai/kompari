@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-06-30（mock 表示改善 Step1 完了）
+最終更新: 2026-06-30（mock 表示改善 Step2 完了）
 
 ## 完了フェーズ
 
@@ -441,6 +441,49 @@
     - ranking 側の「予測数」は確定済み countable 件数として扱われる
     - 本番現データでは mock 実在なし（数値変化なし）。将来 API失敗 fallback mock が発生しても混入しない
 
+- [x] mock 表示改善 Step2: race詳細の mock を「判定不可」表示 + consensus/support 系から除外
+  - commit: 405914a fix(race): show mock predictions as unavailable and exclude from consensus
+  - 目的:
+    - race詳細で公式AI fallback mock が結果確定後に「外れ」赤表示される問題を修正
+    - mock を「そのAIが外した予測」と誤認させない
+    - mock はカード上には残し、透明性を保ちながら「判定不可」として表示する
+    - mock fallback のランダム候補を AI consensus / support / podium に混ぜない
+  - 実装:
+    - `lib/events.ts`
+      - `PredictionDisplayStatus = PredictionStatus | "unavailable"` を追加
+      - `getPredictionDisplayStatus()` を追加
+      - `isCountablePrediction(prediction)` が false の場合は `"unavailable"` を返す
+      - countable な prediction では既存の `getPredictionStatus()` に委譲
+    - `app/race/[slug]/page.tsx`
+      - `getPredictionResult()` が `getPredictionDisplayStatus()` を使用
+      - `"unavailable"` の場合は `判定不可` / `bg-gray-100 text-gray-500`
+      - 既存の `判定待ち` / `的中` / `外れ` は変更なし
+      - PredictionCard から mock を消さず、カードとして残す
+    - consensus / support 系:
+      - `buildConsensus()` の filter に `isCountablePrediction(p)` を追加
+      - `buildPodiumData()` の filter に `isCountablePrediction(p)` を追加
+      - render-level に `countableOfficialPreds` を追加
+      - split meter / legend / CandidateCard の支持率分母は `countableOfficialPreds` を使用
+      - AI予測数バッジと PredictionCard ループは `officialPreds` のまま維持
+  - 維持したもの:
+    - `getPredictionStatus()` は3値 `hit | miss | pending` のまま
+    - `isCountablePrediction()` 本体は変更なし
+    - PredictionCard 表示から mock を削除しない
+    - 文言統一は行わない
+    - My AI 系は触らない
+    - Firestore 書き込みなし
+  - 安全性確認:
+    - CandidateCard は `totalPredictions = 0` でも `rate = 0` になる既存ガードあり（L320〜323）
+    - `NaN%` / 0除算リスクなし
+  - 本番確認:
+    - mock が無い通常イベントでは表示差分なし（`officialPreds === countableOfficialPreds`）
+    - ベルギーVSエジプト: 5公式AIすべて通常どおり「外れ」赤表示。AIコンセンサス / split meter / legend / CandidateCard が従来どおり
+    - サークルインターネット: 4公式AIの的中/外れ表示が正常。既存表示を壊していない
+  - 挙動:
+    - mock が無い race詳細では表示・支持率・コンセンサスは従来どおり
+    - mock がある race詳細では、PredictionCard は「外れ」赤ではなく「判定不可」グレーになる
+    - mock は consensus / podium / split meter / legend / CandidateCard 支持率分母から除外される
+
 ## 現在の Source of Truth
 
 writes:
@@ -508,7 +551,7 @@ Phase 5: 集計堅牢化
 - [x] Phase 5-b-1: isCountablePrediction() 集約（commit 7dadb62、上記「完了フェーズ」参照）
 - [x] Phase 5-b-2: getPredictionStatus() 集約（commit 4674c05、上記「完了フェーズ」参照）
 - [x] 5-b-3: PredictionRunStatus 設計調査・今は実装しない判断（上記「完了フェーズ」参照）
-  - mock/failed の表示変更（「判定不可/未回答」化）は将来の status 実装時に合わせて対応
+  - mock の表示変更（「判定不可」化）は Step2 で完了（commit 405914a）。failed/omitted の表示変更は将来の status 実装時に合わせて対応
 - 5-b-3 派生の将来候補（実装する場合の前提順序）:
   - [x] 前提: 公式AIリストの正本一元化 → `lib/ai/official-ai.ts` に完了（commit 2960c96）
   - 次: omitted 検出設計（Event側メタ or 全AI分 stub prediction doc）→ `PredictionRunStatus` 導入
@@ -516,9 +559,14 @@ Phase 5: 集計堅牢化
   - [x] Step1: `ai/[slug]` buildStats に `isCountablePrediction()` 適用（commit 4091dd0）
     - ranking / lib/stats.ts と同じ countable 判定を AI詳細ページの独自集計にも適用
     - 的中率・的中数・確定数が ranking と整合
-  - Step2（未実装）: race詳細 PredictionCard で mock を「判定不可」グレー表示
-    - `getPredictionDisplayStatus()` 追加または getPredictionResult() での先判定
-    - race詳細 consensus / podium から mock を除外するか要検討
+  - [x] Step2: race詳細の mock を「判定不可」表示 + consensus/support 系から除外（commit 405914a）
+    - race詳細で公式AI fallback mock が結果確定後に「外れ」赤表示される問題を修正
+    - mock はカード上に残し「判定不可」グレーとして表示する
+    - mock は consensus / podium / split meter / legend / CandidateCard 支持率分母から除外
+  - これにより、公式AI fallback mock については以下の扱いが確立:
+    - 表示上は存在を隠さない
+    - ただし「外れ」と誤表示しない
+    - 的中率・recent list・consensus・support には混ぜない
   - My AI 系（別フェーズ）: `my-ai/[id]` / `my-ai/page` の legacy mock 集計・表示混入
     - My AI は MVP 非優先・将来機能扱いのため今回対象外
 - omitted の本番実在確認（任意・別アクション）:
@@ -527,15 +575,10 @@ Phase 5: 集計堅牢化
 
 保留:
 - My AI(将来作り直し) / LegacyRaceData削除 / aiModelバックフィル / TopBarバッジ復活
-- mock 表示改善 Step2（未実装）:
-  - race詳細 PredictionCard で mock 予測を「判定不可」グレー表示に変更する
-    - 現状: 結果確定後に mock が「外れ」（赤）で表示される
-    - 対応案A: `lib/events.ts` に `getPredictionDisplayStatus()` を追加（"unavailable" を含む4値）
-    - 対応案B: `getPredictionResult()` 内で `!isCountablePrediction()` を先判定してグレー返却
-    - race詳細 consensus / podium が mock を含む点も要検討
-  - `my-ai/[id]` / `my-ai/page` の legacy mock 集計・表示混入は別フェーズ
-    - `buildStats()` / `buildMyAiStats()` に `isCountablePrediction()` を追加すれば解決するが
-    - My AI は MVP 非優先・将来機能扱いのため今回対象外
+- My AI 系 mock 集計・表示混入（別フェーズ）:
+  - `my-ai/[id]` / `my-ai/page` の legacy mock 集計・表示混入
+  - `buildStats()` / `buildMyAiStats()` に `isCountablePrediction()` を追加すれば解決するが
+  - My AI は MVP 非優先・将来機能扱いのため今回対象外
 - 文言統一（候補）: 「予測中 vs 判定待ち」「不的中 vs 外れ」= UI方針の別決定事項。判定ロジックは 5-b-2 で共通化済み。
 - status / failure / omission handling（5-b-3 調査済み）:
   - 現時点では `PredictionRunStatus` は実装しない。
