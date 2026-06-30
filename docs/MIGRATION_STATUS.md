@@ -694,3 +694,133 @@ Result Settlement は、存在する prediction doc のみを対象に hit / mis
 
 既存の `isCountablePrediction()` による mock 除外ガードは維持する。
 Result Settlement 側で mock / status 抽象化を新たに増やさない。
+
+## Result Settlement 既存資産調査結果（outcome非権威 / result.winner SoT）
+
+### 調査概要
+
+Result Settlement 実装方針を決める前に、`outcome` フィールドがコード上でどこで・誰によって・何を根拠に設定されているかを読み取り専用で調査した。
+調査対象：`lib/events.ts` / `lib/stats.ts` / `app/admin/**` / `app/ranking/page.tsx` / `app/ai/[slug]/page.tsx` / `app/race/[slug]/page.tsx` / `kompari-backfill/backfill.mjs`。
+コード変更・Firestore write・commit はなし。
+
+### 確認した実データ（補足）
+
+- `outcome` 全 prediction doc に存在（miss:28 / hit:17 / pending:16）
+- `pending` 16件の内訳：正規 pending 5件（結果未設定）/ stale pending 11件（結果あり・outcome未更新）
+
+stale pending の詳細：
+
+| event | result.winner | pending件数 | 原因 |
+|---|---|---|---|
+| ベルギー VS エジプト | 引き分け | 5 | backfill時は結果なし→pending。saveResult は outcome を更新しない |
+| 皐月賞 | ロブチェン | 4 | 同上 |
+| ウィザーズVSブルズ | ウィザーズ | 1 (ChatGPT) | 結果確定後に予測を再生成 → outcome:"pending" にリセット |
+| 阪神 vs 巨人 | 巨人勝利 | 1 (Grok) | 結果確定後に Grok 追加 → creation は常に pending |
+| フランス VS セネガル | **未設定** | 5 | 正規 pending（結果未確定） |
+
+### outcome の書き込み箇所
+
+| ファイル | 関数 | 書き込む値 | 種別 |
+|---|---|---|---|
+| `app/admin/page.tsx` | `createEvent()` | `"pending"` 固定 | 初期値 |
+| `app/admin/edit/[id]/page.tsx` | `generatePrediction()` | `"pending"` 固定 | 再生成リセット |
+| `kompari-backfill/backfill.mjs` | `computeOutcome()` | hit/miss/pending 計算 | Phase 2.5 の一回限り |
+| `lib/events.ts:normalizeEventDocToEvent` | — | 動的 hit/miss | **メモリのみ。Firestore に書き戻さない** |
+
+`saveResult()` は `events/{id}.result` を更新するが、`predictions.outcome` は更新しない（コード確認済み）。
+Firestore 上に存在する `outcome: "hit"/"miss"` は、Phase 2.5 バックフィルが一度だけ書いたもの。
+
+### outcome の読み取り箇所
+
+現行の表示・集計・ranking はいずれも `prediction.outcome` を参照しない。
+
+| 箇所 | 手法 |
+|---|---|
+| `lib/stats.ts`（aggregateByBrand / aggregateByModel） | `isFinished && pick === winner` で動的計算 |
+| `app/ranking/page.tsx`（buildRankings） | `pick === winner` で動的計算 |
+| `app/ai/[slug]/page.tsx`（buildStats） | `getPredictionStatus(prediction, resultWinner)` → 動的計算 |
+| `app/race/[slug]/page.tsx` | `getPredictionDisplayStatus()` → 動的計算 |
+| `lib/events.ts:normalizeEventDocToEvent` | `p.outcome === "pending" && isFinished` の場合のみ動的補完（メモリ返却値） |
+
+### actualResult / resultCheckedAt の所在
+
+コード上・本番データ上ともに未実在。`outcome` 判定に使われるフィールドは存在しない。
+
+### source と predictionSource の意味確定
+
+| フィールド | 型 | 代入箇所 | 意味 |
+|---|---|---|---|
+| `source` | `"official" \| "user"` | admin 作成・編集で `"official"` 明示、backfill で `"user"` コピー | legacy 2値フィールド。公式AI vs My AI |
+| `predictionSource` | `"official-ai" \| "my-ai" \| "custom-ai" \| "mock" \| "manual"` | API route が成功時 `"official-ai"`、失敗時 `"mock"` を設定 | 細粒度ソース分類 |
+
+`source: "user"` は My AI 予測を意味する。全ページで `p.source !== "user" && !p.myAiId` フィルタにより公開集計・consensus・ranking から除外済み。
+
+Result Settlement 実装時は、`predictionSource` だけでなく `source` / `myAiId` / `isCountablePrediction()` の関係を再確認する。フィールド名のみで My AI 混入を断定しない。
+
+### 設計判断
+
+#### Result Settlement の Single Source of Truth
+
+Result Settlement の SoT は `events/{id}.result.winner` とする。
+
+hit / miss は以下の派生値として扱う。
+
+```
+events.result.winner + prediction.main → 動的突合 → hit / miss
+```
+
+#### outcome の位置づけ
+
+`outcome` は保存されているが、現行の表示・集計・ranking の正本ではない。
+
+現時点では `outcome` を権威値に昇格させない。`saveResult()` 実行時に `predictions.outcome` を一括更新する処理も追加しない。
+
+理由：
+
+- `result.winner` と `predictions.outcome` の二重管理が発生するため
+- winner 修正時に outcome 再計算が必要になり、整合性負債を増やすため
+- 現行 UI / ranking / stats はすでに `result.winner` ベースの動的計算で成立しているため
+- stale pending は現行画面に実害がないため
+
+#### stale pending 11件の扱い
+
+直ちに修正すべき機能バグではなく、過去 backfill / 再生成処理由来の非権威フィールド残骸として扱う。
+
+将来 `outcome` を派生キャッシュとして使う必要が出た場合のみ、`result.winner` を SoT として再計算する。
+
+#### 将来の高速化・集計最適化
+
+件数増加で動的計算コストが問題になった場合でも、`outcome` を SoT にする必要はない。
+
+`events.result.winner` を SoT に保ったまま、派生キャッシュとして再計算する方針をとる。
+
+```
+SoT:   events.result.winner
+Derived: hit / miss calculation / AI accuracy stats / ranking aggregates / optional cached outcome
+```
+
+この構造により、winner 修正時も SoT を直して派生値を再計算すればよく、二重管理を避けられる。
+
+### Result Settlement への含意
+
+Result Settlement の大規模新規実装は現時点では不要。
+
+現行の機能は以下で成立している。
+
+```
+saveResult() → events.result.winner 更新
+→ UI / ranking / stats が prediction.main と winner を動的突合
+→ hit / miss 表示・集計
+```
+
+Result Settlement は「ゼロからの新規実装」ではなく、既存ロジックの補完 / 自動化フェーズとして扱う。
+
+今後必要になる可能性がある限定的改善：
+
+- result 入力 UI の安全性確認
+- `result.winner` の型・値の揺れ防止
+- winner 修正時の影響範囲整理
+- 将来の派生キャッシュ設計
+- audit metadata / result source / checkedAt の必要性検討
+
+これらは `outcome` 権威値化とは別問題として扱う。
