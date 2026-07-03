@@ -71,6 +71,46 @@ function isOfficialPrediction(prediction: KompariPrediction, aiName: string) {
   );
 }
 
+type DriftedPrediction = {
+  ai: string;
+  main: string;
+  group: "official" | "user";
+};
+
+// 候補編集で既存 predictions.main が新 candidates から外れるケースを検出する。
+// admin/edit の保存前警告専用のローカル判定。mock/空mainは対象外(isCountablePrediction相当)。
+function findDriftedPredictions(
+  predictions: KompariPrediction[],
+  newCandidates: string[]
+): DriftedPrediction[] {
+  const newCandidatesSet = new Set(
+    newCandidates.map((c) => c.trim()).filter(Boolean)
+  );
+
+  const drifted: DriftedPrediction[] = [];
+
+  for (const prediction of predictions) {
+    if (prediction.isMock === true) continue;
+    if (prediction.predictionSource === "mock") continue;
+
+    const main = (prediction.main || "").trim();
+    if (!main) continue;
+
+    if (newCandidatesSet.has(main)) continue;
+
+    drifted.push({
+      ai: prediction.ai,
+      main,
+      group:
+        prediction.source === "user" || prediction.myAiId
+          ? "user"
+          : "official",
+    });
+  }
+
+  return drifted;
+}
+
 type PredictionIdInput = { ai?: string | null; myAiId?: string | null };
 
 function makePredictionId(pred: PredictionIdInput): string {
@@ -193,6 +233,44 @@ export default function AdminEditPage({
     if (candidates.length < 2) {
       alert("候補リストを2つ以上入力してください");
       return;
+    }
+
+    const driftedPredictions = findDriftedPredictions(
+      currentPredictions,
+      candidates
+    );
+
+    if (driftedPredictions.length > 0) {
+      const officialDrifted = driftedPredictions.filter(
+        (d) => d.group === "official"
+      );
+      const userDrifted = driftedPredictions.filter(
+        (d) => d.group === "user"
+      );
+
+      const detailLines = driftedPredictions
+        .slice(0, 5)
+        .map((d) => `- ${d.ai}: ${d.main}`);
+      const remaining = driftedPredictions.length - detailLines.length;
+      if (remaining > 0) {
+        detailLines.push(`他${remaining}件`);
+      }
+
+      const confirmed = window.confirm(
+        `既存予測の一部が、新しい候補リストに含まれない候補を予測しています。\n\n` +
+          `このまま保存すると、該当予測は結果判定・集計・表示でズレる可能性があります。\n\n` +
+          `候補外になる予測:\n` +
+          `- 公式AI: ${officialDrifted.length}件\n` +
+          `- My AI / user prediction: ${userDrifted.length}件\n\n` +
+          `${detailLines.join("\n")}\n\n` +
+          `保存後は、公式AI予測の再生成を推奨します。\n` +
+          `My AI / user prediction は自動更新されません。\n\n` +
+          `このまま保存しますか？`
+      );
+
+      if (!confirmed) {
+        return;
+      }
     }
 
     try {
