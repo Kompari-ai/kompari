@@ -145,7 +145,25 @@ export default function AdminResultsPage() {
       setSavingId(event.id);
 
       const trimmedWinner = winner.trim();
-      const resultValue = trimmedWinner ? { winner: trimmedWinner } : null;
+
+      // settledAt = このeventに初めて result.winner が保存された時刻。
+      // winner修正時は既存 settledAt を保持する。
+      // legacy(winnerあり・settledAtなし)の再編集では settledAt を後付けしない。
+      let resultValue: { winner: string; settledAt?: unknown } | null = null;
+
+      if (trimmedWinner) {
+        const previousWinner = (event.result?.winner || "").trim();
+        const previousSettledAt = event.result?.settledAt;
+
+        resultValue = { winner: trimmedWinner };
+
+        if (previousSettledAt) {
+          resultValue.settledAt = previousSettledAt;
+        } else if (!previousWinner) {
+          resultValue.settledAt = serverTimestamp();
+        }
+      }
+
       const batch = writeBatch(db);
       batch.update(doc(db, "events", event.id), {
         result: resultValue,
