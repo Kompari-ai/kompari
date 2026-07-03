@@ -1062,3 +1062,71 @@ Candidate ID は MVP直近では不要。
 - implementation commit: `4f7dd79 feat(admin): warn on candidate edit drift before save`
 - push済み
 - origin/main 反映済み
+
+## settledAt 導入 Step 1(saveResult主経路)
+
+### 位置づけ
+
+- Step 1（saveResult主経路のみ）
+- 「settledAt導入完了」ではない
+
+### 定義
+
+- `result.settledAt` = そのeventに初めて `result.winner` が保存された時刻
+- 初回確定時刻として扱う
+
+### 挙動
+
+- winner修正時は settledAt を更新しない
+- 既存 settledAt は保持する
+- legacy（winnerあり・settledAtなし）は再編集しても settledAt を後付けしない
+- retroactive backfill しない
+- winner clear時は既存どおり `result: null` に戻す
+
+### 実装
+
+- `app/admin/results/page.tsx` の `saveResult()` に3条件分岐を追加
+- trimmedWinner非空 かつ previousSettledAt無し かつ previousWinner無し の場合のみ settledAt を新規付与
+- `lib/events.ts` の result型に optional `settledAt` を追加
+
+### 非接触
+
+- `result.winner` のSoT性
+- `getResultWinner()`
+- ranking
+- stats
+- 確定判定（`getResultWinner` 真偽値）
+- stored outcome
+- mock / non-countable 除外
+- 以上はいずれも無変更
+
+### Known Uncovered Write Paths
+
+- createEvent（`app/admin/page.tsx`）経由の `result.winner` 書き込みには settledAt が付かない
+- saveEvent（`app/admin/edit/[id]/page.tsx`）経由の `result.winner` 書き込みには settledAt が付かない
+- この2経路からの結果入力は winnerあり・settledAtなし を生む
+- 次PRで対応し、3経路分散するなら共通helper化を検討する
+
+### 別PR / 今回スコープ外
+
+- resultUpdatedAt
+- resultSource
+- result revision履歴
+- 結果確定後のprediction再生成guard
+- settledAt表示UI
+
+### 後方互換
+
+- winnerあり・settledAtなし = 確定済みだが時刻不明
+- 既存データはこの状態を許容する
+- 読み側は settledAt 欠損を許容する
+
+### 動作確認
+
+- 通常運用で次に結果入力する際、Firebase Consoleで `result.settledAt` 付与を確認する
+- 本番テスト書き込みはしない
+
+### commit
+
+- `abaaadd feat(settlement): record result.settledAt on first winner save`
+- pushed to main
