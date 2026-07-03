@@ -980,3 +980,85 @@ Candidate ID は MVP直近では不要。
 - Claude Code は記録・手順書・確認リスト作成のみ担当
 - 本番DBへ直接 restore しない
 - restore / clone は必ず新DBで確認する
+
+## 候補編集drift予防 実装(2026-07-04)
+
+### 背景
+
+- winner安全性調査（本ドキュメント「result.winner 安全性確認 / Candidate ID 前提調査」節）で確認された、唯一の実在drift経路への予防的ハードニング
+- drift経路：`saveEvent()` が `events/{id}` の `candidates` を更新しても、既存 `predictions.main` を追従させない
+- 本番実害は未検出（Firebase Console目視確認済み、既存調査参照）
+- 今回は実害対応ではなく、予防目的の実装
+
+### 実装内容
+
+- 採用案：B案（保存前drift検出 + confirm、blockはしない）
+- 対象ファイル：`app/admin/edit/[id]/page.tsx`
+- `saveEvent()` の Firestore write 前に drift 検出を追加
+- drift がある場合のみ confirm を表示
+- Cancel なら保存中断
+- OK なら従来どおり保存継続
+- Firestore 書き込み構造は変更していない
+
+### drift判定基準
+
+- `prediction.main.trim()` が、新しい `candidates` の trim 後集合に含まれない場合に drift 対象
+- 比較は trim 後で行う（既存 `getPredictionStatus()` の正規化粒度と揃える）
+- mock / non-countable は除外
+  - `isMock === true`
+  - `predictionSource === "mock"`
+  - `prediction.main` なし
+  - `prediction.main.trim()` が空
+
+### warning仕様
+
+- confirm では official AI と My AI / user prediction を件数分離して表示
+- My AI / user prediction の判定基準：`source === "user"` または `myAiId` が存在
+- 最大5件まで詳細を表示、6件以上は「他N件」と表示
+- confirm 文面に以下を明記
+  - 保存後は公式AI予測の再生成を推奨
+  - My AI / user prediction は自動更新されない
+
+### helper方針
+
+- `findDriftedPredictions` は `app/admin/edit/[id]/page.tsx` 内のローカル関数として実装
+- `lib/events.ts` などへの共通helper切り出しは行っていない
+- 理由：
+  - 今回は admin/edit 専用のUI警告であるため
+  - 将来、他画面でも再利用する必要が出たら共通helperへ昇格する
+
+### 動作確認
+
+- ローカル `npm run dev` で確認済み
+- 対象イベント：`8kUrRnIAPuIHfjhSCchK`（ウィザーズ vs ブルズ）
+- 候補 `ウィザーズ` を一時的に `ウィザーズ_test` に変更して drift 状態を作成
+- confirm が1回発火
+- confirm 文面で以下を確認
+  - 公式AI: 1件
+  - My AI / user prediction: 0件
+  - 詳細: `Gemini: ウィザーズ`
+  - `My AI / user prediction は自動更新されません`
+- Cancel 相当で保存中断を確認
+- 保存成功alertは発火しなかった
+- OK保存は行っていない
+- リロード後、候補リストと result winner が元のままであることを確認
+- 本番Firestoreには不要な変更を保存していない
+
+### やらなかったこと
+
+- `predictions.main` の自動書き換えはしていない
+- official AI / My AI の自動再生成はしていない
+- 保存の hard block はしていない
+- `result.winner` は変更していない
+- `outcome` は変更していない
+- stored `outcome` を権威化していない
+- Candidate ID は導入していない
+- Firestore schema変更はしていない
+- migration はしていない
+- firestore.rules は変更していない
+
+### commit / push
+
+- implementation commit: `4f7dd79 feat(admin): warn on candidate edit drift before save`
+- push済み
+- origin/main 反映済み
