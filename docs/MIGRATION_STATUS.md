@@ -924,3 +924,59 @@ Candidate ID は MVP直近では不要。
 - Candidate ID は将来の再検討候補として保留する
 
 いずれも本記録時点では実装しない。
+
+## Firestore バックアップ確立(2026-07-04)
+
+### 設定完了項目
+
+- Blaze プラン切り替え済み
+- 予算アラート設定済み
+  - Google Cloud Billing
+  - 月額 ¥1,000
+  - しきい値 50% / 90% / 100%
+  - 予算アラートは通知であり、課金停止ではない
+- PITR 有効化済み
+  - 保持 7日
+  - 1分粒度
+  - 記録開始: 2026-07-03 20:02 UTC+9
+- Firestore 日次スケジュールバックアップ設定済み
+  - daily
+  - retention 30日
+  - 初回スナップショット生成: 2026-07-04
+
+### Retention and Cost Tradeoff
+
+- 現状データは極小規模
+  - 13 events
+  - 61 predictions
+- 現状ではコストは無視できる範囲
+- PITR 7日を超える中期保険として30日を選択
+- 最大98日固定にはしていない
+- データ量増加時に retention は見直す前提
+
+### Restore test 結果
+
+- 本番 `(default)` には復元していない
+- 新DB `restore-test-20260704` へ復元
+- 復元後に確認した項目
+  - events 13件
+  - predictions subcollection
+  - result.winner
+  - prediction.main
+  - source / predictionSource
+  - legacy races
+- restore test 成功
+- テストDB `restore-test-20260704` は確認後に削除済み
+- 本番 `(default)` は無傷
+- バックアップ取得だけでなく、復元できることまで確認済み
+
+### Operational conclusion
+
+- Firestore backup phase is complete
+- write / migration 系フェーズへ進む前提条件を満たした
+- 今後の write / migration 作業前には、必ず最新バックアップの存在を確認する
+- `docs/FIRESTORE_BACKUP_PROCEDURE.md` の Pre-Write Phase Checklist に従う
+- Firestore / Google Cloud Console 操作は人間が行う
+- Claude Code は記録・手順書・確認リスト作成のみ担当
+- 本番DBへ直接 restore しない
+- restore / clone は必ず新DBで確認する
