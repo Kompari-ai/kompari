@@ -129,6 +129,24 @@ function getPredictionResult(
   return { label: "外れ", className: "bg-red-50 text-red-700" };
 }
 
+// コンセンサス答え合わせの表示専用ラベル判定。ランキング・判定・集計には使わない。
+function getConsensusAnswerLabel(
+  consensusMainName: string,
+  consensusMainCount: number,
+  consensusTotal: number,
+  resultWinner: string
+) {
+  if (consensusMainName === resultWinner) {
+    return { label: "コンセンサス的中", className: "bg-green-50 text-green-700" };
+  }
+
+  if (consensusMainCount === consensusTotal) {
+    return { label: "全AI外れ", className: "bg-red-50 text-red-700" };
+  }
+
+  return { label: "コンセンサス外れ", className: "bg-amber-50 text-amber-700" };
+}
+
 function formatConfidence(confidence?: string) {
   if (!confidence) return "-";
   if (confidence.includes("%")) return confidence;
@@ -541,6 +559,36 @@ export default function RaceDetailPage({
 
   const countableOfficialPreds = officialPreds.filter(isCountablePrediction);
 
+  // コンセンサス答え合わせ用の表示専用集計。ランキング・判定・集計には使わない。
+  // trim後の文字列で集計・比較し、getResultWinner由来のresultWinner(trim済み)との対称性を保つ。
+  const consensusMainCounts: Record<string, number> = {};
+  countableOfficialPreds.forEach((p) => {
+    const main = (p.main || "").trim();
+    if (!main) return;
+    consensusMainCounts[main] = (consensusMainCounts[main] || 0) + 1;
+  });
+
+  let consensusMainName = "";
+  let consensusMainCount = 0;
+  for (const [name, count] of Object.entries(consensusMainCounts)) {
+    if (count > consensusMainCount) {
+      consensusMainName = name;
+      consensusMainCount = count;
+    }
+  }
+
+  const consensusTotal = countableOfficialPreds.length;
+
+  const consensusAnswer =
+    resultWinner && consensusTotal > 0 && consensusMainName
+      ? getConsensusAnswerLabel(
+          consensusMainName,
+          consensusMainCount,
+          consensusTotal,
+          resultWinner
+        )
+      : null;
+
   return (
     <main className="min-h-screen bg-[#F2F4F8] text-[#0F172A]">
       <TopBar />
@@ -650,6 +698,37 @@ export default function RaceDetailPage({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Consensus answer check: consensus main vs result, display-only */}
+          {consensusAnswer && (
+            <div className="mb-4 rounded-[12px] border border-gray-100 bg-gray-50 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-[10px] font-bold text-gray-400">
+                  コンセンサス答え合わせ
+                </span>
+                <span
+                  className={`shrink-0 text-[10.5px] font-bold px-2.5 py-1 rounded-full ${consensusAnswer.className}`}
+                >
+                  {consensusAnswer.label}
+                </span>
+              </div>
+
+              <div className="text-xs text-gray-500">
+                コンセンサス本命:{" "}
+                <span className="font-bold text-gray-900">
+                  {consensusMainName}
+                </span>
+                （{consensusMainCount}/{consensusTotal} AI）
+              </div>
+
+              <div className="mt-1 text-xs text-gray-500">
+                結果:{" "}
+                <span className="font-bold text-gray-900">
+                  {resultWinner}
+                </span>
+              </div>
             </div>
           )}
 
