@@ -1734,3 +1734,38 @@ race detail のヒーローに result.settledAt を表示。Kompari が「結果
 ### 検証メモ2: legacy に現在時刻を後付けしない（設計判断）
 
 既存 legacy イベントに admin 再保存で settledAt を付ける案は採らない。過去確定イベントに serverTimestamp() を付けると、実際の確定時刻ではなく「再保存した時刻」が記録され、Kompari の「データを正直に出す」思想に反する。legacy は「時刻記録なし」のまま残すのが正しい。settledAt は今後の新規結果確定から自然に入る。「時刻記録なし」は不完全な表示ではなく、過去データに対する正直な表示である。
+
+## trust UI Phase 4: 結果確定後の予測書き換え trust note (commit 308387d)
+
+race detail の結果確定済みイベントに、Kompari の運用方針を伝える1行 note を表示。「結果確定後にAI予測を書き換えない設計です。」
+
+### 実装
+
+- Phase 3 の settledAt 表示直下、resultWinner 条件ブロック内に独立1行
+- 表示条件: resultWinner あり（settledAt の有無は問わない）。admin/edit の isResultSettled も winner 主判定のため条件を揃えた
+- text-[10px] text-white/60（settledAt の text-white/70 より控えめ）
+- イベント単位で1回。各AIカード・コンセンサスセクションには出さない
+- 判定ロジック・Phase 1-3 表示・toSettledAtDate/formatSettledAt は無変更
+
+### predictedAt 個別時刻表示を見送った理由
+
+調査で predictedAt は両公式AI経路（createEvent / generatePrediction）とも serverTimestamp() 付与済み・型追加だけで表示可能と判明したが、以下の時刻揺れがあるため trust 表現には使わないと判断:
+
+- createEvent 同時生成（Case E）: predictedAt と settledAt が同一 batch でほぼ同時刻になり、「予測が結果より先」を時刻で証明できない
+- legacy: 締切ガード導入前に確定後生成された実例が現存（ウィザーズvsブルズ ChatGPT、阪神vs巨人 Grok）。個々のデータに「必ず結果確定前に作成された」と断定できない
+- My AI: 書き込み経路が削除済みで、既存 legacy データの付与状況が追跡不能
+
+将来 predictedAt を settledAt と対比表示する場合は、Case E/legacy/My AI の扱いを整理してから。
+
+### 文言を「設計です」に抑えた理由
+
+候補「ブロックされています」「必ず結果確定前に作成された」は不採用。
+
+- guard はクライアント側（admin/edit の JS ロジック）のみ。firestore.rules（41-49行目）は predictions の write を isAdmin() だけで許可し、winner/settledAt を条件にしていない。ルール層での強制ではないため「ブロック」は過大主張
+- legacy に確定後生成の実例があるため「必ず確定前」は個々のデータに対し偽
+
+「設計です」= 標準管理画面での運用方針の説明にとどめ、実態と一致させた。
+
+### 将来施策: rules レベルでの確定後 write 禁止（未実装）
+
+firestore.rules に「result.winner/settledAt があるイベントの predictions write を拒否する」ルールを追加すれば、guard がアプリ層でなくデータアクセス層で強制され、trust note を「ブロックされています」の断定形に強化できる。ただし rules 変更は本番セキュリティに直結するため、影響範囲（admin の正当な操作を阻害しないか等）を精査してから別途検討する。
