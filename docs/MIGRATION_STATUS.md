@@ -1714,3 +1714,23 @@ Phase 2 はセクションレベルの判定バッジが存在せず、この帯
 ### Phase 2.5 候補（記録のみ・未着手）
 
 少数派的中の可視化（多数派が外し少数派のAIだけが当てたケースのハイライト）は今回スコープ外。「誰が少数派か/定義/本命のみか対抗含むか」の設計が必要なため別PRとする。
+
+## trust UI Phase 3: 結果確定時刻（settledAt）表示 (commit a6458cb)
+
+race detail のヒーローに result.settledAt を表示。Kompari が「結果は確定後に記録されたものだ」と示す trust 表示。
+
+### 実装
+
+- toSettledAtDate（unknown -> Date|null）: 表示専用パーサ。firebase Timestamp を import せず、toDate 関数の有無で判定するダックタイピング。null/undefined・Date・string・number・変換失敗はすべて null にフォールバックし、想定外の型でもページを落とさない
+- formatSettledAt（Date -> string）: 「M月D日 HH:mm」形式。Intl.DateTimeFormat で timeZone: "Asia/Tokyo" 固定、hourCycle: "h23"。serverTimestamp() は UTC 基準のため、TZ 固定なしだと本番（Vercel=UTC）で時刻がずれる。既存 formatStartsAt は string 前提のため流用せず別実装
+- 表示位置: ヒーロー統計3タイル（候補/AI予測/結果）の直後、独立1行
+- 3状態: resultWinner なし=非表示 / settledAt Date化成功=「結果確定: 時刻」/ settledAt なし・変換失敗=「結果確定済み（時刻記録なし）」
+- lib/events.ts・normalizeEventDocToEvent・settledAt 型定義は無変更。getResultWinner 等の判定ロジック、Phase 1/2 の答え合わせブロックも無変更
+
+### 検証メモ1: 主経路はローカル注入で検証、実Timestamp発火は初回確定時に確認
+
+本番 Firestore には settledAt 付きの確定イベントが現状1件も存在しない（settledAt 導入以降、新規の結果確定書き込みがまだ行われていないため。既存確定イベントは全て導入前=legacy）。そのため Timestamp様 -> Date -> JST整形の主経路は、ローカルで toDate() を持つ一時オブジェクトを注入して検証した（表示「7月5日 14:30」で JST 正常、[object Object]/Invalid Date なし、検証後コード完全削除・rg残存0件確認）。Firestore が実際に返す Timestamp オブジェクトでの初回発火は、次に新規結果確定を行った際に実データで最終確認すること。
+
+### 検証メモ2: legacy に現在時刻を後付けしない（設計判断）
+
+既存 legacy イベントに admin 再保存で settledAt を付ける案は採らない。過去確定イベントに serverTimestamp() を付けると、実際の確定時刻ではなく「再保存した時刻」が記録され、Kompari の「データを正直に出す」思想に反する。legacy は「時刻記録なし」のまま残すのが正しい。settledAt は今後の新規結果確定から自然に入る。「時刻記録なし」は不完全な表示ではなく、過去データに対する正直な表示である。
