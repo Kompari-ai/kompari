@@ -1130,3 +1130,84 @@ Candidate ID は MVP直近では不要。
 
 - `abaaadd feat(settlement): record result.settledAt on first winner save`
 - pushed to main
+
+## settledAt 導入 Step 2(saveEvent経路)
+
+### 位置づけ
+
+- Step 2
+- `app/admin/edit/[id]/page.tsx` の saveEvent 経路に settledAt 対応を追加
+- Step 1（saveResult）と同型の既存イベント編集経路への対応
+- 「settledAt導入完了」ではない
+- createEvent は未対応で Step 3 に残る
+
+### 定義
+
+- `result.settledAt` = そのeventに初めて `result.winner` が保存された時刻
+- 初回確定時刻として扱う
+
+### 挙動
+
+- 未確定イベントに winner を新規設定した場合のみ settledAt を付与
+- winner修正時は settledAt を更新しない
+- 既存 settledAt は保持する
+- legacy（winnerあり・settledAtなし）は再編集しても settledAt を後付けしない
+- retroactive backfill しない
+- winner clear時は `result: null` に戻す
+
+### 実装
+
+- `app/admin/edit/[id]/page.tsx` の `saveEvent()` 内、resultValue 構築部分のみ変更
+- `previousWinner = event?.result?.winner`
+- `previousSettledAt = event?.result?.settledAt`
+- previousSettledAt があれば保持
+- previousSettledAt がなく previousWinner もない場合だけ `serverTimestamp()` を付与
+- helper化はしていない
+- `lib/events.ts` は変更していない
+- `app/admin/results/page.tsx` の saveResult は変更していない
+- `app/admin/page.tsx` の createEvent は変更していない
+
+### 非接触
+
+- candidate edit drift warning
+- `findDriftedPredictions`
+- `window.confirm`
+- category / title / venue / startsAt / candidates の更新
+- `result.winner` のSoT性
+- `getResultWinner`
+- ranking
+- stats
+- 確定判定
+- stored outcome
+- mock / non-countable 除外
+- 以上はいずれも無変更
+
+### Known Uncovered Write Path
+
+- `app/admin/page.tsx` の createEvent 経路は未対応
+- createEvent経由で resultWinner を保存した場合、まだ settledAt は付かない
+- Step 3で対応予定
+
+### 別PR / 今回スコープ外
+
+- createEvent対応
+- helper化
+- resultUpdatedAt
+- resultSource
+- result revision履歴
+- 結果確定後のprediction再生成guard
+- settledAt表示UI
+- Firestore migration
+- retroactive backfill
+
+### 動作確認
+
+- npm run build 成功
+- git diff --check 成功
+- 本番Firestoreへのテスト書き込みはしていない
+- 通常運用で次に admin/edit から結果入力・修正する際、Firebase Consoleで `result.settledAt` の付与・保持を確認する方針
+
+### commit
+
+- `baed39e feat(settlement): record result.settledAt on saveEvent path`
+- pushed to main
