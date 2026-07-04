@@ -713,6 +713,12 @@ export default function RaceDetailPage({
                 )}
               </p>
             )}
+
+            {resultWinner && (
+              <p className="mt-1 text-[10px] text-white/60">
+                結果確定後にAI予測を書き換えない設計です。
+              </p>
+            )}
           </div>
         </section>
 
