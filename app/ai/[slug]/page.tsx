@@ -359,7 +359,7 @@ export default function AiProfilePage({
 
             <Link
               href="/ranking"
-              className="mt-5 block rounded-2xl bg-blue-700 py-3 text-sm font-bold text-white"
+              className="mt-5 block rounded-2xl bg-brand py-3 text-sm font-bold text-white"
             >
               ランキングへ戻る
             </Link>
@@ -381,7 +381,7 @@ export default function AiProfilePage({
             className="p-5 text-white"
             style={{
               background:
-                "linear-gradient(150deg, #0B1F4B 0%, #13307A 60%, #1D5BFF 130%)",
+                "linear-gradient(150deg, var(--color-brand) 0%, var(--color-brand-soft) 100%)",
             }}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -389,7 +389,7 @@ export default function AiProfilePage({
                 OFFICIAL AI
               </span>
 
-              <span className="text-xs font-bold text-blue-100">
+              <span className="text-xs font-bold text-white/70">
                 AI PROFILE
               </span>
             </div>
@@ -416,7 +416,7 @@ export default function AiProfilePage({
               </div>
             </div>
 
-            <p className="text-sm font-semibold leading-6 text-blue-50">
+            <p className="text-sm font-semibold leading-6 text-white/70">
               {profile.description}
             </p>
 
@@ -479,7 +479,7 @@ export default function AiProfilePage({
 
             <div className="p-3">
               <div className="text-[11px] font-bold text-gray-400">種別</div>
-              <div className="mt-1 text-sm font-extrabold text-blue-700">
+              <div className="mt-1 text-sm font-extrabold text-brand">
                 公式AI
               </div>
             </div>
@@ -490,7 +490,7 @@ export default function AiProfilePage({
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-[15px] font-extrabold">人気</h2>
 
-            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+            <span className="rounded-full bg-brand-tint px-3 py-1 text-xs font-bold text-brand">
               スコア {popularityScore}
             </span>
           </div>
@@ -555,23 +555,23 @@ export default function AiProfilePage({
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-[15px] font-extrabold">実績サマリー</h2>
 
-            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+            <span className="rounded-full bg-brand-tint px-3 py-1 text-xs font-bold text-brand">
               {stats.hit}/{stats.finished}
             </span>
           </div>
 
-          <div className="rounded-2xl bg-blue-50 p-4">
+          <div className="rounded-2xl bg-brand-tint p-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-bold text-gray-600">的中率</span>
 
-              <span className="text-2xl font-extrabold text-blue-700">
+              <span className="text-2xl font-extrabold text-brand">
                 {stats.hitRate}%
               </span>
             </div>
 
             <div className="h-3 overflow-hidden rounded-full bg-white">
               <div
-                className="h-3 rounded-full bg-blue-700"
+                className="h-3 rounded-full bg-brand"
                 style={{ width: `${stats.hitRate}%` }}
               />
             </div>
@@ -619,7 +619,7 @@ export default function AiProfilePage({
                     {getCategoryLabel(item.category)}
                   </div>
 
-                  <div className="text-[15px] font-extrabold text-blue-700">
+                  <div className="text-[15px] font-extrabold text-brand">
                     {item.rate}%
                   </div>
                 </div>
@@ -634,7 +634,7 @@ export default function AiProfilePage({
 
                 <div className="h-2 overflow-hidden rounded-full bg-white">
                   <div
-                    className="h-2 rounded-full bg-blue-700"
+                    className="h-2 rounded-full bg-brand"
                     style={{ width: `${item.rate}%` }}
                   />
                 </div>
@@ -664,7 +664,7 @@ export default function AiProfilePage({
                 <div className="mb-2 flex items-center justify-between">
                   <div className="font-extrabold">{m.displayName}</div>
 
-                  <div className="text-[15px] font-extrabold text-blue-700">
+                  <div className="text-[15px] font-extrabold text-brand">
                     {m.hitRate !== null ? `${m.hitRate}%` : "-"}
                   </div>
                 </div>
@@ -679,7 +679,7 @@ export default function AiProfilePage({
 
                 <div className="h-2 overflow-hidden rounded-full bg-white">
                   <div
-                    className="h-2 rounded-full bg-blue-700"
+                    className="h-2 rounded-full bg-brand"
                     style={{ width: `${m.hitRate ?? 0}%` }}
                   />
                 </div>

@@ -123,8 +123,8 @@ function EventCard({ event }: { event: KompariEvent }) {
         <div className="mt-3 rounded-[10px] bg-[#F8FAFC] border border-[#E8ECF2] p-2.5">
           <div className="text-[10px] font-bold text-gray-500">AIコンセンサス本命</div>
           <div className="mt-1 flex items-center justify-between gap-2">
-            <div className="truncate font-extrabold text-blue-700 text-[13px]">{top.name}</div>
-            <div className="shrink-0 text-[11px] font-bold text-blue-700">
+            <div className="truncate font-extrabold text-brand text-[13px]">{top.name}</div>
+            <div className="shrink-0 text-[11px] font-bold text-brand">
               {top.count}/{officialPreds.length}
             </div>
           </div>
@@ -289,7 +289,7 @@ export default function RacesPage() {
             className="p-5 text-white"
             style={{
               background:
-                "linear-gradient(150deg, #0B1F4B 0%, #13307A 60%, #1D5BFF 130%)",
+                "linear-gradient(150deg, var(--color-brand) 0%, var(--color-brand-soft) 100%)",
             }}
           >
             <div className="mb-3 flex items-center justify-between">
@@ -307,7 +307,7 @@ export default function RacesPage() {
             <div className="mt-4 grid grid-cols-3 gap-3 text-center">
               <div className="rounded-[12px] bg-white p-2.5">
                 <div className="text-[10px] font-bold text-gray-500">総数</div>
-                <div className="mt-0.5 text-xl font-extrabold text-blue-700">
+                <div className="mt-0.5 text-xl font-extrabold text-brand">
                   {events.length}
                 </div>
               </div>
@@ -417,7 +417,7 @@ export default function RacesPage() {
                   setStatusFilter("all");
                   setCategoryFilter("all");
                 }}
-                className="mt-4 rounded-[12px] bg-blue-700 px-5 py-3 text-sm font-bold text-white"
+                className="mt-4 rounded-[12px] bg-brand px-5 py-3 text-sm font-bold text-white"
               >
                 条件をリセット
               </button>

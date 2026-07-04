@@ -361,12 +361,12 @@ function CandidateCard({
       <div className="rounded-[10px] bg-gray-50 p-3">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-bold text-gray-500">AI支持率</span>
-          <span className="text-xs font-extrabold text-blue-700">{rate}%</span>
+          <span className="text-xs font-extrabold text-brand">{rate}%</span>
         </div>
 
         <div className="h-2 overflow-hidden rounded-full bg-white">
           <div
-            className="h-2 rounded-full bg-blue-700"
+            className="h-2 rounded-full bg-brand"
             style={{ width: `${rate}%` }}
           />
         </div>
@@ -506,7 +506,7 @@ export default function RaceDetailPage({
 
             <Link
               href="/races"
-              className="mt-5 block rounded-[12px] bg-blue-700 py-3 text-sm font-bold text-white"
+              className="mt-5 block rounded-[12px] bg-brand py-3 text-sm font-bold text-white"
             >
               イベント一覧へ戻る
             </Link>
@@ -535,7 +535,7 @@ export default function RaceDetailPage({
             className="p-5 text-white"
             style={{
               background:
-                "linear-gradient(150deg, #0B1F4B 0%, #13307A 60%, #1D5BFF 130%)",
+                "linear-gradient(150deg, var(--color-brand) 0%, var(--color-brand-soft) 100%)",
             }}
           >
             <div className="mb-3 flex items-center justify-between gap-3">

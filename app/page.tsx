@@ -100,8 +100,8 @@ function EventCard({ event }: { event: KompariEvent }) {
             AIコンセンサス本命
           </div>
           <div className="flex items-center justify-between gap-2">
-            <div className="font-extrabold text-blue-700 text-[13px]">{top.name}</div>
-            <div className="text-[11px] font-bold text-blue-700">
+            <div className="font-extrabold text-brand text-[13px]">{top.name}</div>
+            <div className="text-[11px] font-bold text-brand">
               {top.count}/{officialPreds.length}
             </div>
           </div>
@@ -164,7 +164,7 @@ function EventCard({ event }: { event: KompariEvent }) {
           )}
         </div>
 
-        <span className="text-[11px] font-bold text-blue-700">
+        <span className="text-[11px] font-bold text-brand">
           詳細を見る ›
         </span>
       </div>
@@ -259,7 +259,7 @@ export default function HomePage() {
             className="p-5 text-white"
             style={{
               background:
-                "linear-gradient(150deg, #0B1F4B 0%, #13307A 60%, #1D5BFF 130%)",
+                "linear-gradient(150deg, var(--color-brand) 0%, var(--color-brand-soft) 100%)",
             }}
           >
             <div className="mb-1 text-[10px] font-bold tracking-[0.22em] text-white/65">
@@ -302,7 +302,7 @@ export default function HomePage() {
           <section className="mb-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[15.5px] font-bold">注目イベント</h2>
-              <Link href="/races" className="text-[12px] font-bold text-blue-700">
+              <Link href="/races" className="text-[12px] font-bold text-brand">
                 すべて見る ›
               </Link>
             </div>
@@ -317,7 +317,7 @@ export default function HomePage() {
           <div className="grid grid-cols-3 gap-2">
             <Link
               href="/races"
-              className="rounded-[12px] bg-blue-700 py-3.5 text-center text-[13px] font-bold text-white"
+              className="rounded-[12px] bg-brand py-3.5 text-center text-[13px] font-bold text-white"
             >
               予測を見る
             </Link>

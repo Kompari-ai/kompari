@@ -55,7 +55,7 @@ export function BottomNav() {
               <div
                 className={`flex h-8 w-8 items-center justify-center rounded-2xl text-base font-extrabold ${
                   active
-                    ? "bg-blue-700 text-white"
+                    ? "bg-brand text-white"
                     : "bg-transparent text-gray-400"
                 }`}
               >
@@ -64,7 +64,7 @@ export function BottomNav() {
 
               <div
                 className={`text-[11px] font-bold leading-none ${
-                  active ? "text-blue-700" : "text-gray-400"
+                  active ? "text-brand" : "text-gray-400"
                 }`}
               >
                 {item.label}

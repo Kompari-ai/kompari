@@ -10,6 +10,12 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-brand: #0A7A3F;
+  --color-brand-soft: #22C55E;
+  --color-brand-tint: #E8F5EE;
+  /* --color-brand-soft はヒーローグラデーションの明側専用。
+     CTA・テキスト・バッジには使わず、それらは必ず --color-brand を使う。 */
 }
 
 body {

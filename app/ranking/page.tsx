@@ -337,7 +337,7 @@ export default function RankingPage() {
             className="p-5 text-white"
             style={{
               background:
-                "linear-gradient(150deg, #0B1F4B 0%, #13307A 60%, #1D5BFF 130%)",
+                "linear-gradient(150deg, var(--color-brand) 0%, var(--color-brand-soft) 100%)",
             }}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -608,7 +608,7 @@ export default function RankingPage() {
               <div className="mt-5">
                 <Link
                   href="/races"
-                  className="block rounded-[12px] bg-blue-700 py-4 text-center text-sm font-extrabold text-white"
+                  className="block rounded-[12px] bg-brand py-4 text-center text-sm font-extrabold text-white"
                 >
                   イベント一覧へ
                 </Link>

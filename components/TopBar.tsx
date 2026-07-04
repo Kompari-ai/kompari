@@ -81,7 +81,7 @@ export function TopBar() {
           </button>
 
           <Link href="/" className="text-center">
-            <div className="text-2xl font-extrabold italic tracking-tight text-blue-700">
+            <div className="text-2xl font-extrabold italic tracking-tight text-brand">
               Kompari
             </div>
             <div className="text-[10px] font-extrabold tracking-[0.35em] text-gray-400">
@@ -92,7 +92,7 @@ export function TopBar() {
           <Link
             href="/notifications"
             className={`relative flex h-10 w-10 items-center justify-center rounded-full text-xl ${
-              isActive(pathname, "/notifications") ? "bg-blue-50" : ""
+              isActive(pathname, "/notifications") ? "bg-brand-tint" : ""
             }`}
             aria-label="通知"
           >
@@ -143,10 +143,10 @@ export function TopBar() {
                   className="p-4 text-white"
                   style={{
                     background:
-                      "linear-gradient(135deg, #2563eb 0%, #1d4ed8 45%, #172554 100%)",
+                      "linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-soft) 100%)",
                   }}
                 >
-                  <div className="text-[11px] font-extrabold tracking-[0.18em] text-blue-100">
+                  <div className="text-[11px] font-extrabold tracking-[0.18em] text-white/70">
                     MENU
                   </div>
 
@@ -154,7 +154,7 @@ export function TopBar() {
                     Kompariメニュー
                   </h2>
 
-                  <p className="mt-1 text-xs font-semibold leading-5 text-blue-50">
+                  <p className="mt-1 text-xs font-semibold leading-5 text-white/70">
                     予測イベント、ランキング、通知、利用規約などを確認できます。
                   </p>
                 </section>
@@ -169,12 +169,12 @@ export function TopBar() {
                         href={item.href}
                         onClick={() => setOpen(false)}
                         className={`rounded-2xl p-3 ${
-                          active ? "bg-blue-50" : "bg-gray-50"
+                          active ? "bg-brand-tint" : "bg-gray-50"
                         }`}
                       >
                         <div
                           className={`text-sm font-extrabold ${
-                            active ? "text-blue-700" : "text-gray-900"
+                            active ? "text-brand" : "text-gray-900"
                           }`}
                         >
                           {item.label}
