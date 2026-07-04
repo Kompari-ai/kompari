@@ -108,6 +108,56 @@ function buildPodiumData(event: KompariEvent) {
 }
 
 
+// event.result.settledAt(unknown)を表示用のDateへ変換する。表示専用、判定・集計には使わない。
+// Firestore Timestampはimportせず、toDate()の有無によるダックタイピングで判定する。
+// 変換できない場合は null を返し、呼び出し側で「時刻記録なし」として扱う。
+function toSettledAtDate(value: unknown): Date | null {
+  if (value === null || value === undefined) return null;
+
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "object") {
+    const maybeTimestamp = value as { toDate?: unknown };
+    if (typeof maybeTimestamp.toDate === "function") {
+      try {
+        const date = (maybeTimestamp.toDate as () => Date)();
+        if (date instanceof Date && !isNaN(date.getTime())) {
+          return date;
+        }
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  return null;
+}
+
+// settledAt表示用フォーマッタ。「M月D日 HH:mm」形式、Asia/Tokyo基準、24時間表記。
+// startsAt用のformatStartsAt(string専用)とは別系統のため流用しない。
+function formatSettledAt(date: Date): string {
+  const parts = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+
+  return `${get("month")}月${get("day")}日 ${get("hour")}:${get("minute")}`;
+}
+
 function getPredictionResult(
   prediction: KompariPrediction,
   resultWinner: string
@@ -485,6 +535,9 @@ export default function RaceDetailPage({
 
   const resultWinner = event ? getResultWinner(event) : "";
 
+  // 結果確定時刻の表示専用派生値。resultWinnerが確定判定のSoTである点は変えない。
+  const settledAtDate = toSettledAtDate(event?.result?.settledAt);
+
   const consensus = useMemo(() => {
     if (!event) return [];
     return buildConsensus(event);
@@ -647,6 +700,19 @@ export default function RaceDetailPage({
                 </div>
               </div>
             </div>
+
+            {resultWinner && (
+              <p className="mt-2 text-[11px] text-white/70">
+                {settledAtDate ? (
+                  <>
+                    <span className="font-semibold">結果確定:</span>{" "}
+                    {formatSettledAt(settledAtDate)}
+                  </>
+                ) : (
+                  "結果確定済み（時刻記録なし）"
+                )}
+              </p>
+            )}
           </div>
         </section>
 
