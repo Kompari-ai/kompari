@@ -1438,3 +1438,103 @@ Candidate ID は MVP直近では不要。
 
 - `222b685 feat(admin): block prediction regeneration on settled events`
 - pushed to main
+
+## guard Step 2(Case E): createEvent 同時生成ケースの判断
+
+### 背景
+
+- Post-Settlement Prediction Regeneration Guard Step 1 では、admin/edit の確定後 prediction 再生成を block した
+- Step 1 の対象は、既存の結果確定済みeventに対して後から prediction を再生成できる事後生成リスクだった
+- 残る論点として、createEvent 時に winner 入力済みで prediction も生成する Case E を調査した
+- Case E は「結果確定後に後から prediction を足す」のではなく、event作成時に result と prediction を同時に保存するケース
+
+### 調査で確認したこと
+
+- createEvent の winner入力欄はデフォルト空
+- 未来イベントの通常作成では winner は空のまま作成される
+- winner を入れて作成した場合、predictions と result(winner + settledAt) は同一 batch で保存される
+- prediction.predictedAt は serverTimestamp()
+- result.settledAt も serverTimestamp()
+- predictedAt と settledAt は同一 batch 内で付与されるため、時系列上はほぼ同時
+- Step 1 が防いだ predictedAt > settledAt の事後生成とは性質が異なる
+
+### 2つの実態パターン
+
+- パターン1: 未来イベント登録時の誤入力
+  - 本来 winner は空のはずだが、誤って winner を入れてしまうケース
+  - デフォルト空なので、うっかり埋まるというより、明示的に入力しない限り発生しにくい
+
+- パターン2: 過去イベントの結果込み投入
+  - 過去に終わったイベントを、result と prediction を含めて手動投入するケース
+  - ダミーデータ・過去イベント投入・検証データ投入として正当な運用になり得る
+  - block するとこの正当用途を阻害する
+
+### 判断
+
+- Case E は guard不要と判断する
+- block は行わない
+- warning + confirm も今回は行わない
+- UI copy の追加もしない
+- flag保存もしない
+
+### 理由
+
+- Case E は時系列上、事後生成ではなく同時生成
+- Step 1 の「確定後に prediction を後から足さない」という線には直接抵触しない
+- winner入力欄はデフォルト空であり、誤入力リスクは限定的
+- 過去イベント投入という正当用途が存在し得る
+- block は強すぎる
+- warning は正当な過去投入のたびにノイズになる可能性がある
+- postSettlementGenerated flag や類似flagは、ranking/stats除外や表示設計を伴うため今回スコープ外
+- 同時投入された prediction が本当に事前に作られたものかどうかは、UI guard ではなく運用ルール・データソース信頼性の問題
+
+### Step 1との整合
+
+- Step 1:
+  - 確定済みeventに対する後追い再生成を block
+  - predictedAt が settlement 後になる事後生成を防いだ
+
+- Case E:
+  - event作成時に result と prediction が同時に保存される
+  - predictedAt と settledAt はほぼ同時
+  - Step 1 と同じ block ルールを機械的に適用する対象ではない
+
+### 非実装
+
+今回、以下は実装しない。
+
+- createEvent の block
+- createEvent の warning + confirm
+- winner欄の UI copy 追加
+- simultaneousResultPrediction などのflag追加
+- postSettlementGenerated flag追加
+- ranking / stats 除外
+- outcome の意味変更
+- result.winner のSoT変更
+- result.settledAt の意味変更
+- migration
+- Firestore rules変更
+
+### 再検討条件
+
+以下の場合は、Case E guard を再検討する。
+
+- createEvent の winner欄が将来、誤って埋まりやすいUIに変わった場合
+- 過去イベント投入の運用が廃止され、winner入力が誤操作しか生まなくなった場合
+- 同時投入predictionの信頼性が問題化し、データソース単位の区別が必要になった場合
+- 外部公開・ランキング集計において、同時投入predictionを明確に区別する必要が出た場合
+- historical import / demo data / verified pre-event prediction などのデータ種別管理が必要になった場合
+
+### 残る設計論点
+
+- 将来、過去イベント投入を正式運用するなら、predictionSource / importSource / verifiedPreEvent などのデータ由来管理を検討する余地がある
+- ただし、これは Case E のguardではなく、データ出所・監査性設計の問題
+- 現時点では最小MVPの信頼性方針として、admin/edit の事後再生成blockまでで十分
+
+### 結論
+
+- Case E は未対応の穴ではない
+- 調査の結果、Step 1の事後生成リスクとは別物と判断
+- 現時点では guard不要
+- 実装PRは作らない
+- 判断をdocsに記録してクローズ
