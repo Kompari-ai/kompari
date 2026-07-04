@@ -142,7 +142,10 @@ export default function AdminPage() {
         candidates,
         venue: venue.trim(),
         startsAt: startsAt || null,
-        result: resultWinner ? { winner: resultWinner } : null,
+        // createEventは新規作成なので既存resultが無く、winnerがあれば常に初回確定。
+        result: resultWinner
+          ? { winner: resultWinner, settledAt: serverTimestamp() }
+          : null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         predictionCount: finalPredictions.length,
