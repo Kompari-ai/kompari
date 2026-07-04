@@ -1035,20 +1035,19 @@ Firebase CLIでdeployするか、Firebase Console側にも反映が必要。
 実AI呼び出し構造(callOpenAiCompatible / callGemini / callAnthropic による provider 別呼び出し構造)は実装済み。
 未確認事項: 本番でAPIキーが実際に設定され実AIが稼働しているか、mock fallbackのままか。
  
-8.2 My AI参加とFirestore rulesの不整合
+8.2 My AI参加とFirestore rulesの不整合(解消済み・legacy note)
  
-現行rulesでは races の update は管理者のみ。
-一方、My AI参加は races.predictions を更新する。
+過去、My AI参加(joinMyAi)は races.predictions を配列更新で追記していました。当時のrulesでは races の update は管理者のみに制限されており、一般ユーザーがMy AI参加を行うとrules上失敗する可能性がある、という不整合が存在していました。
  
-そのため、一般ユーザーがMy AI参加を行うと、rules上は失敗する可能性がある。
-現時点では管理者操作・MVP検証前提。
+joinMyAi 経路は Phase 4-d-3 で削除済みのため、この不整合を生む書き込み経路自体が現在は存在せず、問題は発生しません。
  
-対策候補:
+将来、My AIの外部API連携仕様(セクション13.4)などでMy AI予測の新規書き込み経路を復活させる場合は、現行rules(events/{eventId}/predictions の create/update も isAdmin() のみ)のもとで同種の不整合が再発しうるため、以下を再検討する必要があります。
+ 
+対策候補(将来My AI書き込みを復活させる場合):
  
 ・ユーザー認証を入れる
 ・myAis に ownerUid を持たせる
-・eventPredictions のような別collectionへ分離する
-・Cloud Functions / API Route 経由で安全に追記する
+・predictions サブコレクションへの書き込みをAPI Route/Cloud Functions経由にする
  
 8.3 My AI所有者管理が未実装
  
@@ -1136,25 +1135,20 @@ APIキー未設定・実呼び出し失敗時は mock fallback。
 ・ownerUidをmyAisに持たせる
 ・My AI作成後の編集/削除を本人だけ許可する
  
-9.3 予測データの保存先
+9.3 予測データの保存先(決定済み・実装済み)
  
-未決定。
+正: events/{eventId}/predictions/{predictionId} サブコレクション(Phase 2b で移行済み)。
  
-現状:
+旧: races.predictions 配列に保存(legacy。races write は Phase 4-d-1 で全廃済み、現行の新規書き込み経路はない)。
  
-races.predictions 配列に保存
+サブコレクション化により解消された課題:
  
-課題:
+・配列更新による複数人参加時の競合
+・rulesでの細かい制御のしづらさ(predictions を races 本体と別に create/update/delete 制御可能に)
  
-・配列更新だと複数人参加時に競合しやすい
-・rulesで細かく制御しづらい
-・My AI参加の権限制御が難しい
+残課題:
  
-候補:
- 
-・predictions collection を別に作る
-・events/{eventId}/predictions/{predictionId} にする
-・Cloud Functions/API Route経由で更新する
+・My AI参加の権限制御(現行rulesでは predictions の create/update も isAdmin() のみ。My AI書き込みを復活させる場合は別途設計が必要。セクション8.2参照)
  
 9.4 URL設計
  
