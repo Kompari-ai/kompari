@@ -1769,3 +1769,16 @@ race detail の結果確定済みイベントに、Kompari の運用方針を伝
 ### 将来施策: rules レベルでの確定後 write 禁止（未実装）
 
 firestore.rules に「result.winner/settledAt があるイベントの predictions write を拒否する」ルールを追加すれば、guard がアプリ層でなくデータアクセス層で強制され、trust note を「ブロックされています」の断定形に強化できる。ただし rules 変更は本番セキュリティに直結するため、影響範囲（admin の正当な操作を阻害しないか等）を精査してから別途検討する。
+
+## CLAUDE.md 整地: AI予測生成の実装状況を実態に合わせて修正
+
+CLAUDE.md のAI予測生成関連の記述が古くなっていたため整地した。実装コードの変更はなし。
+
+- 実AI呼び出し構造（callOpenAiCompatible / callGemini / callAnthropic による provider 別呼び出し構造）は実装済み
+- 本番の実AI稼働状況はAPIキー設定に依存し、今回は未確認（「実AIで本番稼働中」とは断定しない）
+- APIキー未設定、または実呼び出し失敗時は mock fallback する
+- 比較AIは5種（ChatGPT/Claude/Gemini/DeepSeek/Grok）。Grokは実装済み（lib/ai/official-ai.ts で正本化、commit 2960c96）
+- predictions は `events/{eventId}/predictions/{predictionId}` サブコレクションに保存（races.predictions ではない）
+- My AI参加の `joinMyAi` 経路は Phase 4-d-3 で削除済み。現在 active な書き込み導線はなし
+- createEvent は5AI逐次呼び出し（forループ、Promise.all未使用）で、1AI失敗時はイベント作成全体が失敗する all-or-nothing 構造。failed/omitted を示す status フィールドは明示保存しておらず、失敗AIは prediction ドキュメントが存在しない「欠落」状態として扱われる
+- 8.2（My AI参加とFirestore rulesの不整合）・9.3（予測データの保存先）セクションにも `races.predictions` という古い記述が残存しているが、今回の修正スコープ外のため未修正のまま残した

@@ -86,16 +86,16 @@ Kompari は、複数のAI予測を同一イベント上で比較する AI Predic
 * Election
 * Esports
  
-比較対象AIは以下です。
+公式AI比較対象(MVP)は以下の5種です。
  
 * ChatGPT
 * Claude
 * Gemini
 * DeepSeek
-* My AI
+* Grok
  
-My AI はユーザーが作成できる独自AI風プロフィールです。
-ただし、現時点ではユーザー認証・所有者管理は未実装です。
+My AI は、ユーザーが作成できる独自AI風プロフィールです。MVPの公式AI比較対象ではなく、将来機能 / 非MVP扱いとして整理します(joinMyAi経路削除済み、詳細はセクション5.3参照)。
+現時点ではユーザー認証・所有者管理は未実装です。
  
 ⸻
  
@@ -178,13 +178,14 @@ NEXT_PUBLIC_ADMIN_EMAIL
 Firebase Authentication
 Firebase Firestore
  
-導入済みだが本格利用未確認:
+実装済み・本番稼働状況は未確認:
  
-openai package
-OPENAI_API_KEY
+openai / @anthropic-ai/sdk / @google/genai パッケージ
+OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / DEEPSEEK_API_KEY / XAI_API_KEY
  
-現時点の /api/generate-prediction は、実AI APIを呼ぶ本格実装ではなく、候補リストとAI名に応じて予測を返す仮実装です。
-OpenAI APIを実際に呼び出すパイプラインは未着手です。
+app/api/generate-prediction/route.ts は、実AI呼び出し構造(callOpenAiCompatible / callGemini / callAnthropic による provider 別呼び出し構造)を実装済みです。
+APIキーが設定されており実呼び出しが成功すればそのAIの実際の応答を使用し、APIキー未設定または実呼び出し失敗時は mock fallback(候補リストとAI名に応じたテンプレート予測)を返します。
+本番環境で実際にAPIキーが設定され実AIが稼働しているか、mock fallbackのままかは、今回のdocs整地時点では未確認です。「実AIで本番稼働中」と断定しないこと。
  
 ⸻
  
@@ -343,7 +344,8 @@ app/admin/page.tsx
 * 管理者用イベント作成画面
 * 候補を入力
 * 公式AI予測を生成
-* Firestore races に保存
+* Firestore events に保存(races write は Phase 4-d-1 で全廃)
+* 5AI(ChatGPT/Claude/Gemini/DeepSeek/Grok)を for ループで逐次呼び出し(Promise.all未使用)。1AI失敗時は event 作成全体が失敗する all-or-nothing 構造
  
 app/admin/results/page.tsx
  
@@ -363,7 +365,8 @@ app/admin/edit/[id]/page.tsx
 app/api/generate-prediction/route.ts
  
 * AI予測生成API
-* 現時点では実AI API呼び出しではなく仮実装
+* 実AI呼び出し構造(callOpenAiCompatible / callGemini / callAnthropic)を実装済み。APIキー未設定・実呼び出し失敗時は mock fallback
+* failed/omitted を示す status フィールドは明示保存していない。失敗AIは prediction ドキュメントが存在しない「欠落」状態として扱われる
 * title, category, aiName, candidates を受け取り、予測JSONを返す
  
 components/TopBar.tsx
@@ -797,40 +800,30 @@ AI予測への投票。
  
 5.1 現在の状態
  
-現時点のAI予測は 仮実装 です。
- 
-本物のOpenAI API / Claude API / Gemini API / DeepSeek APIを呼び分ける実装は未着手です。
+AI予測生成は、実AI呼び出し構造(callOpenAiCompatible / callGemini / callAnthropic による provider 別呼び出し構造)を実装済みです。
+APIキー未設定、または実呼び出し失敗時は mock fallback します。稼働状態(実AI / mock)はAPIキー設定に依存し、本番の実際の設定状況は今回のdocs整地時点では未確認です。「実AIで本番稼働中」とは断定しません。
  
 実装済みの流れは以下。
  
 管理画面 /admin
   ↓
-officialAis = ["ChatGPT", "Claude", "Gemini", "DeepSeek"]
+OFFICIAL_AI_NAMES = ["ChatGPT", "Claude", "Gemini", "DeepSeek", "Grok"](lib/ai/official-ai.ts に正本化)
   ↓
-各AI名ごとに /api/generate-prediction へPOST
+各AI名ごとに /api/generate-prediction へPOST(forループで逐次、Promise.all未使用)
   ↓
-API route が main / second / third / confidence / reason / evidence を返す
+API route が実API呼び出し(成功時)または mock fallback(APIキー未設定・失敗時)で main / second / third / confidence / reason / evidence を返す
   ↓
-Firestore races.predictions に保存
+Firestore events/{eventId}/predictions/{predictionId} サブコレクションに保存(Phase 2b 以降。races write は Phase 4-d-1 で全廃)
  
-My AI参加時の流れ。
- 
-イベント詳細 /race/[slug]
-  ↓
-My AIを選択
-  ↓
-/api/generate-prediction へPOST
-  ↓
-返却された予測に source: "user", myAiId を付与
-  ↓
-races.predictions に追記
+createEvent 経由では、5AI逐次呼び出し中に1AIでも失敗すると event 作成全体が失敗する all-or-nothing 構造です。failed/omitted を示す status フィールドは明示保存しておらず、失敗AIは prediction ドキュメントが存在しない「欠落」状態として扱われます。
  
 5.2 公式AI予測生成
  
 app/admin/page.tsx
  
-const officialAis = ["ChatGPT", "Claude", "Gemini", "DeepSeek"];
-for (const aiName of officialAis) {
+import { OFFICIAL_AI_NAMES } from "@/lib/ai/official-ai";
+// OFFICIAL_AI_NAMES = ["ChatGPT", "Claude", "Gemini", "DeepSeek", "Grok"]
+for (const aiName of OFFICIAL_AI_NAMES) {
   const response = await fetch("/api/generate-prediction", {
     method: "POST",
     headers: {
@@ -854,33 +847,13 @@ for (const aiName of officialAis) {
   });
 }
  
-5.3 My AI参加時の予測生成
+5.3 My AI参加時の予測生成(削除済み・過去の実装)
  
-app/race/[slug]/page.tsx
+かつて app/race/[slug]/page.tsx に、My AI参加時に races.predictions へ updateDoc で追記する joinMyAi 経路が存在しましたが、Phase 4-d-3 で削除済みです。
  
-現時点では、My AI参加側から以下のデータを送信する実装があります。
+現在、My AI を新規参加させる active な書き込み導線はコード上存在しません。既存の My AI 予測データは、削除された経路が過去に書き込んだ legacy データとして races コレクションに残っています。
  
-body: JSON.stringify({
-  title: event.title,
-  category: event.category,
-  aiName: selectedMyAi.name,
-  aiStyle: selectedMyAi.style,
-  aiDescription: selectedMyAi.description,
-  strengthCategory: selectedMyAi.strengthCategory,
-  candidates,
-}),
- 
-返却値は KompariPrediction として扱い、My AI情報を付加して保存します。
- 
-const nextPrediction: KompariPrediction = {
-  ...data,
-  ai: selectedMyAi.name,
-  source: "user",
-  myAiId: selectedMyAi.id,
-};
-await updateDoc(doc(db, "races", slug), {
-  predictions: [...event.predictions, nextPrediction],
-});
+My AI は MVP非優先 / 将来機能として整理します。将来的な外部API連携での作り直しを前提とした保留状態です。
  
 5.4 API route
  
@@ -899,17 +872,11 @@ app/api/generate-prediction/route.ts
  
 5.5 使用プロンプト全文
  
-未着手。
+mock fallback経路(APIキー未設定・実呼び出し失敗時)では、外部AI APIへのプロンプト送信自体を行わず、API route内のテンプレート関数(下記)で理由文を生成しています。
  
-現時点では、外部AI APIに渡すプロンプト文字列は実装されていません。
+実API呼び出し経路では、lib/ai/prompt.ts の buildPredictionPrompt がプロンプトを構築し、各provider(callOpenAiCompatible / callGemini / callAnthropic)から呼び出されています(存在確認済み: 2026-07-05)。プロンプト全文の内容・設計意図は今回のdocs整地では調査していません。
  
-つまり、
- 
-OpenAI / Claude / Gemini / DeepSeek に送るプロンプト全文
- 
-は存在しません。
- 
-代わりに、API route 内のテンプレート関数で理由文を生成しています。
+mock fallback時のテンプレート関数:
  
 function categoryReason(
   category: string,
@@ -966,6 +933,10 @@ My AI:
 値は伏せる。
  
 OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
+DEEPSEEK_API_KEY=
+XAI_API_KEY=
 NEXT_PUBLIC_ADMIN_EMAIL=
 NEXT_PUBLIC_FIREBASE_API_KEY=
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
@@ -1059,10 +1030,10 @@ Firebase CLIでdeployするか、Firebase Console側にも反映が必要。
  
 8. 既知のバグ・技術的負債
  
-8.1 本物のAI API未実装
+8.1 本物のAI API連携(実装済み・稼働状況未確認)
  
-openai package と OPENAI_API_KEY は存在するが、現時点の予測生成は仮実装。
-OpenAI / Claude / Gemini / DeepSeek を個別APIで呼び出す実装は未着手。
+実AI呼び出し構造(callOpenAiCompatible / callGemini / callAnthropic による provider 別呼び出し構造)は実装済み。
+未確認事項: 本番でAPIキーが実際に設定され実AIが稼働しているか、mock fallbackのままか。
  
 8.2 My AI参加とFirestore rulesの不整合
  
@@ -1148,15 +1119,11 @@ metadataは更新済みだが、専用OG画像は未着手。
  
 9. 未決定事項
  
-9.1 本物のAI API連携方式
+9.1 本物のAI API連携方式(実装済み・稼働状況未確認)
  
-未決定。
- 
-候補:
- 
-・OpenAI APIのみで複数AI風に生成する
-・OpenAI / Anthropic / Gemini / DeepSeek を実APIで呼ぶ
-・まずはOpenAIだけ本物にして、他は仮実装を続ける
+実装済み: OpenAI / Anthropic / Gemini 互換の各providerを実APIで呼ぶ構造(lib/ai/providers/)を採用。
+APIキー未設定・実呼び出し失敗時は mock fallback。
+未確認: 本番でのAPIキー設定状況、実際の稼働率。
  
 9.2 My AIの所有者管理
  
@@ -1284,19 +1251,23 @@ My AI参加を一般公開するなら設計変更が必要。
 ・predictionsをsubcollection化
 ・API Route経由で安全に追記
  
-10.4 本物のAI API連携
+10.4 本物のAI API連携(実装済み・残課題あり)
  
 対象:
  
 app/api/generate-prediction/route.ts
  
-やること:
+実装済み:
  
-・OpenAI API呼び出し
-・プロンプト設計
-・JSON schema強制
-・エラー時フォールバック
-・APIキー未設定時の仮実装維持
+・OpenAI / Anthropic / Gemini 互換API呼び出し(lib/ai/providers/)
+・プロンプト構築(lib/ai/prompt.ts の buildPredictionPrompt、詳細な内容は未調査)
+・APIキー未設定・失敗時の mock fallback
+ 
+未確認・残課題:
+ 
+・本番でのAPIキー設定状況
+・createEvent は5AI逐次呼び出し(forループ、Promise.all未使用)で、1AI失敗時はイベント作成全体が失敗する all-or-nothing 構造
+・failed/omitted を示す status フィールドは明示保存していない。失敗AIは prediction ドキュメントが存在しない「欠落」状態として扱われる
  
 10.5 My AI編集機能
  
@@ -1615,18 +1586,11 @@ Kompari側が外部ユーザーAIの推論費用を負担しない。
  
 ⸻
  
-13.5 主要AIに Grok を追加
+13.5 主要AIに Grok を追加(実装済み)
  
-主要AIの比較対象に Grok を追加する方針。
+主要AIの比較対象に Grok を追加する方針。実装済み。
  
-現在の主要AI:
- 
-・ChatGPT
-・Claude
-・Gemini
-・DeepSeek
- 
-今後の主要AI:
+主要AI(5種):
  
 ・ChatGPT
 ・Claude
@@ -1634,18 +1598,21 @@ Kompari側が外部ユーザーAIの推論費用を負担しない。
 ・DeepSeek
 ・Grok
  
-実装で必要な変更:
+実装済みの内容:
  
-・officialAis に "Grok" を追加
-・Grok用のAIプロフィールページを追加または自動対応
-・Grok用のアイコン / 初期表示 / 色設定を追加
-・ランキング集計対象に含める
-・AI予測生成APIで Grok を処理する
-・本物のAPI連携時は Grok API呼び出しを追加する
+・lib/ai/official-ai.ts の OFFICIAL_AI_NAMES に Grok を含む5種を正本化
+・lib/ai/ai-config.ts に Grok の設定(モデル、XAI_API_KEY)を追加
+・AI予測生成APIで Grok を処理
+・ランキング集計対象に Grok を含む
+ 
+未確認事項:
+ 
+・Grok用のAIプロフィールページ表示、アイコン/色設定が個別対応済みかは今回のdocs整地では未調査
+・本番でGrok APIが実際にAPIキー設定され稼働しているかは未確認
  
 実装状況:
  
-未着手
+実装済み(commit 2960c96 で公式AIリスト正本化)
  
 ⸻
  
