@@ -224,6 +224,12 @@ export default function AdminEditPage({
 
   const currentPredictions = event?.predictions || [];
 
+  // result.winner が確定判定のSoT。settledAt は防御的に確定済み扱いする補助シグナル
+  // (通常発生しない winnerなし・settledAtありの不整合状態も確定済み扱いする)。
+  const isResultSettled = Boolean(
+    event?.result?.winner || event?.result?.settledAt
+  );
+
   const saveEvent = async () => {
     if (!title.trim()) {
       alert("イベント名を入力してください");
@@ -322,6 +328,15 @@ export default function AdminEditPage({
   const generatePrediction = async (aiName: string, silent = false) => {
     if (!event) return;
 
+    if (isResultSettled) {
+      if (!silent) {
+        alert(
+          "結果確定済みのイベントでは、予測を生成・再生成できません。予測は結果確定前のものだけを記録します。"
+        );
+      }
+      return;
+    }
+
     if (!title.trim()) {
       alert("イベント名を入力してください");
       return;
@@ -401,6 +416,11 @@ export default function AdminEditPage({
   };
 
   const generateAllPredictions = async () => {
+    if (isResultSettled) {
+      alert("結果確定済みのイベントでは、予測を生成・再生成できません。");
+      return;
+    }
+
     for (const aiName of OFFICIAL_AI_NAMES) {
       await generatePrediction(aiName, true);
     }
@@ -677,7 +697,7 @@ export default function AdminEditPage({
             <button
               type="button"
               onClick={generateAllPredictions}
-              disabled={!!generatingAi || saving}
+              disabled={!!generatingAi || saving || isResultSettled}
               className="rounded-full bg-blue-700 px-4 py-2 text-xs font-bold text-white disabled:bg-gray-300"
             >
               全AI再生成
@@ -695,7 +715,7 @@ export default function AdminEditPage({
                   key={aiName}
                   type="button"
                   onClick={() => generatePrediction(aiName)}
-                  disabled={!!generatingAi || saving}
+                  disabled={!!generatingAi || saving || isResultSettled}
                   className={`rounded-2xl px-3 py-4 text-sm font-bold ${
                     exists
                       ? "bg-blue-50 text-blue-700"
@@ -712,10 +732,16 @@ export default function AdminEditPage({
             })}
           </div>
 
-          <p className="mt-3 text-xs font-bold leading-5 text-gray-400">
-            候補リストを変更した場合は、公式AI予測も再生成してください。My
-            AIの予測はそのまま残ります。
-          </p>
+          {isResultSettled ? (
+            <p className="mt-3 text-xs font-bold leading-5 text-gray-400">
+              結果確定済みのため、予測の生成・再生成はできません。
+            </p>
+          ) : (
+            <p className="mt-3 text-xs font-bold leading-5 text-gray-400">
+              候補リストを変更した場合は、公式AI予測も再生成してください。My
+              AIの予測はそのまま残ります。
+            </p>
+          )}
         </section>
 
         <section className="mb-5 rounded-3xl bg-white p-4 shadow-sm">
