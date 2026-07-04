@@ -1607,3 +1607,79 @@ Candidate ID は MVP直近では不要。
 - globals.css の body背景に残る濃紺グラデーションは白基調SoTとの整合観点で別途確認する
 - 今回は brand token の最小追加のみ。primary / info / surface / ink 等の semantic token 全面整備は Design System 移行PRに委ねる
 - 結果ページ / trust UI 設計は別タスクとして継続する
+
+## Hotfix: brand token runtime CSS variable 化 (commit 92a88bb)
+
+Public UI Primary Accent Alignment（commit 9773279）の副作用として、全ヒーロー（home / races / race detail / ranking / TopBar ハンバーガーヘッダー）の背景グラデーションが白飛びしていた不具合を修正した。
+
+### 原因
+
+Tailwind v4 の `@theme inline` に定義した変数は、utility クラス生成時にリテラル値へ展開されるのみで、`:root` に実CSS変数として出力されない。
+
+そのため `bg-brand` / `text-brand` などのクラス経由は正常動作するが、インラインstyleに手書きした `linear-gradient(..., var(--color-brand) ...)` は参照先の実CSS変数が存在せず、ブラウザが background 宣言ごと破棄し、computed backgroundImage が none になっていた。
+
+### 修正
+
+`app/globals.css` の `:root` に brand token 3種を明示追加。
+
+- `--color-brand: #0A7A3F`
+- `--color-brand-soft: #22C55E`
+- `--color-brand-tint: #E8F5EE`
+
+`@theme inline` 側は無変更。これにより class 経由と inline style の `var()` 参照の両方が動作する。
+
+インラインstyle 5箇所の直値置換は不要だった。
+
+### 実測確認
+
+getComputedStyle で `--color-brand` が空でないこと、ヒーローの computed backgroundImage が正しいグラデーションに解決することを直接確認。
+
+race detail / home の両ヒーロー復活を目視確認。
+
+## trust UI Phase 1: 予測 vs 結果 並置 (commit aad5f68)
+
+race detail の PredictionCard に「答え合わせ」ブロックを追加。
+
+本命（予測）と result.winner（結果）を近接表示し、予測から結果への対比をカード上部で読めるようにした。
+
+### 実装
+
+- Picks（本命 / 対抗 / 穴）の直後、reason より前に答え合わせブロックを挿入
+- 表示: `予測: {prediction.main} → 結果: {resultWinner || "未確定"}`
+- 記号 ◯ / ✕ は使わず矢印のみ
+- 的中 / 外れの色表現は右上の既存判定バッジに一任
+- 旧下段「結果:」ブロックは撤去し、二重表示を防止
+- `isCountablePrediction` で gating し、判定不可（mock / non-countable）カードでは非表示
+- 判定ロジック `getResultWinner` / `getPredictionDisplayStatus` 等は無変更
+- consensus セクションは無変更
+
+### SoT整合
+
+result.winner が確定判定の唯一の根拠という構造を維持。
+
+答え合わせブロックは既存データの表示再配置のみで、新たな判定・集計を持たない。
+
+## 検証教訓: static check では runtime CSS 不具合を検出できない
+
+hotfix の原因である runtime CSS変数未解決は、`npm run build` 成功と `rg` 残存チェックをすり抜け、getComputedStyle 実測でのみ検出された。
+
+### 今後の規律
+
+インラインstyleで CSS変数 `var(--xxx)` を参照する変更、または CSS変数の定義場所を変える変更を行う場合、build / rg に加えて以下の実測を検証必須とする。
+
+- `getComputedStyle(document.documentElement).getPropertyValue("--xxx")` が空でないこと
+- 該当要素の computed style が `none` や意図しない値になっていないこと
+
+実測できない環境では commit を保留する。
+
+## Phase 2 候補（記録のみ・未着手）
+
+race detail の AIコンセンサスセクションは、全AI一致でも本命が外れた場合に「全会一致」バッジが勝ち誇った緑のまま残り、コンセンサスが外れた事実を示していない。
+
+実例: ベルギー vs エジプト。全5AI本命=ベルギー、結果=引き分け、全AI外れ。
+
+コンセンサス答え合わせ（top consensus candidate と result.winner の突合表示）が Phase 2 の主題。
+
+`buildConsensus` 自体は触らず、表示専用の派生で実現する。
+
+Phase 2 は今回実装しない。
