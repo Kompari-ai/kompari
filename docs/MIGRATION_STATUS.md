@@ -1683,3 +1683,34 @@ race detail の AIコンセンサスセクションは、全AI一致でも本命
 `buildConsensus` 自体は触らず、表示専用の派生で実現する。
 
 Phase 2 は今回実装しない。
+
+## trust UI Phase 2: AIコンセンサス答え合わせ (commit b711d17)
+
+race detail のAIコンセンサスセクションに、結果確定後の「コンセンサス本命 vs 結果」の答え合わせ表示を追加した。
+全AI一致でも本命が外れた場合、それを隠さず同一セクション内で示す。
+
+### 実装
+
+- Podium 直後・Split meter 直前に答え合わせブロックを挿入
+- コンセンサス本命（consensusMainName）は buildPodiumData の重み付き順位（mainCount*2+secondCount）ではなく、countableOfficialPreds の prediction.main を trim 正規化して純粋集計した表示専用の派生値。同率トップは配列順で最初の候補
+- resultWinner（getResultWinner 由来、trim 済み）と文字列完全一致で判定。両側 trim で比較の対称性を維持
+- 3分岐: 的中（green） / 全AI外れ（red、本命が全AI一致かつ外れ） / コンセンサス外れ（amber、多数派が外し一部が的中）
+- 表示条件: resultWinner あり かつ countableOfficialPreds > 0 かつ consensusMainName あり。未確定時は非表示
+- buildConsensus / buildPodiumData / getConsensusChip は無変更。consensusChip（全会一致バッジ等）の既存表示も無変更
+
+### 実機確認
+
+- 全AI外れ（red）: ベルギー vs エジプト（全5AI本命=ベルギー、結果=引き分け）
+- コンセンサス的中（green）: ハイチ vs スコットランド（4/5AI本命=スコットランド、結果=スコットランド、Claude のみ外し）
+- amber は該当イベント未存在のため実機未確認。green/red が正しく出るため分岐構造は健全
+
+### 設計メモ: Phase 1 無色 / Phase 2 色付きの理由
+
+Phase 1（各AIカードの答え合わせ帯）は無色、Phase 2（コンセンサス答え合わせ）は色付きで、一見不統一に見えるが意図的。原則は「status の責務は一箇所が担う」。
+
+Phase 1 は右上の判定バッジが的中/外れを担うため帯は無色でよい。
+Phase 2 はセクションレベルの判定バッジが存在せず、この帯自身が唯一の status 表示となるため色を持つ。担い手が違うだけで原則は共通。
+
+### Phase 2.5 候補（記録のみ・未着手）
+
+少数派的中の可視化（多数派が外し少数派のAIだけが当てたケースのハイライト）は今回スコープ外。「誰が少数派か/定義/本命のみか対抗含むか」の設計が必要なため別PRとする。
