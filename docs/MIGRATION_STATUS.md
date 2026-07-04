@@ -1211,3 +1211,102 @@ Candidate ID は MVP直近では不要。
 
 - `baed39e feat(settlement): record result.settledAt on saveEvent path`
 - pushed to main
+
+## settledAt 導入 Step 3(createEvent経路) / 全経路完了
+
+### 位置づけ
+
+- Step 3
+- `app/admin/page.tsx` の createEvent 経路に settledAt 対応を追加
+- createEvent は新規作成経路のため、既存 result は構造的に存在しない
+- そのため Step 1 / Step 2 の previousWinner / previousSettledAt / legacy 判定は不要
+- winner が入力されていれば、常に初回確定として `settledAt: serverTimestamp()` を付与する
+- winner 未入力時は `result: null` の既存挙動を維持
+
+### 全経路完了
+
+- saveResult 経路: `abaaadd feat(settlement): record result.settledAt on first winner save`
+- saveEvent 経路: `baed39e feat(settlement): record result.settledAt on saveEvent path`
+- createEvent 経路: `603eb5b feat(settlement): record result.settledAt on createEvent path (Step 3)`
+- 既知の result.winner 書き込み3経路すべてに settledAt 付与が揃った
+- Known Uncovered Write Path は解消
+
+### 定義
+
+- `result.settledAt` = そのeventに初めて `result.winner` が保存された時刻
+- 初回確定時刻として扱う
+- `result.winner` が確定判定のSoT
+- settledAt は補助メタデータ
+
+### Step 3の挙動
+
+- createEvent で winner 入力あり:
+  - `result: { winner, settledAt: serverTimestamp() }`
+- createEvent で winner 未入力:
+  - `result: null`
+- createEvent は新規作成なので legacy 判定は存在しない
+- retroactive backfill はしない
+
+### Step 1 / Step 2との一貫性
+
+- saveResult / saveEvent では、既存イベント編集のため3条件分岐を維持
+- winner修正時は settledAt を更新しない
+- 既存 settledAt は保持する
+- legacy（winnerあり・settledAtなし）は再編集しても settledAt を後付けしない
+- winner clear時は `result: null` に戻す
+- createEvent は新規作成のため、winner があれば常に初回確定として settledAt を付与する
+
+### 非接触
+
+- predictions サブコレクション
+- prediction.outcome
+- outcome:"pending"
+- ranking
+- stats
+- 確定判定
+- `getResultWinner`
+- `getPredictionStatus`
+- `isCountablePrediction`
+- mock / non-countable 除外
+- candidates / title / venue / startsAt / category / slug / predictionCount
+- createdAt / updatedAt
+- saveResult
+- saveEvent
+- `lib/events.ts`
+- Firestore rules
+- migration
+- 以上はいずれも無変更
+
+### helper化判断
+
+- 現時点では helper化を見送る
+- 理由:
+  - saveResult / saveEvent は既存イベント編集経路で、同一の3条件分岐
+  - createEvent は新規作成経路で、winner があれば常に settledAt 付与の単純ケース
+  - createEvent だけ条件が異なるため、3経路を無理に1つのhelperへ吸収すると、呼び出し側から条件が見えにくくなる
+  - 現状の重複は if 2段 × 2箇所程度で小さい
+  - 今は各経路で条件が明示されている可読性を優先する
+- 将来 resultUpdatedAt / resultSource / result revision履歴など settlement metadata が増える段階で再検討する
+
+### 別PR / 今回スコープ外
+
+- resultUpdatedAt
+- resultSource
+- result revision履歴
+- 結果確定後のprediction再生成guard
+- settledAt表示UI
+- Firestore migration
+- retroactive backfill
+- helper化
+
+### 動作確認
+
+- npm run build 成功
+- git diff --check 成功
+- 本番Firestoreへのテスト書き込みはしていない
+- 通常運用で次に admin から winner 入力ありの event 作成を行う自然な機会に、Firebase Consoleで `result.settledAt` 付与を確認する方針
+
+### commit
+
+- `603eb5b feat(settlement): record result.settledAt on createEvent path (Step 3)`
+- pushed to main
