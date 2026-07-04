@@ -279,7 +279,25 @@ export default function AdminEditPage({
       const trimmedTitle = title.trim();
       const trimmedVenue = venue.trim();
       const trimmedResultWinner = resultWinner.trim();
-      const resultValue = trimmedResultWinner ? { winner: trimmedResultWinner } : null;
+
+      // settledAt = このeventに初めて result.winner が保存された時刻。
+      // winner修正時は既存 settledAt を保持する。
+      // legacy(winnerあり・settledAtなし)の再編集では settledAt を後付けしない。
+      let resultValue: { winner: string; settledAt?: unknown } | null = null;
+
+      if (trimmedResultWinner) {
+        const previousWinner = (event?.result?.winner || "").trim();
+        const previousSettledAt = event?.result?.settledAt;
+
+        resultValue = { winner: trimmedResultWinner };
+
+        if (previousSettledAt) {
+          resultValue.settledAt = previousSettledAt;
+        } else if (!previousWinner) {
+          resultValue.settledAt = serverTimestamp();
+        }
+      }
+
       const batch = writeBatch(db);
       batch.update(doc(db, "events", id), {
         category,
