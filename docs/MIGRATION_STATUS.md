@@ -1310,3 +1310,131 @@ Candidate ID は MVP直近では不要。
 
 - `603eb5b feat(settlement): record result.settledAt on createEvent path (Step 3)`
 - pushed to main
+
+## 結果確定後 prediction 再生成 guard Step 1(admin/edit)
+
+### 背景
+
+- winner安全性調査・settledAt調査で、結果確定後に prediction を再生成できる信頼性リスクが確認されていた
+- 確定後に再生成された prediction は predictedAt が現在時刻に更新され、outcome:"pending" に戻り、既存predictionを上書きし得る
+- isCountablePrediction / ranking / stats は predictedAt と settledAt の時系列を見ないため、事後生成データが分母に混ざるリスクがある
+- 本番でも、ウィザーズVSブルズのChatGPT、阪神vs巨人のGrok が結果確定後に再生成された実例として MIGRATION_STATUS.md に記録済み
+- 「予測は事前に行われたものだけを記録する」という信頼性方針に基づき、事後生成を予防する
+- Grok欠落8件で「後追い再生成しない」と決めた思想と同じ
+
+### 方針
+
+- warning + confirm ではなく block を採用
+- confirm はOKすれば事後生成データが作れてしまうため、信頼性対策として不十分
+- postSettlementGenerated flag + 集計除外は、ranking / stats / 表示設計を伴うため今回スコープ外
+- 今回は事後生成データを構造的に作らせないことを優先する
+
+### 実装
+
+- 対象ファイル: `app/admin/edit/[id]/page.tsx`
+- `isResultSettled` を追加
+- 判定は `Boolean(event?.result?.winner || event?.result?.settledAt)`
+- `result.winner` が確定判定のSoT
+- `settledAt` は防御的な補助シグナル
+- settledAtあり / winnerなし の不整合状態も確定済みとして block 対象
+- `generatePrediction()` 冒頭に function-level block を追加
+- `generateAllPredictions()` 冒頭にも function-level block を追加
+- 確定済みeventでは `batch.set` まで到達しない
+- 単体AI再生成ボタンに `isResultSettled` を disabled 条件として追加
+- 全AI再生成ボタンにも `isResultSettled` を disabled 条件として追加
+- 確定済み時は「結果確定済みのため、予測の生成・再生成はできません。」の理由文を表示
+
+### 二段guard
+
+- UI disable:
+  - 確定済みeventでは単体AI再生成ボタンを押せない
+  - 確定済みeventでは全AI再生成ボタンを押せない
+
+- function-level block:
+  - UIをすり抜けても `generatePrediction()` で return
+  - `generateAllPredictions()` でも return
+  - `generateAllPredictions()` は1回だけ alert して return
+  - `generatePrediction(aiName, true)` の silent 呼び出しにより alert 連打を避ける構造
+
+### 期待挙動
+
+- 未確定event:
+  - 単体AI再生成可能
+  - 全AI再生成可能
+  - 既存どおり prediction 生成可能
+
+- result.winnerあり:
+  - 単体AI再生成ボタン disabled
+  - 全AI再生成ボタン disabled
+  - `generatePrediction()` を直接呼んでも return
+  - `generateAllPredictions()` を直接呼んでも return
+  - `batch.set` まで到達しない
+  - predictedAt を更新しない
+  - outcome:"pending" に戻さない
+  - 既存predictionを上書きしない
+
+- result.winner + settledAtあり:
+  - 同様に block
+
+- settledAtあり / winnerなし:
+  - 通常は作らない不整合状態だが、防御的に block
+
+### 非接触
+
+- outcome:"pending" の書き込み内容
+- predictedAt: serverTimestamp() の書き込み内容
+- batch.set の prediction 書き込み構造
+- saveEvent の resultValue / settledAt 実装
+- saveEvent の category / title / venue / startsAt / candidates 更新
+- saveResult
+- createEvent
+- `lib/events.ts`
+- ranking
+- stats
+- `getResultWinner`
+- `getPredictionStatus`
+- `isCountablePrediction`
+- Firestore rules
+- migration
+- postSettlementGenerated flag
+- 以上はいずれも無変更
+
+### saveEvent非接触
+
+- 同じ `app/admin/edit/[id]/page.tsx` 内にある saveEvent は今回止めていない
+- 確定済みイベントでも、イベント情報・候補・結果修正・削除自体は引き続き可能
+- 今回止めるのは prediction の生成・再生成のみ
+
+### ローカル目視確認
+
+- 実施済み
+- 対象event: ウィザーズVSブルズ `8kUrRnIAPuIHfjhSCchK`
+- admin/edit で確定済みeventを表示
+- 全AI再生成ボタン disabled を確認
+- ChatGPT再生成 / Grok生成を含む公式AI個別ボタン disabled を確認
+- 「結果確定済みのため、予測の生成・再生成はできません。」の表示を確認
+- 通常時の候補編集案内文が非表示であることも確認
+- ボタンはクリックしていない
+- 本番Firestoreへのテスト書き込みなし
+- ブラウザ自動化の screenshot/find は Firestore の永続WebSocket接続による document_idle 待機でタイムアウトしたため、javascript_tool による DOM readyState / disabled 属性確認に切り替えた
+- ページ自体は正常ロード済みで、DOM検査結果は有効
+
+### 残る判断 / Known
+
+- createEvent時に winner 入力済みで prediction も生成する「同時生成ケース」は今回スコープ外
+- これは既存確定済みeventの事後再生成ではなく、作成時の同時生成であり性質が異なる
+- 必要なら別PRで扱う
+- 将来 Grok欠落補完など正当な例外生成が必要になった場合は、postSettlementGenerated flag + ranking/stats除外 + 表示設計を別フェーズで検討する
+- 現時点では例外経路を作らず、blockを優先
+
+### 動作確認
+
+- npm run build 成功
+- git diff --check 成功
+- ローカルDOM確認済み
+- 本番Firestoreへのテスト書き込みなし
+
+### commit
+
+- `222b685 feat(admin): block prediction regeneration on settled events`
+- pushed to main
