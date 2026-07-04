@@ -1538,3 +1538,72 @@ Candidate ID は MVP直近では不要。
 - 現時点では guard不要
 - 実装PRは作らない
 - 判断をdocsに記録してクローズ
+
+## Public UI Primary Accent Alignment (commit 9773279)
+
+確定デザインSoT(primary accent = Kompari Green #0A7A3F、青は情報用副次色)への整合として、公開UIで primary accent として誤用されていた青を brand token に置換した。
+
+### Code commit
+
+- `9773279 style: align public UI primary accent to Kompari Green`
+
+### 追加
+
+- `app/globals.css` の `@theme inline` に brand token 3種を追加
+  - `--color-brand: #0A7A3F`
+  - `--color-brand-soft: #22C55E`
+  - `--color-brand-tint: #E8F5EE`
+- `--color-brand-soft` はヒーローグラデーションの明側専用として用途制限コメントを追加
+
+### 置換対象
+
+以下の公開UI primary accent 用途を brand token に置換した。
+
+- BottomNav active
+- TopBar ロゴ / メニュー active
+- 各ヒーローグラデーション
+- 主要CTA
+- 主見出し強調
+- AIコンセンサス本命強調
+- AI支持率強調
+
+### 意図的に維持した blue
+
+以下は info / state / category / brand identification として意味を持つため維持した。
+
+- 判定待ち / 予測中バッジ
+- consensus lean chip
+- カテゴリバッジ
+- 候補順位バッジ（非勝者blue / 勝者green の状態対比）
+- 対抗ラベル
+- Gemini識別色
+- 検索focus ring
+- データ根拠を見る toggle
+
+### 非対象
+
+以下は今回触っていない。
+
+- admin
+- MyAI
+- 法務ページ
+- hit/miss 判定ロジック
+- ranking / stats 計算
+- trust UI
+- /results
+- body背景グラデーション
+- Design System 全面移行
+
+### Validation
+
+- npm run build succeeded
+- brand-soft はヒーローグラデーション内、token定義、用途制限コメントに限定
+- CTA / text / badge / progress bar への brand-soft 誤用なし
+- blue residue check で GREEN候補の置換漏れなし
+- 残存 blue は BLUE維持として意図的に残したもののみ
+
+### Known follow-ups
+
+- globals.css の body背景に残る濃紺グラデーションは白基調SoTとの整合観点で別途確認する
+- 今回は brand token の最小追加のみ。primary / info / surface / ink 等の semantic token 全面整備は Design System 移行PRに委ねる
+- 結果ページ / trust UI 設計は別タスクとして継続する
