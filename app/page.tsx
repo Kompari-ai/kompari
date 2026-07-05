@@ -359,8 +359,13 @@ export default function HomePage() {
         {/* Finished events */}
         <section className="mb-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[15.5px] font-bold">結果入力済み</h2>
-            <span className="text-[12px] font-bold text-gray-400">{finishedEvents.length}件</span>
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15.5px] font-bold">結果入力済み</h2>
+              <span className="text-[12px] font-bold text-gray-400">{finishedEvents.length}件</span>
+            </div>
+            <Link href="/results" className="text-[12px] font-bold text-brand">
+              すべての結果を見る ›
+            </Link>
           </div>
 
           <div className="space-y-3">
