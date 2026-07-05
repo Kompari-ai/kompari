@@ -2027,3 +2027,7 @@ event型に source系フィールドを additive 追加(source=データ出所 /
 ## Event Auto Creation PR-2.5: importer の --write を Admin SDK 経路に変更
 
 client SDK 未認証実行は firestore.rules の isAdmin() を満たせず permission-denied になるため、server-side の Admin SDK に差し替え。firebase-admin 導入、scripts 用 Admin 初期化 helper、認証は GOOGLE_APPLICATION_CREDENTIALS 経由のサービスアカウント鍵パスで扱う。サービスアカウントJSON・秘密鍵は gitignore 済みで commit 禁止。.env.local.example には環境変数名のみ記載。dry-run は Firebase 非接触維持。実 --write は鍵設定 + Console確認とセットで人間が手動実行する。
+
+## Event Auto Creation PR-3: 手入力テストデータ削除スクリプト
+
+source未設定の event を削除対象、source設定済み(importer製)を残す機械判定。デフォルト dry-run、--delete フラグ時のみ削除。削除対象一覧と残す一覧を事前表示し、fixture-sample-race-2026-11-08-01 が残ることを確認できる。predictions サブコレクションを先に削除してから event 本体を削除し、orphan を回避。実削除は dry-run 確認後に人間が手動実行する。
