@@ -68,6 +68,13 @@ export type KompariEvent = {
   startsIn?: string;
   resultWinner?: string;
   createdAt?: unknown;
+
+  // 出所系フィールド(additive追加、PR-2)。KompariEventDocの同名フィールドと対称。
+  // まだUI表示には使わない(normalizeEventDocToEventでの転記のみ)。
+  source?: string;
+  sourceId?: string;
+  sourceUrl?: string;
+  creationSource?: string;
 };
 
 export type LegacyRaceData = {
@@ -192,6 +199,10 @@ export function normalizeEventDocToEvent(
     startsIn: "",
     resultWinner: doc.result?.winner ?? "",
     createdAt: doc.createdAt,
+    source: doc.source,
+    sourceId: doc.sourceId,
+    sourceUrl: doc.sourceUrl,
+    creationSource: doc.creationSource,
   };
 }
 
