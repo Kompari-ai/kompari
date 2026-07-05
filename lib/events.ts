@@ -112,6 +112,23 @@ export type KompariEventDoc = {
   createdAt?: unknown;
   updatedAt?: unknown;
   predictionCount?: number;
+
+  // 以下は出所系フィールド(additive追加)。source と creationSource は別軸で、混同しない。
+  //
+  // source: データそのものの出自(どこから来たデータか)。
+  //   例: "manual-fixture"(手元JSON fixtureから) / 将来 "jra" | "netkeiba" 等(外部API/スクレイピングから)
+  source?: string;
+  // sourceId: 外部ソース上での一意ID。重複検出のキーとして使う(例: JRAのレースID等)。
+  //   手動作成イベント(/admin)には存在しない。
+  sourceId?: string;
+  // sourceUrl: 出所を示すURL(任意)。人間が元データを追跡するための参考情報。
+  sourceUrl?: string;
+  // creationSource: Kompari内での「作成経路」(source とは別軸)。
+  //   "manual"   = /admin から人間が手入力
+  //   "fixture"  = 手元JSON/CSV fixtureの内容そのもの(importerが読む前の分類、将来利用)
+  //   "importer" = importerスクリプト経由で作成
+  //   "auto"     = 将来の完全自動生成(外部API等からのスケジュール取り込み)
+  creationSource?: string;
 };
 
 // events/{eventId}/predictions サブコレクション(新) 1ドキュメントの型。

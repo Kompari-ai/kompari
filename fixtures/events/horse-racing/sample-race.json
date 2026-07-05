@@ -1,0 +1,16 @@
+{
+  "raceName": "スプリングトライアルステークス",
+  "raceDate": "2026-11-08T06:40:00.000Z",
+  "venue": "架空競馬場・芝1800m",
+  "entries": [
+    "コンパスウィナー",
+    "ノーザンフレア",
+    "ブルーホライズン",
+    "サイレントキャニオン",
+    "レッドヴァリアント",
+    "ミストラルクイーン"
+  ],
+  "category": "horse_racing",
+  "sourceId": "sample-race-2026-11-08-01",
+  "sourceUrl": "https://example.com/fixtures/sample-race-2026-11-08-01"
+}
