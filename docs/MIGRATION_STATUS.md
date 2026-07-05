@@ -2031,3 +2031,26 @@ client SDK 未認証実行は firestore.rules の isAdmin() を満たせず perm
 ## Event Auto Creation PR-3: 手入力テストデータ削除スクリプト
 
 source未設定の event を削除対象、source設定済み(importer製)を残す機械判定。デフォルト dry-run、--delete フラグ時のみ削除。削除対象一覧と残す一覧を事前表示し、fixture-sample-race-2026-11-08-01 が残ることを確認できる。predictions サブコレクションを先に削除してから event 本体を削除し、orphan を回避。実削除は dry-run 確認後に人間が手動実行する。
+
+## PR-3 実削除完了
+
+人間が `scripts/delete-legacy-events/delete.ts --delete` を実行し、手入力テストデータの削除が完了した。
+
+実行結果:
+
+- 削除対象 events: 9件
+- 削除した predictions docs: 44件
+- 削除した events: 9件
+- 残した source付き events: 1件
+- 残った event: `fixture-sample-race-2026-11-08-01`(source=manual-fixture / creationSource=importer)
+- Firebase Console で events が1件のみになったことを確認済み
+
+削除前:
+
+- 手入力テストevent 9件 + predictions 44件 + importer sample 1件
+
+削除後:
+
+- importer製sample 1件のみ(source / sourceId / sourceUrl / creationSource 保持、predictionsなし)
+
+これにより、Event Auto Creation の土台作り(型追加・importer・Admin SDK write path・guarded deletion)は一区切りとする。次フェーズは manual-fixture ではなく、JRA 等の実データ寄りの source をどう取り込むかの検討に進む。
