@@ -1948,3 +1948,39 @@ race詳細内に consensus 計算が3系統に分散している。
 buildStats 調査で見た構造と同型の「既知・低実害」負債として扱う。
 
 将来 consensus 計算を触る時に統一を検討する。
+
+## Result ページ PR-1: `/results` 一覧ページ追加
+
+`/results` を新規追加した。
+
+目的は、確定済みイベントの「答え合わせ一覧」を提供すること。
+`/races?status=finished` は予測一覧の結果済みフィルタ、`/results` はAI予測と実際の結果を比較する答え合わせ入口として役割を分ける。
+
+今回のスコープ:
+
+- `/results` 一覧ページのみ
+- 確定済みイベントのみ表示
+- winner 表示
+- consensus favorite → result の答え合わせ表示
+- consensus 支持数 count / total 表示
+- 既存 `/race/[slug]` へのリンク
+- legacy `races` は含めない
+- BottomNav / TopBar は未変更
+- URL移行は未実施
+- trust UI component 化は未実施
+
+今回やらないこと:
+
+- BottomNav 4タブ化
+- TopBar変更
+- `/results/[slug]`
+- `/races` → `/events` 移行
+- trust UI component 化
+- Firestore schema / rules / write 変更
+
+実装上の注意:
+
+- consensus answer-check は race詳細 Phase 2 と同じ判定基準
+- `/results` では1イベント分を受け取るローカル関数として一覧向けに実装
+- settledAt / startsAt は Date 化してからソート
+- 白基調・グリーンアクセント `#0A7A3F`
