@@ -1844,3 +1844,107 @@ lib/metrics.ts への集約は今回見送り。official 側の helper は既に
 残る共通化候補([表示不変]なもの)はコード構造の整理に留まり実害改善が薄い。
 [表示変化リスク]のある統一(ranking total 定義、My AI への
 isCountablePrediction 追加)は仕様変更として別途扱う。
+
+## consensus snapshot 永続化 read-only 調査（実装なし・現状維持で確定）
+
+確定時点のコンセンサス、つまり「何AIが何を本命にしたかの分布」を Firestore に永続化すべきか read-only で調査した。
+
+結論: 今は consensus snapshot を永続化しない。docs 記録で閉じる。
+
+### 調査で確定した現状
+
+- 現在のコンセンサスは `app/race/[slug]/page.tsx` で render 時に predictions から再計算している
+- Firestore に保存された consensus snapshot を読む箇所は存在しない
+- consensus 関連計算は複数箇所に分散している
+  - `buildConsensus`
+  - `buildPodiumData`
+  - Phase 2 の consensus answer-check 用インライン計算
+  - `getConsensusChip`
+- `buildConsensus` と Phase 2 answer-check は `isCountablePrediction` を使う
+- `getConsensusChip` は mock 除外 / `isCountablePrediction` の適用がなく、将来的には整理候補
+- ただし現時点の本番データでは `isMock: true` が実害化していないため、緊急修正対象ではない
+
+### 確定後 consensus drift の扱い
+
+- 確定後にコンセンサスが失われる問題は過去に実在した
+  - ウィザーズvsブルズ
+  - 阪神vs巨人
+- これらは guard 導入前に、結果確定後の prediction 再生成が起きた例
+- guard 導入後は、通常の `admin/edit` 操作では post-settlement prediction regeneration は block 済み
+- 一方、`firestore.rules` は settled event の predictions write を rules レベルでは禁止していない
+- 現在の rules は admin 権限に対して predictions create / update / delete を許可しており、`result.winner` / `settledAt` の有無を条件にした制約はない
+- したがって分類は「通常操作ではほぼ守られているが、rules レベルでは完全防御ではない」
+
+### 予防（rules guard）と記録（snapshot）の整理
+
+「確定後にコンセンサスが失われる」問題への対処には、2つのアプローチがある。
+
+1. rules guard
+   - Firestore rules で、結果確定後の predictions write を禁止する
+   - 予測が変わらないようにする「予防」のアプローチ
+
+2. consensus snapshot 永続化
+   - 確定時点の consensus を Firestore に保存する
+   - 仮に predictions が変わっても記録を残す「記録」のアプローチ
+
+今回の判断では、予防である rules guard の方が snapshot より根本的。
+
+理由:
+
+- predictions が確定後に変わらなければ、render 時計算が常に確定時点と一致する
+- その場合、snapshot の主要価値である Result UI の安定は自然に達成される
+- snapshot は Firestore 書き込み増加、schema追加、live再計算との二重管理、SoT 問題を生む
+- rules guard は既存の render 時計算を維持しつつ、確定後の predictions 改変を構造的に防げる
+
+### snapshot に残る価値
+
+rules guard で代替できない snapshot の残余価値もある。
+
+- 確定時点の countable 判定基準の監査ログ
+- 将来 `isCountablePrediction` の基準が変わった場合の復元手段
+- 確定時点の prediction doc IDs / countable AI 集合の記録
+- 将来の Result ページ一級市民化や分析データ資産
+
+ただし、これらは MVP 現段階では緊急度が低い。
+
+### 見送りの理由
+
+- snapshot 永続化は Firestore 書き込み増加を伴う
+- live 再計算と snapshot の二重管理が発生する
+- snapshot と predictions がズレた場合の SoT 問題が生じる
+- legacy event に snapshot なしの不均一状態が生じる
+- snapshot 誤り時の修正手順が未設計
+- 確定後保護は通常操作では guard により達成済み
+- MVP 本線への費用対効果は高くない
+
+### 将来やる場合の順序
+
+1. rules guard が snapshot より先
+   - 「変わっても記録する」より、「変わらないようにする」方が trust の土台としてシンプル
+
+2. rules guard の前提条件
+   - 前回 feasibility 調査では「可能だが追加調査が必要」と判定済み
+   - Case E、つまり `createEvent` で predictions と result を同時生成するケースとの rules 評価整合が要確認
+   - Firebase CLI / emulator 環境が未整備
+   - 本番 rules 直接適用はリスクが高い
+   - rules guard 着手前に emulator 環境整備が必要
+
+3. snapshot の再検討タイミング
+   - Result ページ一級市民化
+   - consensus history / audit log が明確に必要になった時
+   - `isCountablePrediction` など判定基準変更が具体化した時
+
+### 副次発見
+
+race詳細内に consensus 計算が3系統に分散している。
+
+- `buildConsensus`
+- Phase 2 answer-check 用インライン計算
+- `getConsensusChip`
+
+`getConsensusChip` だけ mock 除外 / `isCountablePrediction` が未適用。
+
+ただし本番 `isMock: true` は実害化しておらず、現時点では低優先度。
+buildStats 調査で見た構造と同型の「既知・低実害」負債として扱う。
+
+将来 consensus 計算を触る時に統一を検討する。
