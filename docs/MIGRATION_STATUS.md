@@ -2003,3 +2003,15 @@ buildStats 調査で見た構造と同型の「既知・低実害」負債とし
 
 BottomNav 4タブ化は未実施。
 `/results` の価値確認後に別PRで判断する。
+
+## Firestore events/predictions はテスト fixture（本番資産ではない）
+
+現在の Firestore の `events` / `predictions` は、UI・予測フロー・表示の動作確認のために手入力したテストデータであり、本番の歴史的資産ではない。
+
+個別に正史データとして保持する必要はない。
+
+Event Auto Creation 導入時に、既存の手入力テスト `events` とその `predictions` はまとめて削除し、自動生成イベントに置き換えてよい。
+
+過去 docs で「Guard 既知実例」等として参照した個別イベントも、この fixture 前提の下では保護対象ではない。
+
+自動化リセット後に同様の検証が必要な場合は、必要最小限の fixture を改めて投入する。
