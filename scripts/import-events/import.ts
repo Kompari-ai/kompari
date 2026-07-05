@@ -5,9 +5,9 @@
 //   Firestore 関連の import は一切発生しない(下記 writeToFirestore 参照)。
 //
 // --write フラグ時のみ Firestore write 経路を通る:
-//   1. events/{deterministic id} を transaction 内で get
-//   2. 存在する → skip(上書きしない)
-//   3. 存在しない → create(get→create を同一 transaction で atomic に行う)
+//   1. events/{deterministic id} に Admin SDK の doc().create() を試みる
+//   2. 既に存在する → create() が ALREADY_EXISTS で失敗するので catch して skip ログを出す(上書きしない)
+//   3. 存在しない → create() が成功する
 //   predictions サブコレクションには一切触れない。
 //
 // 実行:
@@ -16,14 +16,14 @@
 //   npx tsx scripts/import-events/import.ts --write      (実書き込み)
 //
 // 注意(SDK/認証について):
-//   このスクリプトは firebase-admin ではなく、既存の client SDK(lib/firebase.ts の db)を使う。
-//   firebase-admin は package.json に存在せず、サービスアカウント鍵も本リポジトリに無いため、
-//   今回は追加していない(勝手な依存・認証情報の追加はしない方針)。
-//   Firestore rules は events の create に isAdmin()(管理者メールでの認証)を要求するため、
-//   本スクリプトを認証なしで --write 実行すると permission-denied で失敗する見込みが高い。
-//   実際に書き込むには、管理者として認証された Firebase セッションを別途用意するか、
-//   firebase-admin + サービスアカウント鍵を整備するか、のプロダクト判断が必要。
-//   このスクリプトはその判断より先には進まない(認証機構の追加は行わない)。
+//   --write 経路は firebase-admin(Admin SDK)を使う。scripts/lib/admin.ts 参照。
+//   client SDK(firebase/firestore)は使わない。理由: firestore.rules の events
+//   create/update/delete は isAdmin()(管理者メールでの認証)を要求しており、
+//   scripts から実行する未認証の client SDK ではこの条件を満たせず permission-denied
+//   になることが PR-2 の read-only 確認で判明したため。
+//   Admin SDK は GOOGLE_APPLICATION_CREDENTIALS(サービスアカウントJSONの絶対パス)を
+//   前提とする。未設定の場合は scripts/lib/admin.ts が明示的なエラーを投げて停止する。
+//   サービスアカウントJSONは本リポジトリに存在せず、このスクリプトも生成・commitしない。
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -59,18 +59,27 @@ function logDraft(result: ConvertResult) {
   }
 }
 
-// --write モード専用。Firestore関連の import はこの関数の中でのみ行う。
-// dry-run モードではこの関数自体が呼ばれないため、firebase/firestore は一切ロードされない。
+// Admin SDK の create() が ALREADY_EXISTS で失敗した場合の判定。
+// SDK/gRPCのバージョンにより code の形が揺れる可能性があるため、
+// 数値コード(6 = ALREADY_EXISTS)とメッセージ文字列の両方をフォールバックとして見る。
+function isAlreadyExistsError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code === 6 || code === "already-exists") return true;
+
+  const message = error instanceof Error ? error.message : String(error);
+  return /ALREADY_EXISTS/i.test(message);
+}
+
+// --write モード専用。Admin SDK 関連の import はこの関数の中でのみ行う。
+// dry-run モードではこの関数自体が呼ばれないため、firebase-admin は一切ロードされない。
 async function writeToFirestore(result: ConvertResult): Promise<void> {
   if (!result.ok) {
     console.log("変換失敗のため書き込みをスキップします。");
     return;
   }
 
-  const { doc, runTransaction, serverTimestamp } = await import(
-    "firebase/firestore"
-  );
-  const { db } = await import("../../lib/firebase");
+  const { getAdminFirestore } = await import("../lib/admin");
+  const { FieldValue } = await import("firebase-admin/firestore");
 
   const event = result.event;
   const eventId = event.id;
@@ -81,29 +90,23 @@ async function writeToFirestore(result: ConvertResult): Promise<void> {
   console.log(`  candidates件数: ${event.candidates.length}`);
   console.log("  predictions は作成しません。");
 
-  const eventRef = doc(db, "events", eventId);
+  const firestore = getAdminFirestore();
+  const eventRef = firestore.collection("events").doc(eventId);
 
-  await runTransaction(db, async (transaction) => {
-    const existing = await transaction.get(eventRef);
-
-    if (existing.exists()) {
-      console.log(
-        `\nevents/${eventId} は既に存在します。skip します(上書きしません)。`
-      );
-      return;
-    }
-
-    transaction.set(eventRef, {
+  try {
+    // create() は既存ドキュメントがあると ALREADY_EXISTS で失敗するため、
+    // 無条件 set() より安全な「存在しない場合のみ作成」を1呼び出しで実現できる。
+    await eventRef.create({
       slug: event.slug,
       category: event.category,
       title: event.title,
       candidates: event.candidates,
       venue: event.venue,
       startsAt: event.startsAt,
-      // 取り込み時点では未確定。空文字列は入れない。
+      // 取り込み時点では未確定。空文字列は入れない。既存admin UIと同じくnullで表現する。
       result: null,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
       predictionCount: 0,
       source: event.source,
       sourceId: event.sourceId,
@@ -114,7 +117,16 @@ async function writeToFirestore(result: ConvertResult): Promise<void> {
     console.log(
       `\nevents/${eventId} を作成しました。predictions は作成していません。`
     );
-  });
+  } catch (error) {
+    if (isAlreadyExistsError(error)) {
+      console.log(
+        `\nevents/${eventId} は既に存在します。skip します(上書きしません)。`
+      );
+      return;
+    }
+
+    throw error;
+  }
 }
 
 async function main() {
