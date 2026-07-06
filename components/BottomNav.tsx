@@ -10,9 +10,14 @@ const navItems = [
     icon: "⌂",
   },
   {
-    label: "予測",
+    label: "イベント",
     href: "/events",
     icon: "◇",
+  },
+  {
+    label: "結果",
+    href: "/results",
+    icon: "✓",
   },
   {
     label: "ランキング",
@@ -42,7 +47,7 @@ export function BottomNav() {
         maxWidth: "430px",
       }}
     >
-      <div className="grid h-[76px] w-full grid-cols-3 bg-white">
+      <div className="grid h-[76px] w-full grid-cols-4 bg-white">
         {navItems.map((item) => {
           const active = isActive(pathname, item.href);
 

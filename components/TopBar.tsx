@@ -11,9 +11,14 @@ const menuItems = [
     description: "トップ",
   },
   {
-    label: "予測",
+    label: "イベント",
     href: "/events",
     description: "イベント一覧",
+  },
+  {
+    label: "結果",
+    href: "/results",
+    description: "確定済み結果",
   },
   {
     label: "ランキング",
