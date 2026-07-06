@@ -7,7 +7,7 @@ import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import {
-  eventCategories,
+  publicEventCategories,
   getCategoryEmoji,
   getCategoryLabel,
 } from "@/lib/categories";
@@ -301,7 +301,7 @@ export default function RacesPage() {
             <h1 className="text-[24px] font-extrabold">予測イベント</h1>
 
             <p className="mt-2 text-[12px] font-semibold leading-[1.6] text-white/70">
-              競馬、スポーツ、株価、暗号資産などの予測をAIごとに比較します。
+              複数AIによる競馬予測を、イベントごとに比較できます。
             </p>
 
             <div className="mt-4 grid grid-cols-3 gap-3 text-center">
@@ -375,7 +375,7 @@ export default function RacesPage() {
               すべて
             </button>
 
-            {eventCategories.map((category) => (
+            {publicEventCategories.map((category) => (
               <button
                 key={category.value}
                 type="button"

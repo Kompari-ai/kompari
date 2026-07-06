@@ -7,7 +7,7 @@ import { db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import {
-  eventCategories,
+  publicEventCategories,
   getCategoryEmoji,
   getCategoryLabel,
   type EventCategory,
@@ -453,7 +453,7 @@ export default function RankingPage() {
                   全カテゴリ
                 </button>
 
-                {eventCategories.map((category) => (
+                {publicEventCategories.map((category) => (
                   <button
                     key={category.value}
                     type="button"

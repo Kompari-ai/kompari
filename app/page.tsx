@@ -272,7 +272,7 @@ export default function HomePage() {
                   Kompari
                 </h1>
                 <p className="mt-1.5 text-[12px] leading-[1.6] text-white/70">
-                  競馬・スポーツ・金融・選挙の予測を複数AIで比較するプラットフォームです。
+                  複数AIの競馬予測を比較し、結果と的中率まで確認できる予測メディアです。
                 </p>
               </div>
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] bg-white/10 text-2xl">

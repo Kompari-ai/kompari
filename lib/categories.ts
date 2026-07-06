@@ -76,3 +76,10 @@ export function getCategoryEmoji(category?: string) {
     eventCategories.find((item) => item.value === category)?.emoji || "🐎"
   );
 }
+
+// 公開ページ向けの実装済みカテゴリのみの派生配列。
+// eventCategories 本体・EventCategory 型・admin のカテゴリ選択肢は変更しない。
+// 将来カテゴリを解禁する際は、このフィルタ条件を広げるだけでよい。
+export const publicEventCategories = eventCategories.filter(
+  (category) => category.value === "horse_racing"
+);
