@@ -111,6 +111,12 @@ function findDriftedPredictions(
   return drifted;
 }
 
+type GeneratePredictionOptions = {
+  // false の場合、実AI呼び出し失敗時に mock フォールバックへ進まず、生成を失敗として扱う。
+  // 未指定は既存挙動(mock フォールバック可)を維持する。
+  allowMock?: boolean;
+};
+
 type PredictionIdInput = { ai?: string | null; myAiId?: string | null };
 
 function makePredictionId(pred: PredictionIdInput): string {
@@ -325,7 +331,11 @@ export default function AdminEditPage({
     }
   };
 
-  const generatePrediction = async (aiName: string, silent = false) => {
+  const generatePrediction = async (
+    aiName: string,
+    silent = false,
+    options: GeneratePredictionOptions = {}
+  ) => {
     if (!event) return;
 
     if (isResultSettled) {
@@ -360,10 +370,21 @@ export default function AdminEditPage({
           category,
           aiName,
           candidates,
+          ...(options.allowMock === false ? { allowMock: false } : {}),
         }),
       });
 
       if (!response.ok) {
+        const errorBody = await response.json().catch(() => null) as
+          | { mockBlocked?: boolean }
+          | null;
+
+        if (errorBody?.mockBlocked) {
+          throw new Error(
+            `${aiName}: 実AI呼び出しに失敗し、mockフォールバックが無効のため予測を保存しませんでした`
+          );
+        }
+
         throw new Error("AI予測の生成に失敗しました");
       }
 
@@ -409,7 +430,9 @@ export default function AdminEditPage({
       }
     } catch (error) {
       console.error(error);
-      alert(`${aiName}の予測再生成に失敗しました`);
+      const message =
+        error instanceof Error ? error.message : `${aiName}の予測再生成に失敗しました`;
+      alert(message);
     } finally {
       setGeneratingAi("");
     }
@@ -714,7 +737,9 @@ export default function AdminEditPage({
                 <button
                   key={aiName}
                   type="button"
-                  onClick={() => generatePrediction(aiName)}
+                  onClick={() =>
+                    generatePrediction(aiName, false, { allowMock: false })
+                  }
                   disabled={!!generatingAi || saving || isResultSettled}
                   className={`rounded-2xl px-3 py-4 text-sm font-bold ${
                     exists

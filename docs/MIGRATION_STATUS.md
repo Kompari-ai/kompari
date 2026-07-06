@@ -2054,3 +2054,13 @@ source未設定の event を削除対象、source設定済み(importer製)を残
 - importer製sample 1件のみ(source / sourceId / sourceUrl / creationSource 保持、predictionsなし)
 
 これにより、Event Auto Creation の土台作り(型追加・importer・Admin SDK write path・guarded deletion)は一区切りとする。次フェーズは manual-fixture ではなく、JRA 等の実データ寄りの source をどう取り込むかの検討に進む。
+
+## PR-4a: 予測生成に mock禁止モード(allowMock)を追加
+
+importer製 sample event(`fixture-sample-race-2026-11-08-01`)への1AI手動生成テストで「実AIの応答だけが保存される」ことを保証するため、`/api/generate-prediction` に `allowMock?: boolean` を追加した。`allowMock === false` の場合、実API呼び出し失敗(キー未設定/呼び出し例外/timeout)時に mock フォールバックへ進まず、`{ mockBlocked: true }` 付きの502を返す。`allowMock` 未指定/true は既存挙動(mock フォールバック可)を維持する。
+
+`app/admin/edit/[id]/page.tsx` の `generatePrediction` に `options: { allowMock? }` を追加し、AI別ボタン(1AI手動生成)からのみ `{ allowMock: false }` を渡す。`generateAllPredictions`(全AI一括)は引数を変更しておらず、`allowMock` 未指定のまま = 既存挙動維持(mock フォールバック可)。API失敗時は `response.ok` チェック後の `throw` が Firestore `batch.set`/`batch.commit` より前にあるため、strict生成が失敗しても既存 prediction は上書きされない。
+
+### P1 follow-up(未対応、別PRで扱う)
+
+`lib/ai/parse.ts` の `pickCandidate` は、AI出力の `main`/`second`/`third` が `candidates` 配列と完全一致しない場合、無警告で `candidates[0]` 等へ差し替える。全角半角・空白・言い換え等の表記ゆれで発生しうる。この場合 `reason`/`evidence` の説明内容と実際に保存された `main` が食い違う静かなデータ不整合が起き、結果的中判定が実際のAI意図とズレる恐れがある。`allowMock=false` はこの問題を検知・防止しない(実APIが「候補外の文字列」を返した場合でも、parse.ts側で候補内の値に差し替えられるため、API自体は成功として扱われる)。対応は次回 importer製 event で実際にAI生成→表記ゆれの実例が観測されたタイミング、または本格的な外部データ取り込み(JRA等)を検討する際に着手する。

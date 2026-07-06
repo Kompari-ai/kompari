@@ -16,6 +16,9 @@ type PredictionRequest = {
   aiStyle?: string;
   aiDescription?: string;
   strengthCategory?: string;
+  // false の場合、実AI呼び出し失敗時に mock フォールバックへ進まず 502 を返す。
+  // 未指定/true は既存挙動(mock フォールバック可)を維持する。
+  allowMock?: boolean;
 };
 
 const officialAiStyles: Record<string, string> = {
@@ -327,6 +330,7 @@ export async function POST(req: Request) {
 
     const aiDescription = String(body.aiDescription || "").trim();
     const strengthCategory = String(body.strengthCategory || "").trim();
+    const allowMock = body.allowMock !== false;
 
     if (!title) {
       return NextResponse.json(
@@ -389,6 +393,20 @@ export async function POST(req: Request) {
       }
 
       return NextResponse.json({ ai: aiName, ...realResult, isMock: false, predictionSource: "official-ai" });
+    }
+
+    if (!allowMock) {
+      console.error(`[${aiName}] real API call failed and allowMock=false; refusing mock fallback`);
+
+      return NextResponse.json(
+        {
+          error: "Real AI prediction failed and mock fallback is disabled.",
+          reason: "provider_call_failed",
+          mockBlocked: true,
+          aiName,
+        },
+        { status: 502 }
+      );
     }
 
     // モック（フォールバック）
