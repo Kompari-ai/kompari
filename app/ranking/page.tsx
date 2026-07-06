@@ -16,6 +16,7 @@ import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   getResultWinner,
   isCountablePrediction,
+  isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -254,10 +255,16 @@ export default function RankingPage() {
     return () => { eventsUnsub(); predsUnsub(); };
   }, []);
 
-  const finishedEvents = useMemo(() => {
-    if (!events) return [];
-    return events.filter((event) => !!getResultWinner(event));
+  // 公開ページはmanual-fixture(sample)eventを実績として見せない。
+  const publicEvents = useMemo<KompariEvent[] | null>(() => {
+    if (!events) return null;
+    return events.filter(isPublicEvent);
   }, [events]);
+
+  const finishedEvents = useMemo(() => {
+    if (!publicEvents) return [];
+    return publicEvents.filter((event) => !!getResultWinner(event));
+  }, [publicEvents]);
 
   const targetEvents = useMemo(() => {
     return finishedEvents.filter((event) => {
@@ -278,15 +285,15 @@ export default function RankingPage() {
 
   // "brand" モード: 公式AIのみ対象、category/source フィルタ無効
   const brandCards = useMemo(() => {
-    if (!events) return [];
-    return aggregateByBrand(events, { source: "official" }).map(brandToCard);
-  }, [events]);
+    if (!publicEvents) return [];
+    return aggregateByBrand(publicEvents, { source: "official" }).map(brandToCard);
+  }, [publicEvents]);
 
   // "model" モード: 公式AIのみ・aiModel/aiModelId 有りのデータのみ対象
   const modelCards = useMemo(() => {
-    if (!events) return [];
-    return aggregateByModel(events, { source: "official" }).map(modelToCard);
-  }, [events]);
+    if (!publicEvents) return [];
+    return aggregateByModel(publicEvents, { source: "official" }).map(modelToCard);
+  }, [publicEvents]);
 
   const activeCards = useMemo(() => {
     if (aggregationMode === "ai") return aiCards;

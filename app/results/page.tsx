@@ -10,6 +10,7 @@ import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
   getResultWinner,
   isCountablePrediction,
+  isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -149,10 +150,16 @@ export default function ResultsPage() {
     return eventDocs.map((doc) => normalizeEventDocToEvent(doc, predsMap.get(doc.id) ?? []));
   }, [eventDocs, predsMap]);
 
-  const finishedEvents = useMemo(() => {
-    if (!events) return [];
+  // 公開ページはmanual-fixture(sample)eventを実績として見せない。
+  const publicEvents = useMemo<KompariEvent[] | null>(() => {
+    if (!events) return null;
+    return events.filter(isPublicEvent);
+  }, [events]);
 
-    return events
+  const finishedEvents = useMemo(() => {
+    if (!publicEvents) return [];
+
+    return publicEvents
       .filter((event) => !!getResultWinner(event))
       .sort((a, b) => {
         const timeA = getSortTime(a);
@@ -164,7 +171,7 @@ export default function ResultsPage() {
 
         return timeB - timeA;
       });
-  }, [events]);
+  }, [publicEvents]);
 
   const loaded = events !== null;
 

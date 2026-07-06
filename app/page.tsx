@@ -12,6 +12,7 @@ import {
   formatStartsAt,
   getConsensusChip,
   getResultWinner,
+  isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -213,28 +214,34 @@ export default function HomePage() {
     return () => { eventsUnsub(); predsUnsub(); };
   }, []);
 
-  const featuredEvent = events ? (events[0] || null) : null;
+  // 公開ページはmanual-fixture(sample)eventを実績として見せない。
+  const publicEvents = useMemo<KompariEvent[] | null>(() => {
+    if (!events) return null;
+    return events.filter(isPublicEvent);
+  }, [events]);
+
+  const featuredEvent = publicEvents ? (publicEvents[0] || null) : null;
 
   const pendingEvents = useMemo(() => {
-    if (!events) return [];
-    return events.filter((event) => !getResultWinner(event));
-  }, [events]);
+    if (!publicEvents) return [];
+    return publicEvents.filter((event) => !getResultWinner(event));
+  }, [publicEvents]);
 
   const finishedEvents = useMemo(() => {
-    if (!events) return [];
-    return events.filter((event) => getResultWinner(event));
-  }, [events]);
+    if (!publicEvents) return [];
+    return publicEvents.filter((event) => getResultWinner(event));
+  }, [publicEvents]);
 
   const totalPredictions = useMemo(() => {
-    if (!events) return 0;
-    return events.reduce(
+    if (!publicEvents) return 0;
+    return publicEvents.reduce(
       (sum, event) =>
         sum +
         event.predictions.filter((p) => p.source !== "user" && !p.myAiId)
           .length,
       0
     );
-  }, [events]);
+  }, [publicEvents]);
 
   if (events === null) {
     return (
@@ -283,7 +290,7 @@ export default function HomePage() {
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">イベント</div>
-                <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">{events.length}</div>
+                <div className="mt-0.5 text-xl font-extrabold [font-variant-numeric:tabular-nums]">{publicEvents?.length ?? 0}</div>
               </div>
               <div className="rounded-[12px] bg-white/10 p-2.5">
                 <div className="text-[10px] text-white/65">予測中</div>

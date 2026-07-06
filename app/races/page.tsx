@@ -16,6 +16,7 @@ import {
   formatStartsAt,
   getConsensusChip,
   getResultWinner,
+  isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -228,11 +229,17 @@ export default function RacesPage() {
     return () => { eventsUnsub(); predsUnsub(); };
   }, []);
 
+  // 公開ページはmanual-fixture(sample)eventを実績として見せない。
+  const publicEvents = useMemo<KompariEvent[] | null>(() => {
+    if (!events) return null;
+    return events.filter(isPublicEvent);
+  }, [events]);
+
   const filteredEvents = useMemo(() => {
-    if (!events) return [];
+    if (!publicEvents) return [];
     const normalizedKeyword = keyword.trim().toLowerCase();
 
-    return events.filter((event) => {
+    return publicEvents.filter((event) => {
       const resultWinner = getResultWinner(event);
 
       if (statusFilter !== "all" && getStatus(event) !== statusFilter) {
@@ -261,10 +268,10 @@ export default function RacesPage() {
 
       return targetText.includes(normalizedKeyword);
     });
-  }, [categoryFilter, events, keyword, statusFilter]);
+  }, [categoryFilter, publicEvents, keyword, statusFilter]);
 
-  const openCount = (events ?? []).filter((event) => getStatus(event) === "open").length;
-  const finishedCount = (events ?? []).filter((event) => getStatus(event) === "finished").length;
+  const openCount = (publicEvents ?? []).filter((event) => getStatus(event) === "open").length;
+  const finishedCount = (publicEvents ?? []).filter((event) => getStatus(event) === "finished").length;
 
   if (events === null) {
     return (
@@ -308,7 +315,7 @@ export default function RacesPage() {
               <div className="rounded-[12px] bg-white p-2.5">
                 <div className="text-[10px] font-bold text-gray-500">総数</div>
                 <div className="mt-0.5 text-xl font-extrabold text-brand">
-                  {events.length}
+                  {publicEvents?.length ?? 0}
                 </div>
               </div>
               <div className="rounded-[12px] bg-white p-2.5">

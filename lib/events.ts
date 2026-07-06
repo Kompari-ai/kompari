@@ -219,6 +219,17 @@ export function getResultWinner(event: KompariEvent): string {
   return (event.result?.winner || event.resultWinner || "").trim();
 }
 
+// Public-facing pages must not expose manual fixture/sample events.
+// source undefined is treated as public so existing admin-created events remain visible.
+// Do not use creationSource === "importer" here because future real imports may also use importer.
+// Do not use string matching on sourceId/id (e.g. includes("sample")) — future real data could
+// coincidentally match. Use an explicit source value only.
+// If explicit fields such as isSample or visibility are introduced later, extend this guard here.
+// This is an event-level guard; do not mix it into isCountablePrediction (prediction-level).
+export function isPublicEvent(event: Pick<KompariEvent, "source">): boolean {
+  return event.source !== "manual-fixture";
+}
+
 // ランキング集計の分母に入れてよい予測かを判定する。
 // 明示的に mock と分かるものだけ除外する。
 // isMock/predictionSource が missing(undefined)の旧公式AIデータは除外しない。

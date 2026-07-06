@@ -15,6 +15,7 @@ import {
   getPredictionDisplayStatus,
   getResultWinner,
   isCountablePrediction,
+  isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -472,7 +473,14 @@ export default function RaceDetailPage({
         setLoaded(true);
         return;
       }
-      setEvent(normalizeEventDocToEvent(eventDocData, predictionsData));
+      const normalized = normalizeEventDocToEvent(eventDocData, predictionsData);
+      // manual-fixture(sample)eventは公開詳細ページにも出さない。既存の not found 表示に寄せる。
+      if (!isPublicEvent(normalized)) {
+        setEvent(null);
+        setLoaded(true);
+        return;
+      }
+      setEvent(normalized);
       setLoaded(true);
     }
 

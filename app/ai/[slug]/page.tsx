@@ -11,6 +11,7 @@ import {
   getPredictionStatus,
   getResultWinner,
   isCountablePrediction,
+  isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -303,11 +304,17 @@ export default function AiProfilePage({
     return () => unsubscribe();
   }, []);
 
+  // 公開ページはmanual-fixture(sample)eventを実績として見せない。
+  const publicEvents = useMemo<KompariEvent[] | null>(() => {
+    if (!events) return null;
+    return events.filter(isPublicEvent);
+  }, [events]);
+
   const stats = useMemo(() => {
-    if (!events) return buildStats([], "");
-    if (!profile) return buildStats(events, "");
-    return buildStats(events, profile.name);
-  }, [events, profile]);
+    if (!publicEvents) return buildStats([], "");
+    if (!profile) return buildStats(publicEvents, "");
+    return buildStats(publicEvents, profile.name);
+  }, [publicEvents, profile]);
 
   const voteStats = useMemo(() => {
     if (!profile) {
@@ -324,11 +331,11 @@ export default function AiProfilePage({
   const categories = useMemo(() => categoryRows(stats), [stats]);
 
   const modelStats = useMemo(() => {
-    if (!events || !profile) return [];
-    return aggregateByModel(events, { source: "official" }).filter(
+    if (!publicEvents || !profile) return [];
+    return aggregateByModel(publicEvents, { source: "official" }).filter(
       (m) => m.brandKey === profile.name
     );
-  }, [events, profile]);
+  }, [publicEvents, profile]);
 
   if (events === null) {
     return (
