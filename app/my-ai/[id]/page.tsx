@@ -60,12 +60,6 @@ type MyAiStats = {
   recent: MyAiPredictionRow[];
 };
 
-function formatConfidence(confidence?: string) {
-  if (!confidence) return "-";
-  if (confidence.includes("%")) return confidence;
-  return `${confidence}%`;
-}
-
 function isThisMyAiPrediction(
   prediction: KompariPrediction,
   myAi: MyAi,
@@ -630,19 +624,10 @@ export default function MyAiDetailPage({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 gap-2 text-sm">
                   <div className="rounded-xl bg-white p-2">
                     <div className="text-xs font-bold text-gray-400">本命</div>
                     <div className="font-extrabold">{row.main}</div>
-                  </div>
-
-                  <div className="rounded-xl bg-white p-2">
-                    <div className="text-xs font-bold text-gray-400">
-                      信頼度
-                    </div>
-                    <div className="font-extrabold">
-                      {formatConfidence(row.confidence)}
-                    </div>
                   </div>
                 </div>
 

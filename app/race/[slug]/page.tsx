@@ -197,12 +197,6 @@ function getConsensusAnswerLabel(
   return { label: "コンセンサス外れ", className: "bg-amber-50 text-amber-700" };
 }
 
-function formatConfidence(confidence?: string) {
-  if (!confidence) return "-";
-  if (confidence.includes("%")) return confidence;
-  return `${confidence}%`;
-}
-
 function isMyAiPrediction(prediction: KompariPrediction, myAis: MyAi[]) {
   if (prediction.source === "user") return true;
   if (prediction.myAiId) return true;
@@ -288,11 +282,6 @@ function PredictionCard({
                 {isMyAi ? "My AI" : "公式AI"}
               </span>
             </div>
-            {prediction.confidence && (
-              <div className="mt-0.5 text-[11px] text-gray-500 font-semibold">
-                自信度 {formatConfidence(prediction.confidence)}
-              </div>
-            )}
           </div>
 
           <span
