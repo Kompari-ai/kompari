@@ -576,7 +576,7 @@ export default function AdminEditPage({
           </div>
 
           <Link
-            href={`/race/${id}`}
+            href={`/events/${id}`}
             className="mt-3 block rounded-2xl border border-gray-200 bg-white py-3 text-center text-sm font-bold text-gray-600"
           >
             詳細ページを見る

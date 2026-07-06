@@ -446,7 +446,7 @@ export default function MyAiPage() {
                     </Link>
 
                     <Link
-                      href="/races"
+                      href="/events"
                       className="rounded-2xl bg-white py-3 text-center text-sm font-bold text-gray-700"
                     >
                       参加させる

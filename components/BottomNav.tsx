@@ -11,7 +11,7 @@ const navItems = [
   },
   {
     label: "予測",
-    href: "/races",
+    href: "/events",
     icon: "◇",
   },
   {

@@ -73,7 +73,7 @@ function NotificationCard({ event }: { event: KompariEvent }) {
 
       <div className="mt-4">
         <Link
-          href={`/race/${event.id}`}
+          href={`/events/${event.id}`}
           className="block rounded-2xl bg-gray-100 py-3 text-center text-sm font-bold text-gray-700"
         >
           詳細を見る
@@ -244,7 +244,7 @@ export default function NotificationsPage() {
             </Link>
 
             <Link
-              href="/races"
+              href="/events"
               className="rounded-2xl bg-gray-100 py-4 text-center text-sm font-bold text-gray-700"
             >
               予測を見る

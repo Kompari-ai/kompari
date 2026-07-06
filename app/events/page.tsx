@@ -56,7 +56,7 @@ function EventCard({ event }: { event: KompariEvent }) {
 
   return (
     <Link
-      href={`/race/${event.id}`}
+      href={`/events/${event.id}`}
       className="block rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
     >
       {/* Top row */}

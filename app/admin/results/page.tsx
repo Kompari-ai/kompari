@@ -527,7 +527,7 @@ export default function AdminResultsPage() {
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => goTo(`/race/${event.id}`)}
+                    onClick={() => goTo(`/events/${event.id}`)}
                     className="rounded-2xl border border-gray-200 bg-white py-4 text-center text-sm font-extrabold text-gray-700"
                   >
                     詳細を見る

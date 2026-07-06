@@ -168,7 +168,7 @@ export default function AdminPage() {
       await batch.commit();
 
       alert("イベントを作成しました");
-      router.push(`/race/${eventId}`);
+      router.push(`/events/${eventId}`);
     } catch (error) {
       console.error(error);
       alert(

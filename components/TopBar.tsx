@@ -12,7 +12,7 @@ const menuItems = [
   },
   {
     label: "予測",
-    href: "/races",
+    href: "/events",
     description: "イベント一覧",
   },
   {

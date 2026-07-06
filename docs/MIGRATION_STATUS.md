@@ -2266,3 +2266,15 @@ read-only調査で判定Aが確定した。`source = "manual-fixture"` の impor
 - `app/admin/*` / `app/my-ai/*` / `lib/stats.ts` / `lib/event-import.ts` / `scripts/*` / Firestoreデータは無変更
 
 既存sampleの物理削除、および `isSample` / `visibility` 等の明示フィールド化は別フェーズとする。実データが投入されるまでは、上記ページが軒並み空状態表示になる(既存の空状態UIをそのまま利用、崩れないことを確認済み)。
+
+## PR-1: URL移行 /races→/events, /race/[slug]→/events/[slug]
+
+データ層はFirestore `events` collectionに移行済みだが公開URLが`/races`・`/race/[slug]`のまま残っていたため、カテゴリ非依存のEvent概念に合わせてURLを`/events`系へ移行した。
+
+- `app/races` → `app/events`、`app/race/[slug]` → `app/events/[slug]` へフォルダ改名(`git mv`)。旧`app/races`・`app/race`は残していない
+- 内部リンク15ファイル・21箇所を`/events`系へ更新(`components/BottomNav.tsx` / `components/TopBar.tsx` / `app/page.tsx` / `app/events/page.tsx` / `app/events/[slug]/page.tsx` / `app/results/page.tsx` / `app/ranking/page.tsx` / `app/ai/[slug]/page.tsx` / `app/my-ai/page.tsx` / `app/my-ai/[id]/page.tsx` / `app/notifications/page.tsx` / `app/disclaimer/page.tsx` / `app/admin/page.tsx` / `app/admin/edit/[id]/page.tsx` / `app/admin/results/page.tsx`)
+- `next.config.ts` に旧URL保護のための `redirects()` を追加(`/races`→`/events`、`/race/:slug`→`/events/:slug`、いずれも`permanent: true`)。追加前は`redirects`/`rewrites`未設定の空に近い設定だったため既存設定との競合なし
+- param名は`slug`のまま維持。`doc(db, "events", slug)`でFirestoreドキュメントidにそのまま使う設計は変更していない。`KompariEventDoc.slug`フィールド自体は元々write-onlyの未使用フィールドで、doc id===slugが常に保証されているため、リネームの必要性はなかった
+- PR-4a由来のsample除外ガード(`isPublicEvent`)は`app/events/[slug]/page.tsx`にそのまま引き継がれ、新パスでも機能を維持している
+
+今回やらないこと: BottomNav 4タブ化・「予測」→「イベント」ラベル変更・結果タブ追加・TopBarメニュー再編は別PR(PR-2)。SSR・`generateMetadata`・動的OGP・canonicalは別PR(PR-3)。Firestoreデータ・admin機能の仕様は無変更。

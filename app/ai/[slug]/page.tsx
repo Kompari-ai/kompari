@@ -708,7 +708,7 @@ export default function AiProfilePage({
             {stats.recent.slice(0, 10).map((row) => (
               <Link
                 key={`${row.eventId}-${row.main}`}
-                href={`/race/${row.eventId}`}
+                href={`/events/${row.eventId}`}
                 className="block rounded-2xl border border-gray-100 bg-gray-50 p-3"
               >
                 <div className="mb-2 flex items-start justify-between gap-3">

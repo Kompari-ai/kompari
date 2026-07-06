@@ -49,7 +49,7 @@ function EventCard({ event }: { event: KompariEvent }) {
 
   return (
     <Link
-      href={`/race/${event.id}`}
+      href={`/events/${event.id}`}
       className="block rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
     >
       {/* Top row */}
@@ -309,7 +309,7 @@ export default function HomePage() {
           <section className="mb-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[15.5px] font-bold">注目イベント</h2>
-              <Link href="/races" className="text-[12px] font-bold text-brand">
+              <Link href="/events" className="text-[12px] font-bold text-brand">
                 すべて見る ›
               </Link>
             </div>
@@ -323,7 +323,7 @@ export default function HomePage() {
 
           <div className="grid grid-cols-3 gap-2">
             <Link
-              href="/races"
+              href="/events"
               className="rounded-[12px] bg-brand py-3.5 text-center text-[13px] font-bold text-white"
             >
               予測を見る

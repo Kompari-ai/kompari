@@ -207,7 +207,7 @@ export default function ResultsPage() {
               return (
                 <Link
                   key={event.id}
-                  href={`/race/${event.id}`}
+                  href={`/events/${event.id}`}
                   className="block rounded-[18px] border border-[#E8ECF2] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">

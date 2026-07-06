@@ -566,7 +566,7 @@ export default function RankingPage() {
                     {card.history.slice(0, 3).map((item) => (
                       <Link
                         key={`${card.key}-${item.eventId}`}
-                        href={`/race/${item.eventId}`}
+                        href={`/events/${item.eventId}`}
                         className="flex items-center justify-between gap-2 rounded-[10px] bg-white p-2.5"
                       >
                         <div className="min-w-0 flex-1">
@@ -614,7 +614,7 @@ export default function RankingPage() {
 
               <div className="mt-5">
                 <Link
-                  href="/races"
+                  href="/events"
                   className="block rounded-[12px] bg-brand py-4 text-center text-sm font-extrabold text-white"
                 >
                   イベント一覧へ

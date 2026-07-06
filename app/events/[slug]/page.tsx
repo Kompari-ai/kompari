@@ -590,7 +590,7 @@ export default function RaceDetailPage({
             </p>
 
             <Link
-              href="/races"
+              href="/events"
               className="mt-5 block rounded-[12px] bg-brand py-3 text-sm font-bold text-white"
             >
               イベント一覧へ戻る
@@ -908,7 +908,7 @@ export default function RaceDetailPage({
 
         <section className="mt-5">
           <Link
-            href="/races"
+            href="/events"
             className="block rounded-[12px] border border-[#E8ECF2] bg-white py-4 text-center text-sm font-bold text-gray-700 shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
           >
             一覧へ戻る

@@ -110,7 +110,7 @@ export default function DisclaimerPage() {
           </Link>
 
           <Link
-            href="/races"
+            href="/events"
             className="rounded-2xl bg-blue-700 py-4 text-center text-sm font-bold text-white"
           >
             予測を見る
