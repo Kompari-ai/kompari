@@ -159,7 +159,6 @@ export default function AdminPage() {
           ...pred,                       // isMock/predictionSource/ai/main/aiModel等を流用
           eventId,
           predictionId,
-          outcome: "pending",            // 作成時は常に pending
           predictedAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
           // createdAt は入れない(predictedAtと重複するため)

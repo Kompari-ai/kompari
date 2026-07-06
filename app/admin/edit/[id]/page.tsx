@@ -404,7 +404,6 @@ export default function AdminEditPage({
         ...nextPrediction,
         eventId: id,
         predictionId,
-        outcome: "pending",
         predictedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };

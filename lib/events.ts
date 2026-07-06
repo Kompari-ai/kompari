@@ -29,7 +29,7 @@ export type KompariPrediction = {
 
   // 集計の整合性のための土台フィールド(方針: MVP監査で確定)。
   // 失敗/欠落/モック予測を、コンセンサスと的中率の母数から正しく扱うために使う。
-  // outcome未確定(undefined)の旧データは、集計側で従来の動的計算にフォールバックする。
+  // isMock/predictionSource が未設定(undefined)の旧データは、集計側で従来の動的計算にフォールバックする。
   isMock?: boolean;
 
   // predictionSource の境界:
@@ -39,8 +39,6 @@ export type KompariPrediction = {
   //   mock:        API失敗時/開発用のモック予測。商用集計から除外・別扱い
   //   manual:      管理画面等から人間が手入力・補正した予測
   predictionSource?: "official-ai" | "my-ai" | "custom-ai" | "mock" | "manual";
-
-  outcome?: "pending" | "hit" | "miss" | "void" | "unknown";
 };
 
 export type KompariEvent = {
@@ -140,7 +138,7 @@ export type KompariEventDoc = {
 
 // events/{eventId}/predictions サブコレクション(新) 1ドキュメントの型。
 // 既存 KompariPrediction(optional)とは別の新型。新コレクション専用。
-// isMock/predictionSource/outcome は必須にして undefined を作らない方針。
+// isMock/predictionSource は必須にして undefined を作らない方針。
 // confidence は現状の string 混在(72/medium/high)のまま維持。数値化は将来別タスク。
 export type KompariPredictionDoc = {
   eventId: string;
@@ -159,7 +157,6 @@ export type KompariPredictionDoc = {
   predictionSource: "official-ai" | "my-ai" | "custom-ai" | "mock" | "manual";
   source?: "official" | "user";
   myAiId?: string;
-  outcome: "pending" | "hit" | "miss" | "void" | "unknown";
   usedFactors?: PredictionFactor[];
   factorKeys?: string[];
   predictedAt?: unknown;
@@ -171,21 +168,6 @@ export function normalizeEventDocToEvent(
   doc: KompariEventDoc,
   predictions: KompariPredictionDoc[]
 ): KompariEvent {
-  const winner = (doc.result?.winner ?? "").trim();
-  const isFinished = !!winner;
-
-  const normalizedPredictions: KompariPrediction[] = predictions.map((p) => {
-    // 確定値は上書きしない。pending かつ確定済みのときだけ hit/miss を算出
-    let computedOutcome = p.outcome;
-    if (p.outcome === "pending" && isFinished) {
-      computedOutcome = p.main?.trim() === winner ? "hit" : "miss";
-    }
-    return {
-      ...p,
-      outcome: computedOutcome,
-    };
-  });
-
   return {
     id: doc.id,
     category: doc.category,
@@ -193,7 +175,7 @@ export function normalizeEventDocToEvent(
     candidates: doc.candidates,
     startsAt: doc.startsAt,
     participants: [],
-    predictions: normalizedPredictions,
+    predictions,
     result: doc.result,
     venue: doc.venue ?? "",
     startsIn: "",
@@ -207,19 +189,7 @@ export function normalizeEventDocToEvent(
 }
 
 export function normalizeRaceToEvent(race: LegacyRaceData): KompariEvent {
-  const winner = (race.result?.winner || race.resultWinner || "").trim();
-  const isFinished = !!winner;
-  const predictions = (race.predictions || []).map((p) => {
-    const computedOutcome = !isFinished
-      ? "pending"
-      : p.main?.trim() === winner
-        ? "hit"
-        : "miss";
-    return {
-      ...p,
-      outcome: p.outcome ?? computedOutcome,
-    };
-  });
+  const predictions = race.predictions || [];
 
   return {
     id: race.id,
