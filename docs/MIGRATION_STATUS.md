@@ -2278,3 +2278,16 @@ read-only調査で判定Aが確定した。`source = "manual-fixture"` の impor
 - PR-4a由来のsample除外ガード(`isPublicEvent`)は`app/events/[slug]/page.tsx`にそのまま引き継がれ、新パスでも機能を維持している
 
 今回やらないこと: BottomNav 4タブ化・「予測」→「イベント」ラベル変更・結果タブ追加・TopBarメニュー再編は別PR(PR-2)。SSR・`generateMetadata`・動的OGP・canonicalは別PR(PR-3)。Firestoreデータ・admin機能の仕様は無変更。
+
+## PR-3a: /events/[slug] の動的metadata/OGP対応(案W: metadata-only)
+
+PR-3事前調査で、SSR化なしに`layout.tsx`(server component)へ`generateMetadata`だけ追加する案W(metadata-only)が成立すると確認済みだったため、その方針で実装した。
+
+- `app/events/[slug]/layout.tsx` を新設(server component)。`generateMetadata`をexportし、`params`(`Promise<{ slug: string }>`)を`await`して`slug`を取得、event本体のtitleのみを使いtitle/description/openGraph/twitterを動的生成する。既存の`app/events/[slug]/page.tsx`("use client"、`onSnapshot`購読)は無変更
+- `lib/firebase-server.ts` を新設。`firebase/auth`(`getAuth`/`GoogleAuthProvider`)・`firebase-admin`のいずれもimportせず、既存の`NEXT_PUBLIC_FIREBASE_*`環境変数と`firebase/firestore`の`getDoc`だけで1回読みする。`events`コレクションはFirestore rulesで公開read(`allow read: if true`)のため、Admin SDK・秘密鍵は不要。クライアント側の`lib/firebase.ts`とはアプリ名を分離(`kompari-server`)し、app instanceを共有しない
+- `predictions`サブコレクションは読まない。consensus算出もしない。使うのは`event.title`のみ
+- `isPublicEvent`(`lib/events.ts`)を再利用し、`source === "manual-fixture"`のsample eventはmetadata取得時にnullを返して汎用metadataにフォールバックする(公開除外方針と整合)
+- event取得不可・sample・環境変数不足時はthrowせず、汎用metadata(`"Kompari | AI予測比較"`)にフォールバックする
+- キャッシュ/revalidateの指定は今回入れていない。使用フィールドが`event.title`のみ(登録時固定、result確定後も変わらない)のため、鮮度対策が現時点で不要と判断。consensusや結果をmetadataに含める段階(別PR)でまとめて検討する
+
+今回やらないこと: 既存page.tsxの変更、SSR化、server wrapper化、predictions取得、consensus算出、動的OGP画像(`@vercel/og`)、Admin SDK、Firestoreデータ変更。実在public eventでの動的metadata実確認は、初回実データ投入後に別途行う。
