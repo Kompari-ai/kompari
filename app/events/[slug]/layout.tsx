@@ -23,9 +23,13 @@ export async function generateMetadata({
 
   if (!source) {
     return {
-      title: FALLBACK_TITLE,
+      // absolute: root layout の title.template("%s | Kompari")をバイパスする。
+      // FALLBACK_TITLE 自体が既に "Kompari" を含むため、templateを適用すると二重になる。
+      title: { absolute: FALLBACK_TITLE },
       description: FALLBACK_DESCRIPTION,
       openGraph: {
+        // openGraph/twitterのtitleはtemplate非適用(OGカード表示用の独立指定)のため、
+        // 元の文字列のままでよい。
         title: FALLBACK_TITLE,
         description: FALLBACK_DESCRIPTION,
         url,
@@ -39,21 +43,25 @@ export async function generateMetadata({
     };
   }
 
-  const title = `${source.title} | Kompari`;
+  // document <title> 用。root layout の title.template("%s | Kompari")が
+  // "| Kompari" を付与するため、ここでは event.title のみを渡す。
+  const pageTitle = source.title;
+  // openGraph/twitter用。templateが効かないため "| Kompari" をここで明示する。
+  const ogTitle = `${source.title} | Kompari`;
   const description = `${source.title}をChatGPT・Claude・Gemini・DeepSeek・GrokのAI予測で比較。結果と的中率まで確認できるAI予測メディアです。`;
 
   return {
-    title,
+    title: pageTitle,
     description,
     openGraph: {
-      title,
+      title: ogTitle,
       description,
       url,
       type: "website",
     },
     twitter: {
       card: "summary",
-      title,
+      title: ogTitle,
       description,
     },
   };
