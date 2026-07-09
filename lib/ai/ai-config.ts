@@ -40,9 +40,9 @@ export const AI_CONFIGS: AiConfig[] = [
     displayName: "Gemini",
     provider: "google",
     providerKind: "gemini",
-    model: "Gemini 2.5 Pro",
-    prodModelId: "gemini-2.5-pro",
-    devModelId: "gemini-2.5-flash",
+    model: "Gemini 3.1 Flash Lite",
+    prodModelId: "gemini-3.1-flash-lite",
+    devModelId: "gemini-3.1-flash-lite",
     apiKeyEnv: "GEMINI_API_KEY",
   },
   {

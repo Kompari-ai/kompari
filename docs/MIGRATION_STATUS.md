@@ -2302,3 +2302,14 @@ PR-3事前調査で、SSR化なしに`layout.tsx`(server component)へ`generateM
 - 実AI予測は `/admin/edit/[id]` のAI別strict生成ボタン(`allowMock:false`)で生成する運用に統一
 - `app/admin/edit/[id]/page.tsx` は無変更(既存のstrict生成・`allowMock:false`ロジックはそのまま)
 - 効果: `/admin` からの新規作成時にmock許容予測がFirestoreへ書かれる経路が構造的になくなり、初回実データ投入時のmock混入リスクを排除した
+
+## Gemini modelIdを gemini-3.1-flash-lite に更新(旧モデル404対応)
+
+初回実データ投入でGeminiのみ実AI呼び出しに失敗しmock混入した件を調査し、原因と対応をまとめた。
+
+- 原因調査: 最小疎通テストで `gemini-2.5-flash` が Google から明示404 `"no longer available"` を返すことを実測確認(提供終了)
+- `gemini-3.5-flash` を次候補として複数回(計4回)疎通確認したが、いずれも503 `"high demand"` で失敗。MVPの安定運用には不安ありと判断し不採用
+- `gemini-3.1-flash-lite` は generateContent 最小疎通に成功(response: `"OK"`)。非preview固定モデルであることを `models.list()` でも確認済み
+- `lib/ai/ai-config.ts` の Gemini `devModelId` / `prodModelId` を両方とも `gemini-3.1-flash-lite` に更新。`model` 表示名も `aiModel` として prediction docに保存されるため、将来のモデル別成績追跡に備えて `"Gemini 3.1 Flash Lite"` に変更
+- 教訓: `models.list()` に載っていても `generateContent` が404/503になる場合があるため、モデルID変更時は必ず実生成疎通確認を先に行ってから反映する
+- `latest` alias(`gemini-flash-latest` 等)とpreviewモデルは、モデル別成績追跡の一貫性と安定運用の観点から採用しない
