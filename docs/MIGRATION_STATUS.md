@@ -2291,3 +2291,14 @@ PR-3事前調査で、SSR化なしに`layout.tsx`(server component)へ`generateM
 - キャッシュ/revalidateの指定は今回入れていない。使用フィールドが`event.title`のみ(登録時固定、result確定後も変わらない)のため、鮮度対策が現時点で不要と判断。consensusや結果をmetadataに含める段階(別PR)でまとめて検討する
 
 今回やらないこと: 既存page.tsxの変更、SSR化、server wrapper化、predictions取得、consensus算出、動的OGP画像(`@vercel/og`)、Admin SDK、Firestoreデータ変更。実在public eventでの動的metadata実確認は、初回実データ投入後に別途行う。
+
+## /admin 新規作成を「イベント作成のみ」に変更(mock許容予測の作成時混入を排除)
+
+`/admin` の新規作成画面から予測生成導線を廃止し、event doc作成専用にした。AI予測生成は `/admin/edit/[id]` のAI別strictボタン(`allowMock:false`)に一本化する。
+
+- `app/admin/page.tsx`: `createPredictionsBeforeSave()` / `generatePredictions()` / 「AI予測生成」プレビューボタン / 予測プレビューUI(生成済みAI予測カード) / 不要になった `predictions` state・`KompariPrediction`/`OFFICIAL_AI_NAMES` importを削除
+- `createEvent` は event doc(`events/{id}`)のみを書き込む。predictions subcollectionへの書き込みを行わない。`predictionCount` は `0` 固定
+- 作成後の遷移先を `/events/${eventId}` から `/admin/edit/${eventId}` に変更
+- 実AI予測は `/admin/edit/[id]` のAI別strict生成ボタン(`allowMock:false`)で生成する運用に統一
+- `app/admin/edit/[id]/page.tsx` は無変更(既存のstrict生成・`allowMock:false`ロジックはそのまま)
+- 効果: `/admin` からの新規作成時にmock許容予測がFirestoreへ書かれる経路が構造的になくなり、初回実データ投入時のmock混入リスクを排除した
