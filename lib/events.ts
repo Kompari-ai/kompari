@@ -1,5 +1,6 @@
 import type { EventCategory } from "@/lib/categories";
 import type { PredictionFactor } from "@/lib/factors";
+import { isOfficialAiName } from "@/lib/ai/official-ai";
 
 export type KompariPrediction = {
   ai: string;
@@ -246,6 +247,35 @@ export function isCountablePrediction(prediction: KompariPrediction): boolean {
   return true;
 }
 
+// 表示用の「正式な公式AI予測」判定(mock「見せない」対策・P2-1)。
+// predictionSource === "official-ai" を正式性のSoTとする(ホワイトリスト方式)。
+// mock・predictionSource未設定の旧データ(Phase 2.5バックフィル以前等)は
+// いずれもこの条件を満たさないため、まとめて表示対象から除外される。
+// 製品方針上、predictionSource:"official-ai" を持たない旧predictionを
+// 正式な実績・ランキング・学習資産として後方互換で守る対象とはしない。
+//
+// predictionSource を主要SoTとしつつ、以下を多層防御として重ねて除外する
+// (矛盾データ・My AI・非公式AI名・main空が predictionSource だけの判定を
+// すり抜けないようにするため):
+// - isMock === true(predictionSource が誤ってofficial-aiのまま残った矛盾データ対策)
+// - source === "user" / myAiId あり(My AI予測の除外)
+// - 公式AI名(OFFICIAL_AI_NAMES)でない場合(isOfficialAiNameで判定)
+// - main が空文字列
+//
+// isCountablePrediction(ranking/results等の集計SoT)は今回変更しない。
+// この関数は表示専用であり、集計側の判定とは独立している。
+export function isOfficialPrediction(prediction: KompariPrediction): boolean {
+  if (prediction.predictionSource !== "official-ai") return false;
+  if (prediction.isMock === true) return false;
+  if (prediction.source === "user" || prediction.myAiId) return false;
+  if (!isOfficialAiName(prediction.ai)) return false;
+
+  const pick = (prediction.main || "").trim();
+  if (!pick) return false;
+
+  return true;
+}
+
 export type PredictionStatus = "hit" | "miss" | "pending";
 
 // 表示用の3値判定。
@@ -285,7 +315,9 @@ export function getPredictionDisplayStatus(
 export function getConsensusChip(
   predictions: KompariPrediction[]
 ): { type: "unan" | "lean" | "split"; label: string } | null {
-  const officialPreds = predictions.filter((p) => p.source !== "user");
+  // P2-1: My AI・mock・非公式データを含まない isOfficialPrediction に統一
+  // (旧: source!=="user" のみだったため isMock/myAiId/旧データを素通ししていた)。
+  const officialPreds = predictions.filter(isOfficialPrediction);
   if (officialPreds.length === 0) return null;
 
   const mains = officialPreds

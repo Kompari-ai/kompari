@@ -12,9 +12,9 @@ import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   formatStartsAt,
   getConsensusChip,
-  getPredictionDisplayStatus,
+  getPredictionStatus,
   getResultWinner,
-  isCountablePrediction,
+  isOfficialPrediction,
   isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
@@ -55,9 +55,7 @@ function getCandidateList(event: KompariEvent) {
 
 function buildConsensus(event: KompariEvent) {
   const counts: Record<string, number> = {};
-  const officialPreds = event.predictions.filter(
-    (p) => p.source !== "user" && !p.myAiId && isCountablePrediction(p)
-  );
+  const officialPreds = event.predictions.filter(isOfficialPrediction);
 
   officialPreds.forEach((prediction) => {
     if (!prediction.main) return;
@@ -80,9 +78,7 @@ function buildConsensus(event: KompariEvent) {
 function buildPodiumData(event: KompariEvent) {
   const mainCounts: Record<string, number> = {};
   const secondCounts: Record<string, number> = {};
-  const officialPreds = event.predictions.filter(
-    (p) => p.source !== "user" && !p.myAiId && isCountablePrediction(p)
-  );
+  const officialPreds = event.predictions.filter(isOfficialPrediction);
 
   officialPreds.forEach((p) => {
     if (p.main) mainCounts[p.main] = (mainCounts[p.main] || 0) + 1;
@@ -159,15 +155,14 @@ function formatSettledAt(date: Date): string {
   return `${get("month")}月${get("day")}日 ${get("hour")}:${get("minute")}`;
 }
 
+// PredictionCard は isOfficialPrediction を満たす予測のみ受け取るため、
+// mock固有の「判定不可」(getPredictionDisplayStatus の unavailable)分岐は不要。
+// 3値判定の getPredictionStatus のみを使う。
 function getPredictionResult(
   prediction: KompariPrediction,
   resultWinner: string
 ) {
-  const status = getPredictionDisplayStatus(prediction, resultWinner);
-
-  if (status === "unavailable") {
-    return { label: "判定不可", className: "bg-gray-100 text-gray-500" };
-  }
+  const status = getPredictionStatus(prediction, resultWinner);
 
   if (status === "pending") {
     return { label: "判定待ち", className: "bg-blue-50 text-blue-700" };
@@ -320,29 +315,29 @@ function PredictionCard({
           )}
         </div>
 
-        {/* Answer check: prediction vs result, display-only comparison */}
-        {isCountablePrediction(prediction) && (
-          <div className="mb-2 rounded-[10px] border border-gray-100 bg-gray-50 px-3 py-2 text-xs">
-            <div className="mb-1 text-[10px] font-bold text-gray-400">
-              答え合わせ
-            </div>
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-gray-500">
-              <span>
-                予測:{" "}
-                <span className="font-extrabold text-gray-900">
-                  {prediction.main}
-                </span>
-              </span>
-              <span className="text-gray-300">→</span>
-              <span>
-                結果:{" "}
-                <span className="font-extrabold text-gray-900">
-                  {resultWinner || "未確定"}
-                </span>
-              </span>
-            </div>
+        {/* Answer check: prediction vs result, display-only comparison.
+            PredictionCard は isOfficialPrediction 済みの予測のみ受け取るため、
+            mock/非公式を理由にこのブロックを非表示にする条件分岐は不要(常時表示)。 */}
+        <div className="mb-2 rounded-[10px] border border-gray-100 bg-gray-50 px-3 py-2 text-xs">
+          <div className="mb-1 text-[10px] font-bold text-gray-400">
+            答え合わせ
           </div>
-        )}
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-gray-500">
+            <span>
+              予測:{" "}
+              <span className="font-extrabold text-gray-900">
+                {prediction.main}
+              </span>
+            </span>
+            <span className="text-gray-300">→</span>
+            <span>
+              結果:{" "}
+              <span className="font-extrabold text-gray-900">
+                {resultWinner || "未確定"}
+              </span>
+            </span>
+          </div>
+        </div>
 
         {/* Reason */}
         {prediction.reason && (
@@ -603,16 +598,17 @@ export default function RaceDetailPage({
     );
   }
 
-  const officialPreds = event.predictions.filter(
-    (p) => p.source !== "user" && !p.myAiId
-  );
-
-  const countableOfficialPreds = officialPreds.filter(isCountablePrediction);
+  // P2-1: mock「見せない」対策の一次防衛線。isOfficialPrediction
+  // (predictionSource==="official-ai" をSoTとするホワイトリスト判定)を
+  // 満たす予測のみを表示対象とする。カード列挙・件数・コンセンサス分母/podium/ラベルは、
+  // すべてこの1つの配列から算出する(以前は officialPreds/countableOfficialPreds の
+  // 2段構えで、カード列挙側だけmock除外が抜けていた。今回1つに統一する)。
+  const officialPreds = event.predictions.filter(isOfficialPrediction);
 
   // コンセンサス答え合わせ用の表示専用集計。ランキング・判定・集計には使わない。
   // trim後の文字列で集計・比較し、getResultWinner由来のresultWinner(trim済み)との対称性を保つ。
   const consensusMainCounts: Record<string, number> = {};
-  countableOfficialPreds.forEach((p) => {
+  officialPreds.forEach((p) => {
     const main = (p.main || "").trim();
     if (!main) return;
     consensusMainCounts[main] = (consensusMainCounts[main] || 0) + 1;
@@ -627,7 +623,7 @@ export default function RaceDetailPage({
     }
   }
 
-  const consensusTotal = countableOfficialPreds.length;
+  const consensusTotal = officialPreds.length;
 
   const consensusAnswer =
     resultWinner && consensusTotal > 0 && consensusMainName
@@ -802,10 +798,10 @@ export default function RaceDetailPage({
           )}
 
           {/* Split meter */}
-          {countableOfficialPreds.length > 0 ? (
+          {officialPreds.length > 0 ? (
             <>
               <div className="h-[10px] rounded-full overflow-hidden flex gap-[2px]">
-                {countableOfficialPreds.map((p, i) => (
+                {officialPreds.map((p, i) => (
                   <div
                     key={`seg-${p.ai}-${i}`}
                     className="flex-1 h-full"
@@ -814,7 +810,7 @@ export default function RaceDetailPage({
                 ))}
               </div>
               <div className="flex flex-wrap gap-x-[10px] gap-y-[5px] mt-[7px]">
-                {countableOfficialPreds.map((p, i) => (
+                {officialPreds.map((p, i) => (
                   <span
                     key={`leg-${p.ai}-${i}`}
                     className="text-[10.5px] text-[#64748B] font-semibold inline-flex items-center gap-1 whitespace-nowrap"
@@ -893,7 +889,7 @@ export default function RaceDetailPage({
                 candidate={candidate}
                 index={index}
                 consensusCount={consensusMap[candidate] || 0}
-                totalPredictions={countableOfficialPreds.length}
+                totalPredictions={officialPreds.length}
                 resultWinner={resultWinner}
               />
             ))}
