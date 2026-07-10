@@ -2328,3 +2328,15 @@ PR-3事前調査で、SSR化なしに`layout.tsx`(server component)へ`generateM
   次回 read-only 調査で SoTか派生値か確認、派生値なら廃止検討
 - [要調査] 表示名(aiModel) vs 実 modelId(aiModelId) の乖離が複数AIで疑われる。
   全AI棚卸しと格上げ検討(session-record §4 参照)
+
+## 全AI再生成をstrict化(mock「作らない」P1完了)
+
+`/admin/edit/[id]` の「全AI再生成」ボタンが `allowMock` 未指定のままAPIを呼んでおり、AI別strictボタン(`allowMock:false`)と異なり実AI失敗時にmockへフォールバックしうる、管理画面で唯一残っていたmock生成経路だった。
+
+- `app/admin/edit/[id]/page.tsx` の `generateAllPredictions`: `generatePrediction(aiName, true)` → `generatePrediction(aiName, true, { allowMock: false })` に変更
+- 完了通知の文言を `"公式AI予測を再生成しました"` → `"公式AI予測の再生成処理が完了しました"` に変更(部分失敗があっても全件成功したように読める表現を避けるため)
+- 一括ボタン・逐次処理(forループ)・AIごとの独立batch保存・predictionId生成ロジックは無変更
+- AI別strictボタン(740行、`{ allowMock:false }`)は無変更
+- 効果: 管理画面の通常運用経路(AI別・全AI再生成の両方)からmock許容呼び出しが無くなり、mockを新規生成・保存しうる経路が構造的に無くなった。API route内部のmockフォールバック実装自体(`allowMock` 未指定時のデフォルト挙動含む)は変更していない
+- 既存の課題(未変更・別スコープ): 実API失敗時、`generatePrediction` 内の `catch` の `alert()` は `silent` フラグで抑制されないため、全AI再生成中に個別AIが失敗するとブロッキングalertが表示される。成功数・失敗AI名の集計表示は今回のスコープ外(mock表示除外=P2、失敗UIの改善は別途)
+- build: `npm run build` 成功(型エラー・ビルドエラーなし)

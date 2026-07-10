@@ -444,10 +444,10 @@ export default function AdminEditPage({
     }
 
     for (const aiName of OFFICIAL_AI_NAMES) {
-      await generatePrediction(aiName, true);
+      await generatePrediction(aiName, true, { allowMock: false });
     }
 
-    alert("公式AI予測を再生成しました");
+    alert("公式AI予測の再生成処理が完了しました");
   };
 
   const deleteEvent = async () => {
