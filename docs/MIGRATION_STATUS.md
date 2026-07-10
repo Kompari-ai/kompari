@@ -2313,3 +2313,17 @@ PR-3事前調査で、SSR化なしに`layout.tsx`(server component)へ`generateM
 - `lib/ai/ai-config.ts` の Gemini `devModelId` / `prodModelId` を両方とも `gemini-3.1-flash-lite` に更新。`model` 表示名も `aiModel` として prediction docに保存されるため、将来のモデル別成績追跡に備えて `"Gemini 3.1 Flash Lite"` に変更
 - 教訓: `models.list()` に載っていても `generateContent` が404/503になる場合があるため、モデルID変更時は必ず実生成疎通確認を先に行ってから反映する
 - `latest` alias(`gemini-flash-latest` 等)とpreviewモデルは、モデル別成績追跡の一貫性と安定運用の観点から採用しない
+
+### 初回実データ・中核ループ一周(2026-07-10)
+- 笠松1R C13組(実在レース)で event→5AI予測→consensus→result→hit/miss→
+  results→ranking を実データで一周完了。event id: uHYjIV6DcRZLKSM2Xu9N
+- 5AI全て isMock:false / strict生成。予測は発走前完了(予測は結果に先立つ)
+- 結果 winner=ホウライショウ、全AI不的中(コンセンサスも外れ)を一貫反映
+- Gemini モデル陳腐化(gemini-2.5系 404廃止)を実測で解決し
+  gemini-3.1-flash-lite に更新(commit a3c4d51)
+- 詳細な経緯・発見・次回再開地点は
+  docs/session-records/2026-07-10-first-realdata-coreloop.md 参照
+- [P2] predictionCount 不整合(0のまま・実カウントは5・表示は正・実害なし)。
+  次回 read-only 調査で SoTか派生値か確認、派生値なら廃止検討
+- [要調査] 表示名(aiModel) vs 実 modelId(aiModelId) の乖離が複数AIで疑われる。
+  全AI棚卸しと格上げ検討(session-record §4 参照)
