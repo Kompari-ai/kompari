@@ -2323,6 +2323,7 @@ PR-3事前調査で、SSR化なしに`layout.tsx`(server component)へ`generateM
   gemini-3.1-flash-lite に更新(commit a3c4d51)
 - 詳細な経緯・発見・次回再開地点は
   docs/session-records/2026-07-10-first-realdata-coreloop.md 参照
+- モデル運用の設計方針は docs/MODEL_OPERATIONS_BACKLOG.md(v1.1)に集約
 - [P2] predictionCount 不整合(0のまま・実カウントは5・表示は正・実害なし)。
   次回 read-only 調査で SoTか派生値か確認、派生値なら廃止検討
 - [要調査] 表示名(aiModel) vs 実 modelId(aiModelId) の乖離が複数AIで疑われる。
