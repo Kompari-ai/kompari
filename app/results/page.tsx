@@ -9,7 +9,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
   getResultWinner,
-  isCountablePrediction,
+  isOfficialPrediction,
   isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
@@ -36,8 +36,8 @@ type ResultSummary = {
 function buildResultSummary(event: KompariEvent): ResultSummary {
   const resultWinner = getResultWinner(event);
 
-  const countableOfficialPreds = event.predictions.filter(
-    (p) => p.source !== "user" && !p.myAiId && isCountablePrediction(p)
+  const countableOfficialPreds = event.predictions.filter((p) =>
+    isOfficialPrediction(p)
   );
 
   const consensusMainCounts: Record<string, number> = {};

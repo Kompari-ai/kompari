@@ -10,12 +10,11 @@ import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
   getPredictionStatus,
   getResultWinner,
-  isCountablePrediction,
+  isOfficialPrediction,
   isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
-  type KompariPrediction,
   type KompariPredictionDoc,
 } from "@/lib/events";
 import { aggregateByModel } from "@/lib/stats";
@@ -118,17 +117,6 @@ const aiProfiles: Record<string, AiProfile> = {
   },
 };
 
-function isOfficialAiPrediction(
-  prediction: KompariPrediction,
-  aiName: string
-) {
-  return (
-    prediction.ai === aiName &&
-    prediction.source !== "user" &&
-    !prediction.myAiId
-  );
-}
-
 function buildStats(events: KompariEvent[], aiName: string): AiStats {
   const stats: AiStats = {
     total: 0,
@@ -141,12 +129,11 @@ function buildStats(events: KompariEvent[], aiName: string): AiStats {
   };
 
   events.forEach((event) => {
-    const prediction = event.predictions.find((item) =>
-      isOfficialAiPrediction(item, aiName)
+    const prediction = event.predictions.find(
+      (item) => item.ai === aiName && isOfficialPrediction(item)
     );
 
     if (!prediction) return;
-    if (!isCountablePrediction(prediction)) return;
 
     const resultWinner = getResultWinner(event);
     const status = getPredictionStatus(prediction, resultWinner);
