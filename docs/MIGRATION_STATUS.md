@@ -2340,3 +2340,40 @@ PR-3事前調査で、SSR化なしに`layout.tsx`(server component)へ`generateM
 - 効果: 管理画面の通常運用経路(AI別・全AI再生成の両方)からmock許容呼び出しが無くなり、mockを新規生成・保存しうる経路が構造的に無くなった。API route内部のmockフォールバック実装自体(`allowMock` 未指定時のデフォルト挙動含む)は変更していない
 - 既存の課題(未変更・別スコープ): 実API失敗時、`generatePrediction` 内の `catch` の `alert()` は `silent` フラグで抑制されないため、全AI再生成中に個別AIが失敗するとブロッキングalertが表示される。成功数・失敗AI名の集計表示は今回のスコープ外(mock表示除外=P2、失敗UIの改善は別途)
 - build: `npm run build` 成功(型エラー・ビルドエラーなし)
+
+## resultsとAI詳細の公式AI予測判定をisOfficialPredictionへ統一(P4-1A完了)
+
+P4のread-only調査で、ホーム・イベント一覧・イベント詳細では`isOfficialPrediction`(`predictionSource === "official-ai"`をSoTとするホワイトリスト判定)を使用していた一方、resultsとAI詳細では旧来の`source`/`myAiId`直接判定と`isCountablePrediction`を使用しており、公式AI予測の対象集合が分裂していることを確認した。
+
+P4-1Aでは、公式AI専用ページであるresultsとAI詳細の判定を`isOfficialPrediction`へ統一した。
+
+- commit: `1212444` `refactor: unify official prediction checks in results and AI profile`(full: `12124447d8dd8a2f62b434c873a8b906dfb6f3fd`)
+- 変更ファイル: `app/results/page.tsx`、`app/ai/[slug]/page.tsx`
+- `app/results/page.tsx`: `buildResultSummary`の公式AI予測抽出を、`p.source !== "user" && !p.myAiId && isCountablePrediction(p)`から`isOfficialPrediction(p)`単一のSoTへ変更した。未使用になった`isCountablePrediction`のimportを削除した。件数、コンセンサス分母、的中判定、`consensusTotal === 0`時の「判定不可」表示は、同一のfiltered prediction集合から導出する既存構造を維持した。UI・文言・レイアウトは変更していない
+- `app/ai/[slug]/page.tsx`: ローカル関数`isOfficialAiPrediction`を削除した。予測選択を`event.predictions.find((item) => item.ai === aiName && isOfficialPrediction(item))`の構造へ変更し、正式性判定を`.find()`の述語内へ移したことで、先頭の不適格な旧predictionが後続の正式な`official-ai` predictionを隠す潜在バグも解消した。後段の冗長な`isCountablePrediction`チェックと、未使用になった`isCountablePrediction`/`KompariPrediction`型のimportを削除した。`getPredictionStatus`は維持した。`aggregateByModel(..., { source: "official" })`(モデル別成績)はP4-1B対象として今回は未変更だった
+- 集合関係: `isOfficialPrediction`を満たすprediction集合は、`isCountablePrediction`を満たす集合の厳密な部分集合である(`isOfficialPrediction(p) === true ⇒ isCountablePrediction(p) === true`)。そのため統一後の`isCountablePrediction`重ね掛けは冗長であり削除した
+- 効果: resultsとAI詳細の公式AI予測対象集合が`isOfficialPrediction`へ統一され、ホーム・イベント一覧・イベント詳細との判定分裂をP4-1A対象範囲で解消した
+- 検証: `git diff --check`成功、`npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。変更ファイルは指定2ファイルのみ
+- mainへのpushおよびHEAD / origin/mainの一致を確認済み。本番表示の目視確認は別途実施する
+
+## rankingとlib/stats.tsの公式AI集計対象をisOfficialPredictionへ統一(P4-1B完了)
+
+rankingおよび`lib/stats.ts`の現在使用中の公式AI集計経路(`aggregateByBrand`/`aggregateByModel`の`{source:"official"}`呼び出し、`buildRankings`のAI別集計)では、緩い`getPredictionSource`分類と`isCountablePrediction`を組み合わせており、`predictionSource === "official-ai"`を必須としていなかった。P4-1Aと同じ判定分裂が、公式AI/My AI混在集計を持つこれらの経路にも存在していた。
+
+P4-1Bでは、現在使用中の公式AI集計経路を`isOfficialPrediction`へ統一した。公式AIとMy AIを同一関数内で扱うため、単純な置換ではなく分岐処理として実装した。
+
+- commit: `5f97116` `refactor: gate official aggregation by isOfficialPrediction in ranking and stats`(full: `5f97116244eceea1d88b528c5dc09edfbac53c8b`)
+- 変更ファイル: `app/ranking/page.tsx`、`lib/stats.ts`
+- `lib/stats.ts`: `isOfficialPrediction`をimportした。`isCountableForSource(prediction, source)`を新設・exportした。判定は`source === "official"`なら`isOfficialPrediction(prediction)`、`source === "user"`なら`isCountablePrediction(prediction)`(既存挙動を維持)。`aggregateByBrand`と`aggregateByModel`の両方で、「sourceを一度取得 → sourceFilter一致判定 → isCountableForSource」の順に統一した。`getModelKey === null`除外、sort、history生成、ブランド/モデルキー生成は変更していない
+- `app/ranking/page.tsx`: `isCountablePrediction`のimportを削除し、`isCountableForSource`をimportした。`buildRankings`で、ローカル`getPredictionSource`によるsource取得後に`isCountableForSource(prediction, source)`で集計可否を判定する構造へ変更した。ローカル`getPredictionSource`、`getPredictionKey`、行レベルのsourceFilter絞り込み、UIは変更していない
+- My AI / user集計は従来の`isCountablePrediction`判定を維持し、P4-1Bでは契約を変更していない
+- P4-1Bで完了した範囲: 現在使用中の公式AI集計経路のSoTを`isOfficialPrediction`へ統一した
+- 未完了/別スコープ(今回は対応していない):
+  - unknown/other分類の整理
+  - user/allフィルタ経路の厳密な意味確定
+  - 未知AIがuserへフォールバックする`getPredictionSource`の既存挙動の変更。現行の`getPredictionSource`は、公式AIと判定されないpredictionを最終的に`"user"`へ分類するため、未知AIやcustom系predictionがuser/all経路へ入る可能性がある。ただし現在の実利用呼び出し元は`source: "official"`であり、P4-1Bの公式AI集計統一には影響しない
+  - `app/ranking/page.tsx`と`lib/stats.ts`に存在する`getPredictionSource`の二重定義解消
+  - `isCountableForSource`末尾の`return false`整理(現行の`"official" | "user"`型では到達不能。将来分類拡張時の安全弁として残置)
+  - 保存境界での`KompariPredictionDoc`型強制(P4-2対象)
+- 検証: `git diff --check`成功、`npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。変更ファイルは指定2ファイルのみ
+- mainへのpushおよびHEAD / origin/mainの一致を確認済み。本番表示の目視確認は別途実施する
