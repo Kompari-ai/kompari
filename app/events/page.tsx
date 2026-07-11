@@ -16,6 +16,7 @@ import {
   formatStartsAt,
   getConsensusChip,
   getResultWinner,
+  isOfficialPrediction,
   isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
@@ -33,8 +34,7 @@ function topPrediction(event: KompariEvent) {
   const counts: Record<string, number> = {};
 
   event.predictions.forEach((prediction) => {
-    if (prediction.source === "user" || prediction.myAiId) return;
-    if (!prediction.main) return;
+    if (!isOfficialPrediction(prediction)) return;
     counts[prediction.main] = (counts[prediction.main] || 0) + 1;
   });
 
@@ -48,9 +48,7 @@ function topPrediction(event: KompariEvent) {
 function EventCard({ event }: { event: KompariEvent }) {
   const resultWinner = getResultWinner(event);
   const status = getStatus(event);
-  const officialPreds = event.predictions.filter(
-    (p) => p.source !== "user" && !p.myAiId
-  );
+  const officialPreds = event.predictions.filter(isOfficialPrediction);
   const top = topPrediction(event);
   const chip = getConsensusChip(event.predictions);
 
