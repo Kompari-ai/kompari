@@ -2403,3 +2403,32 @@ P4-2では、この1経路のFirestore保存オブジェクトを`KompariPredict
   - My AI保存経路の再設計(現在アクティブなprediction保存経路ではない)
 - 検証: `git diff --check`成功、`npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。変更ファイルは`app/admin/edit/[id]/page.tsx`のみ
 - mainへのpush後、HEADとorigin/mainの一致を確認済み。本番でpredictionを新規生成してFirestore保存まで確認する動作確認は別途実施する
+
+## `getPredictionSource`の重複定義を解消(P4-3完了)
+
+`getPredictionSource`が`lib/stats.ts`と`app/ranking/page.tsx`の2ファイルに重複定義されていた。P4-1Bでは両方の分類ロジックを個別に確認しながら変更する必要があり、将来どちらか一方だけが変更されるドリフトリスクが残っていた。
+
+P4-3では、read-only調査で次を確認した。
+
+- `getPredictionSource`の定義は`lib/stats.ts`と`app/ranking/page.tsx`の2箇所のみ。想定外の3つ目の定義は存在しない
+- 2つの関数本体は同一。判定の順序・条件・戻り値は次で一致していた:`source === "user"` → `"user"`、`myAiId`あり → `"user"`、`isOfficialAiName(ai)` → `"official"`、それ以外 → `"user"`
+- `lib/stats.ts`から`app/**`への依存はなく、rankingから`lib/stats.ts`へimportしても循環依存やserver/client境界の問題は発生しない
+
+事前確認に基づき、既存挙動を維持したまま`getPredictionSource`の重複定義を`lib/stats.ts`の単一定義へ統合した。
+
+- commit: `e4ecb4d` `refactor: centralize prediction source classification`(full: `e4ecb4d005436c724f5410c9f28bf6101aabc163`)
+- 変更ファイル: `lib/stats.ts`、`app/ranking/page.tsx`
+- `lib/stats.ts`: 既存の`getPredictionSource`へ`export`を付与した。引数型・戻り値型・条件・評価順序・戻り値・fallback挙動・`isOfficialAiName`による公式AI判定は変更していない
+- `app/ranking/page.tsx`: ローカルの`getPredictionSource`定義を削除し、`@/lib/stats`からimportする構造へ変更した。ローカル関数内でのみ使用していた`isOfficialAiName`のimportは、未使用になるため削除した。`getPredictionSource`の呼び出し箇所、`getPredictionKey`、`buildRankings`、`sourceFilter`処理、`isCountableForSource`、UI・文言・レイアウトは変更していない
+- 効果: prediction source分類の実装を`lib/stats.ts`の1箇所へ集約し、rankingも同じ関数を参照する構造にした。重複定義を解消し、将来の分類ロジックのドリフトリスクを低減した
+- 挙動: 統合前の2実装は同一であり、条件・評価順序・戻り値を変更していないため、prediction sourceの分類結果は変更していない
+- P4-3で完了した範囲: 既存挙動を維持したまま、`getPredictionSource`の重複定義を`lib/stats.ts`の単一定義へ統合した
+- 未完了/別スコープ(今回は対応していない):
+  - APIレスポンスのランタイムschema validation
+  - unknown/user分類の整理
+  - user/allフィルタ経路の厳密な意味確定
+  - `isCountableForSource`末尾の`return false`整理(P4-1B記録済み)
+  - 既存Firestoreドキュメントのmigration(完全自動化前の既存データは対象外とする確定方針)
+  - My AI保存経路の再設計
+- 検証: `git diff --check`成功、`npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。変更ファイルは`lib/stats.ts`、`app/ranking/page.tsx`のみ
+- mainへのpush後、HEADとorigin/mainの一致を確認済み。本番表示の目視確認は別途実施する
