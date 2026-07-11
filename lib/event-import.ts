@@ -70,7 +70,6 @@ export function convertRawEventSource(raw: RawEventSource): ConvertResult {
     result: undefined,
     createdAt: SERVER_TIMESTAMP_PLACEHOLDER,
     updatedAt: SERVER_TIMESTAMP_PLACEHOLDER,
-    predictionCount: 0,
     source: "manual-fixture",
     sourceId: raw.sourceId,
     sourceUrl: raw.sourceUrl,

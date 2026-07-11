@@ -117,7 +117,6 @@ export type KompariEventDoc = {
   };
   createdAt?: unknown;
   updatedAt?: unknown;
-  predictionCount?: number;
 
   // 以下は出所系フィールド(additive追加)。source と creationSource は別軸で、混同しない。
   //

@@ -163,3 +163,16 @@ predictionSource === "official-ai"
 この契約を満たさない完全自動化前の旧 prediction が表示・表示側集計から外れることは許容した。
 
 一方で、カード、件数、コンセンサス、podium、split meter、候補支持率、consensus chip が同じ正式予測集合を使用するよう統一し、予測件数が変動してもイベント詳細ページが安全に描画される構造を維持した。
+
+---
+
+## P3完了: predictionCount デッドフィールド廃止(2026-07-11)
+
+`predictionCount` は、動作ロジックからの読み取りがゼロのデッドフィールドだった(`outcome` と同型)。read-only 調査で、書き込み3箇所・診断ログ用の読み取り1箇所・型定義2箇所のみが検索結果として確認され、表示・集計・判定のいずれからも参照されていないことが確定した。
+
+- 書き込みを削除: `app/admin/page.tsx`(イベント作成)、`scripts/import-events/import.ts`(importer の Firestore create)、`lib/event-import.ts`(EventDraft 構築)
+- 型定義を削除: `lib/events.ts` の `KompariEventDoc.predictionCount`
+- 診断ログ用の読み取りを削除: `scripts/delete-legacy-events/delete.ts`(`data.predictionCount` の取得・`EventSummary.predictionCountField`・console.log 出力)。削除対象/残す対象の判定(`isSourceUnset`)・安全上限チェック・fixture 混入チェックには `predictionCount` を使用していなかったため、削除ロジック自体は無変更
+- 全AI再生成(`generateAllPredictions`)には `predictionCount` の書き込みは元々無く、対象外
+- 既存 Firestore document に残る `predictionCount` フィールドの物理削除・バックフィル・migration は行っていない(読まれないため実害なし)
+- 予測数は引き続き `predictions` 配列の `.length` または `collectionGroup` の実データから算出する(ホーム・一覧・詳細・ranking・results・AI詳細のいずれも無変更)

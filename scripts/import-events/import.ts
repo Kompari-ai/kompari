@@ -107,7 +107,6 @@ async function writeToFirestore(result: ConvertResult): Promise<void> {
       result: null,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-      predictionCount: 0,
       source: event.source,
       sourceId: event.sourceId,
       sourceUrl: event.sourceUrl,

@@ -59,7 +59,6 @@ export default function AdminPage() {
           : null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        predictionCount: 0,
       });
 
       await batch.commit();

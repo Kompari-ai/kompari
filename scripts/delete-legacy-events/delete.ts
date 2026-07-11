@@ -52,7 +52,6 @@ type EventSummary = {
   source: unknown;
   sourceId: unknown;
   creationSource: unknown;
-  predictionCountField: unknown;
   actualPredictionDocsCount: number;
 };
 
@@ -91,7 +90,6 @@ async function main() {
       source: data.source,
       sourceId: data.sourceId,
       creationSource: data.creationSource,
-      predictionCountField: data.predictionCount,
       actualPredictionDocsCount: predictionsSnapshot.size,
     };
 
@@ -107,9 +105,7 @@ async function main() {
     console.log(
       `  id=${e.id} title=${e.title} category=${e.category} source=${JSON.stringify(
         e.source
-      )} predictionCount(field)=${e.predictionCountField} predictions(実件数)=${
-        e.actualPredictionDocsCount
-      }`
+      )} predictions(実件数)=${e.actualPredictionDocsCount}`
     );
   });
 
