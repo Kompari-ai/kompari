@@ -62,7 +62,7 @@ function computeHitRate(hits: number, finished: number): number | null {
   return Math.round((hits / finished) * 1000) / 10;
 }
 
-function getPredictionSource(prediction: KompariPrediction): "official" | "user" {
+export function getPredictionSource(prediction: KompariPrediction): "official" | "user" {
   if (prediction.source === "user") return "user";
   if (prediction.myAiId) return "user";
   if (isOfficialAiName(prediction.ai)) return "official";

@@ -22,10 +22,10 @@ import {
   type KompariPrediction,
   type KompariPredictionDoc,
 } from "@/lib/events";
-import { isOfficialAiName } from "@/lib/ai/official-ai";
 import {
   aggregateByBrand,
   aggregateByModel,
+  getPredictionSource,
   isCountableForSource,
   type BrandStats,
   type ModelStats,
@@ -69,13 +69,6 @@ type CardRow = {
   hitRatePercent: number | null; // 0-100 または null(データなし)
   history: HistoryItem[];
 };
-
-function getPredictionSource(prediction: KompariPrediction): "official" | "user" {
-  if (prediction.source === "user") return "user";
-  if (prediction.myAiId) return "user";
-  if (isOfficialAiName(prediction.ai)) return "official";
-  return "user";
-}
 
 function getPredictionKey(prediction: KompariPrediction) {
   const source = getPredictionSource(prediction);
