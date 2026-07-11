@@ -1,5 +1,5 @@
 import type { KompariEvent, KompariPrediction } from "@/lib/events";
-import { getResultWinner, isCountablePrediction } from "@/lib/events";
+import { getResultWinner, isCountablePrediction, isOfficialPrediction } from "@/lib/events";
 import type { EventCategory } from "@/lib/categories";
 import { isOfficialAiName } from "@/lib/ai/official-ai";
 
@@ -69,6 +69,17 @@ function getPredictionSource(prediction: KompariPrediction): "official" | "user"
   return "user";
 }
 
+// 集計可否のSoT。公式は official-ai 厳格判定、My AI は従来の集計可能性判定。
+// 分類は呼び出し側で一度だけ行い、その結果を source として受け取る(二重分類を避ける)。
+export function isCountableForSource(
+  prediction: KompariPrediction,
+  source: "official" | "user"
+): boolean {
+  if (source === "official") return isOfficialPrediction(prediction);
+  if (source === "user") return isCountablePrediction(prediction);
+  return false; // 将来 getPredictionSource が分類を増やした場合の安全側デフォルト
+}
+
 // ブランドキーは ai フィールド(displayName)に統一。
 // aiProvider はモック時に欠落するため使わない。
 function getBrandKey(prediction: KompariPrediction): string {
@@ -131,8 +142,9 @@ export function aggregateByBrand(events: KompariEvent[], options?: StatsOptions)
     const isFinished = !!winner;
 
     for (const prediction of event.predictions) {
-      if (sourceFilter !== "all" && getPredictionSource(prediction) !== sourceFilter) continue;
-      if (!isCountablePrediction(prediction)) continue;
+      const source = getPredictionSource(prediction);
+      if (sourceFilter !== "all" && source !== sourceFilter) continue;
+      if (!isCountableForSource(prediction, source)) continue;
 
       const pick = prediction.main.trim();
       const key = getBrandKey(prediction);
@@ -191,8 +203,9 @@ export function aggregateByModel(events: KompariEvent[], options?: StatsOptions)
     const isFinished = !!winner;
 
     for (const prediction of event.predictions) {
-      if (sourceFilter !== "all" && getPredictionSource(prediction) !== sourceFilter) continue;
-      if (!isCountablePrediction(prediction)) continue;
+      const source = getPredictionSource(prediction);
+      if (sourceFilter !== "all" && source !== sourceFilter) continue;
+      if (!isCountableForSource(prediction, source)) continue;
 
       const pick = prediction.main.trim();
       const key = getModelKey(prediction);

@@ -15,7 +15,6 @@ import {
 import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   getResultWinner,
-  isCountablePrediction,
   isPublicEvent,
   normalizeEventDocToEvent,
   type KompariEvent,
@@ -27,6 +26,7 @@ import { isOfficialAiName } from "@/lib/ai/official-ai";
 import {
   aggregateByBrand,
   aggregateByModel,
+  isCountableForSource,
   type BrandStats,
   type ModelStats,
   type HistoryItem,
@@ -90,10 +90,10 @@ function buildRankings(events: KompariEvent[]) {
     if (!winner) return;
 
     event.predictions.forEach((prediction) => {
-      if (!isCountablePrediction(prediction)) return;
+      const source = getPredictionSource(prediction);
+      if (!isCountableForSource(prediction, source)) return;
 
       const pick = prediction.main.trim();
-      const source = getPredictionSource(prediction);
       const key = getPredictionKey(prediction);
 
       const current =
