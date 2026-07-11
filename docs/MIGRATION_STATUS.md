@@ -2377,3 +2377,29 @@ P4-1Bでは、現在使用中の公式AI集計経路を`isOfficialPrediction`へ
   - 保存境界での`KompariPredictionDoc`型強制(P4-2対象)
 - 検証: `git diff --check`成功、`npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。変更ファイルは指定2ファイルのみ
 - mainへのpushおよびHEAD / origin/mainの一致を確認済み。本番表示の目視確認は別途実施する
+
+## prediction保存境界でKompariPredictionDocを型強制(P4-2完了)
+
+P4-2のread-only棚卸しにより、現在アクティブなprediction内容の書き込み経路は、管理画面の`generatePrediction`から`events/{eventId}/predictions/{predictionId}`へ`batch.set`で全置換保存する1経路だけであることを確認した。変更前は、Firestoreへ渡す保存オブジェクト`predDoc`を`Record<string, unknown>`という広い型で宣言しており、書き込み用として定義済みの`KompariPredictionDoc`が保存側で使用されず、`predictionSource`や`isMock`などの必須フィールドに対するコンパイル時の型保証が保存境界前に失われていた。
+
+P4-2では、この1経路のFirestore保存オブジェクトを`KompariPredictionDoc`としてコンパイル時に検査する構造へ変更した。
+
+- commit: `b7cb917` `refactor: enforce prediction document type at save boundary`(full: `b7cb917eed54867e1ba35005e9f69326409c195b`)
+- 変更ファイル: `app/admin/edit/[id]/page.tsx`(1ファイルのみ)
+- APIレスポンス用ローカル型`GeneratePredictionResponse = KompariPrediction & Pick<KompariPredictionDoc, "predictionSource" | "isMock">`を新設した。`response.json()`のキャスト先を、読み取り用の`KompariPrediction`(両フィールドoptional)からこの型へ変更し、クライアントコード上では`predictionSource`/`isMock`をrequiredとして扱うようにした。既存の読み取り型`KompariPrediction`および`lib/events.ts`の型定義は変更していない
+- Firestore保存オブジェクト`predDoc`を`const predDoc: KompariPredictionDoc = {...}`という型注釈で直接構築するよう変更した。保存内容には、APIレスポンスのprediction内容に加え、現行処理どおり`ai`・`source: "official"`・`eventId`・`predictionId`・`predictedAt`・`updatedAt`を含めている。`predictionSource`と`isMock`にはAPIレスポンスの値をそのまま使用し、既定値補完は追加していない。公式AI保存経路であるため`myAiId`は追加していない
+- `removeUndefinedFields`がジェネリック関数として`KompariPredictionDoc`を直接受け取れることを確認したため、`as KompariPredictionDoc`や`as unknown as Record<string, unknown>`のような型変換は追加せず、型保証済みの`predDoc`をそのまま渡している
+- 保存型保証に不要だった中間オブジェクト`nextPrediction`を削除し、prediction IDの生成には`ai`と`myAiId`だけを`makePredictionId`へ直接渡す構造にした。生成されるprediction IDの契約や保存先は変更していない
+- 効果: Firestore保存用オブジェクトを構築するコードが、`KompariPredictionDoc`の必須フィールドを満たすことをコンパイル時に検査できるようになった。保存オブジェクトを最初から`Record<string, unknown>`として扱うことで必須フィールドの型保証が失われる問題を解消した
+- 範囲の明確化: これはコンパイル時の型検査であり、ランタイムのschema validationではない。`response.json()`は`GeneratePredictionResponse`への型アサーションであり、実行時JSONの内容そのものを検証するものではない。APIが実行時に`predictionSource`や`isMock`を返さなかった場合、この変更だけでは検知できない
+- P4-2で完了した範囲: 現在アクティブな公式AI prediction内容保存の1経路について、Firestore保存オブジェクトを`KompariPredictionDoc`としてコンパイル時に検査する構造へ変更した
+- 未完了/別スコープ(今回は対応していない):
+  - APIレスポンスのランタイムschema validation(zod等による実行時の不正JSON・必須フィールド欠損検出)
+  - 既存Firestoreドキュメントのmigration(完全自動化前の既存データは対象外とする確定方針)
+  - 読み取り側のlegacy互換変更
+  - unknown/user分類整理
+  - `lib/stats.ts`と`app/ranking/page.tsx`にある`getPredictionSource`の二重定義解消
+  - `isCountableForSource`末尾の`return false`整理(P4-1B記録済み)
+  - My AI保存経路の再設計(現在アクティブなprediction保存経路ではない)
+- 検証: `git diff --check`成功、`npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。変更ファイルは`app/admin/edit/[id]/page.tsx`のみ
+- mainへのpush後、HEADとorigin/mainの一致を確認済み。本番でpredictionを新規生成してFirestore保存まで確認する動作確認は別途実施する
