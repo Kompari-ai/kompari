@@ -117,6 +117,13 @@ type GeneratePredictionOptions = {
   allowMock?: boolean;
 };
 
+// /api/generate-prediction のレスポンス専用ローカル型。
+// route.ts の全成功パス(実API成功・リトライ成功・mockフォールバック)は
+// predictionSource/isMock を必ず明示するため、読み取り型 KompariPrediction(両方optional)
+// より厳格にrequired化し、保存境界での型チェックに使う(コンパイル時のみ。ランタイム検証は追加しない)。
+type GeneratePredictionResponse = KompariPrediction &
+  Pick<KompariPredictionDoc, "predictionSource" | "isMock">;
+
 type PredictionIdInput = { ai?: string | null; myAiId?: string | null };
 
 function makePredictionId(pred: PredictionIdInput): string {
@@ -388,20 +395,16 @@ export default function AdminEditPage({
         throw new Error("AI予測の生成に失敗しました");
       }
 
-      const data = (await response.json()) as KompariPrediction;
+      const data = (await response.json()) as GeneratePredictionResponse;
 
-      const nextPrediction: KompariPrediction = {
-        ...data,
-        ai: aiName,
-        source: "official",
-      };
-
-      const predictionId = makePredictionId(nextPrediction);
+      const predictionId = makePredictionId({ ai: aiName, myAiId: data.myAiId });
       const batch = writeBatch(db);
 
       // events predictions subcollection: full replace (set, not update) to clean stale fields
-      const predDoc: Record<string, unknown> = {
-        ...nextPrediction,
+      const predDoc: KompariPredictionDoc = {
+        ...data,
+        ai: aiName,
+        source: "official",
         eventId: id,
         predictionId,
         predictedAt: serverTimestamp(),
