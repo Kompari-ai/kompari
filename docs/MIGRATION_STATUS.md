@@ -2458,3 +2458,75 @@ P4-4は、この新規保存経路上の実行時の穴を塞いだ。
   - `KompariPrediction`/`KompariPredictionDoc`/`PredictionOutput`/`PredictionFactor`のschema化
   - 本番UIまたはローカルUIでの公式AI生成→Firestore保存の目視スモークテスト
 - mainへのpush後、HEADとorigin/mainの一致を確認済み。本番でのpredictionを新規生成してFirestore保存まで確認する動作確認・目視スモークテストは別途実施する
+
+## notifications / admin-resultsの公式判定SoT統一(P5-0完了)
+
+P4-1A/P4-1Bでホーム・イベント一覧・イベント詳細・results・ranking・AI詳細が`isOfficialPrediction`へ統一された一方、notificationsとadmin-resultsの2画面は`source !== "user" && !myAiId`という独自のインライン判定(または無フィルタ)のまま取り残されていた。P5-0では、この2画面を既存の公式判定SoTへ統一した。
+
+- commit: `24452b8` `fix: unify official prediction filtering in notifications and admin results`(full: `24452b8f5a869b617491556aed5e53473798f406`)
+- 変更ファイル: `app/notifications/page.tsx`、`app/admin/results/page.tsx`
+- `app/notifications/page.tsx`: `isOfficialPrediction`を`@/lib/events`からimportし、独自条件`p.source !== "user" && !p.myAiId`を使っていた4用途(コンセンサス母集団、結果待ちイベント判定、結果確定イベント判定、公式予測件数)すべてを`event.predictions.filter(isOfficialPrediction)`へ統一した
+- `app/admin/results/page.tsx`: `getConsensus`(旧: 全predictionを無フィルタで走査)を`event.predictions.filter(isOfficialPrediction)`のみ走査するよう変更した。「AI予測」件数表示も、旧`event.predictions.length`から同じ公式prediction集合(`officialPredictions`)の件数へ変更した
+- winner候補生成(`getCandidates`)、winner入力`<select>`、`saveResult`、`settledAt`、Firestore書き込みには変更を加えていない
+- これにより、home・events・event detail・results・ranking・AI詳細・notifications・admin-resultsの8画面で公式prediction判定が`isOfficialPrediction`へ統一された
+- P5-0で完了した範囲: notificationsとadmin-resultsに残っていた独自・無フィルタ判定を、既存の公式判定SoTへ統一した。ranking集計・保存データ・Firestoreデータ自体への変更ではない
+- 検証: `npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。変更ファイルは指定2ファイルのみ
+- mainへのpush後、HEADとorigin/mainの一致を確認済み。本番表示の目視確認は別途実施する
+
+## prediction source分類契約の三値化(P5-A完了)
+
+`getPredictionSource`は従来、`official | user`の二値分類で、officialにもuserにも本来該当しないpredictionを最終catch-allで無条件に`user`へ吸収していた。そのため、非公式AI名・ai欠損・source未知値・全識別子欠損・myAiIdの型崩れ(数値/空文字/空白のみ)・official/user marker矛盾といった異常・分類不能docが、観測されないままuser分類へ混入していた。
+
+P5-Aでは、分類契約を`official | user | unknown`の三値へ変更し、`unknown`をofficial/user双方の集計から除外した。
+
+- commit: `3c41126` `refactor: classify prediction source as official user or unknown`(full: `3c411261e07b865e9179b5a0dc0e4712295bf3e5`)
+- 変更ファイル: `lib/stats.ts`、`app/ranking/page.tsx`
+- 分類契約: `getPredictionSource`の戻り値型を`"official" | "user"`から`PredictionSourceKind`(`"official" | "user" | "unknown"`)へ変更した。official判定は`isOfficialAiName(prediction.ai)`ベースから`isOfficialPrediction(prediction)`ベースへ変更し、P5-0と合わせて公式prediction判定のSoTが`isOfficialPrediction`へ統一された
+- 有効なuser marker: `prediction.source === "user"`、または`typeof prediction.myAiId === "string" && prediction.myAiId.trim().length > 0`のいずれかとした。`myAiId`が空文字・空白のみ・数値・null・objectの場合は無効なmarkerとして扱う。`myAiId`の値自体は書き換えず、`trim()`は非空判定のみに使用する
+- 矛盾検出: `predictionSource === "official-ai"`(狭いofficial-likeシグナル)と有効なuser markerが共存する場合は、userへ寄せず必ず`unknown`とした。`isOfficialPrediction`はuser markerが存在するとfalseを返す設計のため、`isOfficialPrediction(prediction) && hasValidUserMarker(prediction)`では矛盾を検出できない(常にfalseになる)。そのため矛盾検出では`predictionSource`を直接判定している
+- `isCountableForSource`の引数型を`PredictionSourceKind`へ拡張した。`unknown`は常に`false`を返し、official集計・user集計・all集計のいずれからも除外される。`all`の定義は`official + user`のままで、`unknown`は含めない
+- ranking側の型追随: `RankingRow.source`・`CardRow.source`・`AiAvatar`のsource引数を、`lib/stats.ts`の`PredictionSourceKind`から`Exclude<PredictionSourceKind, "unknown">`として導出した`KnownPredictionSource`型へ変更した。`buildRankings`では`getPredictionSource`の戻り値に対して`if (source === "unknown") return;`を追加し、以降の処理でsourceが`official | user`へ型narrowingされる構造にした。公開UIにunknown用のfilterボタン・カード・色・アイコン・ラベルは追加していない。`SourceFilter`型は`"all" | "official" | "user"`のまま維持した
+- 挙動への影響: 主な効果は分類ラベルの正確化、異常docのuser fallback吸収防止、将来のP5-Dによる異常doc可視化の基盤整備であり、的中率・件数などranking集計結果そのものは不変である。理由は、現行でも`isCountableForSource`が`isOfficialPrediction`/`isCountablePrediction`による二段階の再検証を既に行っていたため
+- legacyの扱い: `predictionSource`欠損の旧公式predictionは、分類上`official → unknown`へ変わる。ただし現行でも`isOfficialPrediction`によって公式集計から除外済みだったため、的中率・件数には影響しない。これは完全自動化前データを正式な実績・学習資産として後方互換で守らないという確定済みのlegacy非保護方針と整合する
+- 検証: `npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。既存のテストランナーは未導入のため一時検証スクリプトを使用し、19ケース(正常official、正常source:user、正常myAiId、全識別子欠損、非公式AI名、ai欠損、predictionSource欠損、predictionSource未知値、myAiId空文字、myAiId空白のみ、myAiId数値、official-ai+source:user、official-ai+有効myAiId、mock+公式AI名、mock+user marker、unknownのcountable=false、正常official/userのcountable=true)を全件PASSで確認した。一時検証スクリプトはcommit前に削除済み
+- P5-Aで完了した範囲: 集計前のsource分類契約を正確化し、分類不能・矛盾docをunknownとして分離した。rankingの的中率修正やランキング集計の誤り修正ではない
+- 未完了/別スコープ(今回は対応していない):
+  - ranking `sourceFilter`状態遷移バグの修正(P5-A2で対応)
+  - unknown/異常docの管理画面またはログでの可視化(P5-D、未着手)
+  - Firestore実データ調査
+  - Firestore読み取り側のruntime validation(Zod read schema)
+  - `main`非文字列への防御
+  - 既存Firestoreドキュメントのmigration
+  - My AI保存経路の再導入
+- mainへのpush後、HEADとorigin/mainの一致を確認済み。本番表示の目視確認は別途実施する
+
+## ranking sourceFilter状態遷移バグ修正(P5-A2完了)
+
+ranking画面で「ブランド別」または「モデル別」タブへ切り替えると、`sourceFilter`が`"all"`になっていた。その後「AI別」タブへ戻っても`"official"`へは戻らず、`"all"`が残留した状態でAI別表示が行われていた。`aggregateByBrand`/`aggregateByModel`は`sourceFilter`を参照せず`source: "official"`固定で集計するため、ブランド別・モデル別表示中はこの残留値が表示に影響しなかったが、AI別へ戻ると残留した`"all"`が有効になり、user行が混入し得る状態だった。P5-Aにより`unknown`はbuildRankings段階で既に除外されるため、この状態遷移バグ自体があってもunknownの混入は起きないが、official/user行の混在という表示上の不整合自体は残っていた。
+
+P5-A2では、この状態遷移の1点のみを修正した。
+
+- commit: `963c6b4` `fix: reset ranking source filter when returning to AI view`(full: `963c6b4015e59f6d77a39ac2590db9675fb60506`)
+- 変更ファイル: `app/ranking/page.tsx`(1ファイル・2行追加のみ)
+- aggregationMode切り替えハンドラへ、AI別へ入る場合の`else`分岐を追加した
+
+  ```ts
+  if (item.value !== "ai") {
+    setSourceFilter("all");
+    setCategoryFilter("all");
+  } else {
+    setSourceFilter("official");
+  }
+  ```
+
+- 修正後の状態遷移: 初期表示は`sourceFilter="official"`。AI別→ブランド別/モデル別で`sourceFilter="all"`(既存どおり)。ブランド別/モデル別→AI別で`sourceFilter="official"`へ復元される(修正箇所)
+- 維持したもの: ブランド別/モデル別の`setSourceFilter("all")`、`categoryFilter`の既存挙動、`SourceFilter`型、`sourceFilter`機構自体、`aggregateByBrand`/`aggregateByModel`、`buildRankings`、P5-Aの分類契約はすべて変更していない。`sourceFilter`機構は将来のuserフィルタUI導入の可能性を考慮して残した
+- P5-A2で完了した範囲: AI別へ戻った際に`sourceFilter`が`"official"`へ確実に復元されるようにし、AI別表示へのuser行混入を防いだ。分類契約・集計ロジック・UI文言・レイアウト・Firestore読み取りへの変更ではない
+- 検証: `npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。初期AI別・AI別→ブランド別・ブランド別→AI別・AI別→モデル別・モデル別→AI別の5状態遷移について、AI別へ戻った際に`sourceFilter="official"`となることをコード上で確認した
+- mainへのpush後、HEADとorigin/mainの一致を確認済み。本番でのタブ切り替え目視確認は別途実施する
+
+## 残タスク: P5-D(unknown / 異常prediction docの可視化)
+
+P5-Aで導入した`unknown`分類は、現時点では集計から除外するのみで、observability(誰が・どれだけ・どのようなunknown docを持っているか)は未整備。P5-Dとして、公開UIへunknownを出すのではなく、管理画面またはログで異常docを把握できる観測経路を検討する。
+
+P5-Dは今回実装しない。着手時期は未定。
