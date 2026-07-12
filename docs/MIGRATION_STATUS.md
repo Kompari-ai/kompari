@@ -2432,3 +2432,29 @@ P4-3では、read-only調査で次を確認した。
   - My AI保存経路の再設計
 - 検証: `git diff --check`成功、`npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。変更ファイルは`lib/stats.ts`、`app/ranking/page.tsx`のみ
 - mainへのpush後、HEADとorigin/mainの一致を確認済み。本番表示の目視確認は別途実施する
+
+## Zodによるgenerate-prediction API成功レスポンスのruntime schema validation導入(P4-4完了)
+
+P4-2は`KompariPredictionDoc`による保存境界のコンパイル時型強制だった。しかし変更前のclientでは`response.json()`の結果を型アサーションしているだけで、runtime validationは存在しなかった。そのため、HTTP 200かつJSON構文が正しい場合、次のような不正成功レスポンスがFirestore保存まで進み、成功alertまで表示され得た:`predictionSource`欠損、`isMock`欠損、`main`欠損、`main`の型崩れ、`main`空文字、`predictionSource`と`isMock`の矛盾、候補集合に存在しない`main`/`second`/`third`。
+
+P4-4は、この新規保存経路上の実行時の穴を塞いだ。
+
+- commit: `a38006c` `feat: validate generate-prediction API response at runtime with zod`(full: `a38006c38f6c86fc133a6f404b8331c7c023c1cd`)
+- 変更ファイル: `lib/ai/generate-prediction-schema.ts`(新規)、`app/api/generate-prediction/route.ts`、`app/admin/edit/[id]/page.tsx`、`package.json`、`package-lock.json`
+- 依存追加: `zod`(`^4.4.3`、Zod v4系)を`dependencies`へ直接依存として追加した。推移依存として存在していたZodを流用したのではなく、アプリコードから直接利用するための正式な直接依存化である
+- 共有schema: 新規モジュール`lib/ai/generate-prediction-schema.ts`に`GeneratePredictionResponseSchema`・`GeneratePredictionResponse`(`z.infer<typeof GeneratePredictionResponseSchema>`で導出)・`assertPredictionCandidates`を定義した。今回schemaを型のSoTにした対象は`GeneratePredictionResponse`の1契約のみで、`KompariPrediction`/`KompariPredictionDoc`/`PredictionOutput`/`PredictionFactor`は手書き型のまま維持した
+- 構造検証: 必須フィールドは`ai`(非空文字列)・`main`(非空文字列)・`predictionSource`(`"official-ai"|"mock"`)・`isMock`(boolean)。その他の既存付随フィールドは現物契約に合わせてoptionalとし、`.passthrough()`で未知の付随フィールドを保持する。空白確認の検証は行うが、値自体をtrimして書き換える暗黙正規化は行わない
+- 相関検証: `superRefine`で`predictionSource==="mock" ⇔ isMock===true`、`predictionSource==="official-ai" ⇔ isMock===false`を双方向に保証し、`official-ai`+`isMock:true`、`mock`+`isMock:false`のような矛盾レスポンスをblockする
+- 候補集合検証: 構造schemaとは別関数`assertPredictionCandidates(data, candidates)`として実装。`main`は候補集合に完全一致で含まれることを必須とし、`second`/`third`は存在する場合のみ完全一致で照合する。trim・表記正規化・部分一致・近似一致・fallback・先頭候補による補完は行わない。空の候補集合は必ず失敗する
+- A境界(`app/api/generate-prediction/route.ts`): `createValidatedPredictionResponse`を新設し、実API初回成功・リトライ成功・mock fallbackの成功3経路を`NextResponse.json`直前の共通validationへ通した。A境界で行うのは構造検証と相関検証のみで、候補集合検証はroute側には追加していない(LLM出力段階では既存の`parsePredictionOutput`が候補照合を行っている)。検証失敗時はHTTP 500を返し、payload本体・Zod issuesはresponseへ含めず、`console.error`へ開発者向け詳細のみ記録する。400 title欠落・502 strict失敗・502リトライ後失敗・既存top-level 500の各エラー経路は今回の変更対象外
+- B境界(`app/admin/edit/[id]/page.tsx`): P4-2で追加したローカルの`GeneratePredictionResponse`型定義を削除し、共有schemaモジュールから利用する構造へ変更した。`response.json()`→`unknown`として受領→`GeneratePredictionResponseSchema.safeParse`→`assertPredictionCandidates`→`parsed.data`→`KompariPredictionDoc`構築→`removeUndefinedFields`→`batch.set`→`batch.commit`という処理順とし、未検証のJSON objectや型アサーションした値ではなく検証通過後の`parsed.data`からFirestore保存用documentを構築する
+- 失敗時の不変条件: A/B境界とも、不正な成功レスポンスを正常成功として扱わない、`batch.set`/`batch.commit`へ到達しない、Firestore無変更、成功alertを出さない、欠損を`??`やdefault値で補完しない、`console.error`へ開発者向け詳細を残す、ユーザーには汎用文言のみ表示し内部schema詳細やZod issuesは見せない、をすべて満たす
+- 検証: `npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。既存のテストランナーは未導入のため一時検証スクリプトを使用し、commit前に削除した。正常・不正を含む21ケース(正常official-ai/mock response、predictionSource欠損、isMock欠損、main欠損、main非文字列、main空文字、main空白のみ、official-ai+isMock:true、mock+isMock:false、main/second/third候補外、候補集合が空、追加フィールドのpassthrough保持)とHTTP 200+non-JSON bodyを実測し、すべて期待どおりpassまたはblockした。制御フロー上、schema検証・候補検証は`batch.set`/`batch.commit`より前にあり、失敗時には保存へ到達しないことを確認した。Firestoreへの実書き込みを伴うテストは未実施
+- P4-4で完了した範囲: 公式AI生成の成功レスポンスについて、API routeの出口と管理画面clientの保存入口で、同一Zod schemaによるruntime validationを導入し、新規の不正Firestore保存をblockした
+- 未完了/別スコープ(今回は対応していない):
+  - Firestore読み取り側のruntime validation(アプリのprediction読み取り9経路、運用スクリプトを含めると10経路)
+  - 不正Firestore docをskipするか・エラー表示するか・集計からのみ除外するか等の表示・運用方針
+  - 既存Firestoreドキュメントのmigration
+  - `KompariPrediction`/`KompariPredictionDoc`/`PredictionOutput`/`PredictionFactor`のschema化
+  - 本番UIまたはローカルUIでの公式AI生成→Firestore保存の目視スモークテスト
+- mainへのpush後、HEADとorigin/mainの一致を確認済み。本番でのpredictionを新規生成してFirestore保存まで確認する動作確認・目視スモークテストは別途実施する
