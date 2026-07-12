@@ -4,6 +4,7 @@ import type { PredictionInput } from "@/lib/ai/types";
 import { callOpenAiCompatible } from "@/lib/ai/providers/openai-compatible";
 import { callGemini } from "@/lib/ai/providers/gemini";
 import { callAnthropic } from "@/lib/ai/providers/anthropic";
+import { GeneratePredictionResponseSchema } from "@/lib/ai/generate-prediction-schema";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -256,6 +257,28 @@ function buildEvidence({
   return `カテゴリ「${category}」の特性、候補「${candidateText}」の比較、AIの予測スタイル「${aiStyle}」をもとにした予測です。`;
 }
 
+// 成功レスポンス(実API初回成功・リトライ成功・mock fallbackの3系統)を
+// 返す直前に必ず通す共通の検証境界。schema検証に失敗した場合は、
+// 不正な成功レスポンスをそのまま返さず500として扱う(HTTP statusやmock/strict
+// 挙動には触れない。既存の400/502/500の分岐はこの関数の対象外)。
+function createValidatedPredictionResponse(payload: unknown) {
+  const parsed = GeneratePredictionResponseSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    console.error(
+      "Invalid generate-prediction success response",
+      parsed.error
+    );
+
+    return NextResponse.json(
+      { error: "Prediction response validation failed." },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json(parsed.data);
+}
+
 function getMissingCoreFields(result: {
   main?: string | null;
   reason?: string | null;
@@ -389,10 +412,20 @@ export async function POST(req: Request) {
           );
         }
 
-        return NextResponse.json({ ai: aiName, ...retryResult, isMock: false, predictionSource: "official-ai" });
+        return createValidatedPredictionResponse({
+          ai: aiName,
+          ...retryResult,
+          isMock: false,
+          predictionSource: "official-ai",
+        });
       }
 
-      return NextResponse.json({ ai: aiName, ...realResult, isMock: false, predictionSource: "official-ai" });
+      return createValidatedPredictionResponse({
+        ai: aiName,
+        ...realResult,
+        isMock: false,
+        predictionSource: "official-ai",
+      });
     }
 
     if (!allowMock) {
@@ -421,7 +454,7 @@ export async function POST(req: Request) {
 
     const confidence = getConfidence(aiName, aiStyle, aiDescription);
 
-    return NextResponse.json({
+    return createValidatedPredictionResponse({
       ai: aiName,
       isMock: true,
       predictionSource: "mock",

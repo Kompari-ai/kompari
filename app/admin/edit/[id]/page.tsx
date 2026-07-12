@@ -23,6 +23,10 @@ import {
   type KompariPredictionDoc,
 } from "@/lib/events";
 import { OFFICIAL_AI_NAMES } from "@/lib/ai/official-ai";
+import {
+  GeneratePredictionResponseSchema,
+  assertPredictionCandidates,
+} from "@/lib/ai/generate-prediction-schema";
 
 function parseCandidates(text: string) {
   return text
@@ -116,13 +120,6 @@ type GeneratePredictionOptions = {
   // 未指定は既存挙動(mock フォールバック可)を維持する。
   allowMock?: boolean;
 };
-
-// /api/generate-prediction のレスポンス専用ローカル型。
-// route.ts の全成功パス(実API成功・リトライ成功・mockフォールバック)は
-// predictionSource/isMock を必ず明示するため、読み取り型 KompariPrediction(両方optional)
-// より厳格にrequired化し、保存境界での型チェックに使う(コンパイル時のみ。ランタイム検証は追加しない)。
-type GeneratePredictionResponse = KompariPrediction &
-  Pick<KompariPredictionDoc, "predictionSource" | "isMock">;
 
 type PredictionIdInput = { ai?: string | null; myAiId?: string | null };
 
@@ -395,9 +392,29 @@ export default function AdminEditPage({
         throw new Error("AI予測の生成に失敗しました");
       }
 
-      const data = (await response.json()) as GeneratePredictionResponse;
+      const json: unknown = await response.json();
 
-      const predictionId = makePredictionId({ ai: aiName, myAiId: data.myAiId });
+      const parsed = GeneratePredictionResponseSchema.safeParse(json);
+
+      if (!parsed.success) {
+        console.error("Invalid generate-prediction response", parsed.error);
+        throw new Error(
+          "AI予測の応答形式が不正だったため、保存しませんでした。"
+        );
+      }
+
+      try {
+        assertPredictionCandidates(parsed.data, candidates);
+      } catch (candidateError) {
+        console.error("Prediction candidate mismatch", candidateError);
+        throw new Error(
+          "AI予測の内容が候補リストと一致しなかったため、保存しませんでした。"
+        );
+      }
+
+      const data = parsed.data;
+
+      const predictionId = makePredictionId({ ai: aiName });
       const batch = writeBatch(db);
 
       // events predictions subcollection: full replace (set, not update) to clean stale fields
