@@ -410,6 +410,8 @@ export default function RankingPage() {
                   if (item.value !== "ai") {
                     setSourceFilter("all");
                     setCategoryFilter("all");
+                  } else {
+                    setSourceFilter("official");
                   }
                 }}
                 className={`flex-1 py-2 text-[13px] font-bold rounded-[10px] transition-colors ${
