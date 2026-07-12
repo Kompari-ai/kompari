@@ -15,6 +15,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
   getResultWinner,
+  isOfficialPrediction,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -22,9 +23,7 @@ import {
 } from "@/lib/events";
 
 function NotificationCard({ event }: { event: KompariEvent }) {
-  const officialPreds = event.predictions.filter(
-    (p) => p.source !== "user" && !p.myAiId
-  );
+  const officialPreds = event.predictions.filter(isOfficialPrediction);
 
   const counts: Record<string, number> = {};
   officialPreds.forEach((p) => {
@@ -131,9 +130,7 @@ export default function NotificationsPage() {
   const pendingResultEvents = useMemo(() => {
     if (!events) return [];
     return events.filter((event) => {
-      const officialPreds = event.predictions.filter(
-        (p) => p.source !== "user" && !p.myAiId
-      );
+      const officialPreds = event.predictions.filter(isOfficialPrediction);
       return officialPreds.length > 0 && !getResultWinner(event);
     });
   }, [events]);
@@ -141,9 +138,7 @@ export default function NotificationsPage() {
   const finishedEvents = useMemo(() => {
     if (!events) return [];
     return events.filter((event) => {
-      const officialPreds = event.predictions.filter(
-        (p) => p.source !== "user" && !p.myAiId
-      );
+      const officialPreds = event.predictions.filter(isOfficialPrediction);
       return officialPreds.length > 0 && !!getResultWinner(event);
     });
   }, [events]);
@@ -152,9 +147,7 @@ export default function NotificationsPage() {
     if (!events) return 0;
     return events.reduce(
       (sum, event) =>
-        sum +
-        event.predictions.filter((p) => p.source !== "user" && !p.myAiId)
-          .length,
+        sum + event.predictions.filter(isOfficialPrediction).length,
       0
     );
   }, [events]);

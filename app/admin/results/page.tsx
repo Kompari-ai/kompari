@@ -21,6 +21,7 @@ import {
 } from "@/lib/categories";
 import {
   getResultWinner,
+  isOfficialPrediction,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -56,7 +57,7 @@ function getCandidates(event: KompariEvent) {
 function getConsensus(event: KompariEvent) {
   const counts: Record<string, number> = {};
 
-  event.predictions.forEach((prediction) => {
+  event.predictions.filter(isOfficialPrediction).forEach((prediction) => {
     if (!prediction.main) return;
     counts[prediction.main] = (counts[prediction.main] || 0) + 1;
   });
@@ -386,6 +387,8 @@ export default function AdminResultsPage() {
           {filteredEvents.map((event) => {
             const candidates = getCandidates(event);
             const resultWinner = getResultWinner(event);
+            const officialPredictions =
+              event.predictions.filter(isOfficialPrediction);
             const consensus = getConsensus(event);
             const saving = savingId === event.id;
 
@@ -436,7 +439,7 @@ export default function AdminResultsPage() {
                       AI予測
                     </div>
                     <div className="mt-1 text-lg font-extrabold">
-                      {event.predictions.length}
+                      {officialPredictions.length}
                     </div>
                   </div>
 
