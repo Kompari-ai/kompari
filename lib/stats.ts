@@ -1,7 +1,6 @@
 import type { KompariEvent, KompariPrediction } from "@/lib/events";
 import { getResultWinner, isCountablePrediction, isOfficialPrediction } from "@/lib/events";
 import type { EventCategory } from "@/lib/categories";
-import { isOfficialAiName } from "@/lib/ai/official-ai";
 
 export type StatsSourceFilter = "official" | "user" | "all";
 
@@ -62,22 +61,54 @@ function computeHitRate(hits: number, finished: number): number | null {
   return Math.round((hits / finished) * 1000) / 10;
 }
 
-export function getPredictionSource(prediction: KompariPrediction): "official" | "user" {
-  if (prediction.source === "user") return "user";
-  if (prediction.myAiId) return "user";
-  if (isOfficialAiName(prediction.ai)) return "official";
-  return "user";
+export type PredictionSourceKind = "official" | "user" | "unknown";
+
+// 有効なuser markerかどうかを判定する。値そのものは書き換えない(trimは非空判定のみに使う)。
+// myAiId が number/object/null 等の型崩れの場合は無効なmarkerとして扱う。
+function hasValidUserMarker(prediction: KompariPrediction): boolean {
+  return (
+    prediction.source === "user" ||
+    (typeof prediction.myAiId === "string" && prediction.myAiId.trim().length > 0)
+  );
+}
+
+// P5-A: official | user | unknown の三値分類契約。
+// officialにもuserにも本来該当しない・矛盾したpredictionを user へ無条件吸収せず、
+// unknown として明示的に分離する(将来のP5-Dによる異常doc可視化の基盤)。
+export function getPredictionSource(prediction: KompariPrediction): PredictionSourceKind {
+  // 矛盾検出: predictionSource:"official-ai"(official-like marker)と
+  // 有効なuser markerが共存する場合は必ず unknown とする。
+  // isOfficialPrediction() は user marker があると false を返す設計のため、
+  // isOfficialPrediction() && hasValidUserMarker() では矛盾を検出できない
+  // (常にfalseになる)。そのため矛盾検出には predictionSource 単独の
+  // 狭いofficial-likeシグナルを使う。
+  const hasOfficialMarker = prediction.predictionSource === "official-ai";
+
+  if (hasOfficialMarker && hasValidUserMarker(prediction)) {
+    return "unknown";
+  }
+
+  if (isOfficialPrediction(prediction)) {
+    return "official";
+  }
+
+  if (hasValidUserMarker(prediction)) {
+    return "user";
+  }
+
+  return "unknown";
 }
 
 // 集計可否のSoT。公式は official-ai 厳格判定、My AI は従来の集計可能性判定。
 // 分類は呼び出し側で一度だけ行い、その結果を source として受け取る(二重分類を避ける)。
+// unknown は常に false(official/user/all いずれの集計にも入れない)。
 export function isCountableForSource(
   prediction: KompariPrediction,
-  source: "official" | "user"
+  source: PredictionSourceKind
 ): boolean {
   if (source === "official") return isOfficialPrediction(prediction);
   if (source === "user") return isCountablePrediction(prediction);
-  return false; // 将来 getPredictionSource が分類を増やした場合の安全側デフォルト
+  return false; // unknown、および将来 getPredictionSource が分類を増やした場合の安全側デフォルト
 }
 
 // ブランドキーは ai フィールド(displayName)に統一。

@@ -30,11 +30,16 @@ import {
   type BrandStats,
   type ModelStats,
   type HistoryItem,
+  type PredictionSourceKind,
 } from "@/lib/stats";
 
 type AggregationMode = "ai" | "brand" | "model";
 type CategoryFilter = "all" | EventCategory;
 type SourceFilter = "all" | "official" | "user";
+
+// ranking の行・カードは unknown を一切保持しない(buildRankings で除外済み)。
+// 公開UIに unknown を出さない方針のため、型も official|user のみに絞る。
+type KnownPredictionSource = Exclude<PredictionSourceKind, "unknown">;
 
 type RankingHistory = {
   eventId: string;
@@ -48,7 +53,7 @@ type RankingHistory = {
 type RankingRow = {
   key: string;
   ai: string;
-  source: "official" | "user";
+  source: KnownPredictionSource;
   myAiId?: string;
   total: number;
   hits: number;
@@ -60,7 +65,7 @@ type RankingRow = {
 type CardRow = {
   key: string;
   displayName: string;
-  source: "official" | "user";
+  source: KnownPredictionSource;
   myAiId?: string;
   total: number;     // 全予測数(未確定含む)
   finished: number;  // 結果確定済み予測数
@@ -84,6 +89,8 @@ function buildRankings(events: KompariEvent[]) {
 
     event.predictions.forEach((prediction) => {
       const source = getPredictionSource(prediction);
+      // unknown は集計対象外(RankingRow.source は official|user のみを保持する)。
+      if (source === "unknown") return;
       if (!isCountableForSource(prediction, source)) return;
 
       const pick = prediction.main.trim();
@@ -189,7 +196,7 @@ function rankCircleClass(index: number): string {
   return "bg-gray-100 text-gray-400";
 }
 
-function AiAvatar({ aiName, source }: { aiName: string; source: "official" | "user" }) {
+function AiAvatar({ aiName, source }: { aiName: string; source: KnownPredictionSource }) {
   if (source === "user") {
     return (
       <div className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-sm font-extrabold text-white bg-purple-500">
