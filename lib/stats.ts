@@ -1,4 +1,4 @@
-import type { KompariEvent, KompariPrediction } from "@/lib/events";
+import type { KompariEvent, KompariPrediction, ParsedPredictionDocV1 } from "@/lib/events";
 import { getResultWinner, isCountablePrediction, isOfficialPrediction } from "@/lib/events";
 import type { EventCategory } from "@/lib/categories";
 
@@ -65,7 +65,7 @@ export type PredictionSourceKind = "official" | "user" | "unknown";
 
 // 有効なuser markerかどうかを判定する。値そのものは書き換えない(trimは非空判定のみに使う)。
 // myAiId が number/object/null 等の型崩れの場合は無効なmarkerとして扱う。
-function hasValidUserMarker(prediction: KompariPrediction): boolean {
+function hasValidUserMarker(prediction: ParsedPredictionDocV1): boolean {
   return (
     prediction.source === "user" ||
     (typeof prediction.myAiId === "string" && prediction.myAiId.trim().length > 0)
@@ -75,7 +75,7 @@ function hasValidUserMarker(prediction: KompariPrediction): boolean {
 // P5-A: official | user | unknown の三値分類契約。
 // officialにもuserにも本来該当しない・矛盾したpredictionを user へ無条件吸収せず、
 // unknown として明示的に分離する(将来のP5-Dによる異常doc可視化の基盤)。
-export function getPredictionSource(prediction: KompariPrediction): PredictionSourceKind {
+export function getPredictionSource(prediction: ParsedPredictionDocV1): PredictionSourceKind {
   // 矛盾検出: predictionSource:"official-ai"(official-like marker)と
   // 有効なuser markerが共存する場合は必ず unknown とする。
   // isOfficialPrediction() は user marker があると false を返す設計のため、
@@ -99,52 +99,11 @@ export function getPredictionSource(prediction: KompariPrediction): PredictionSo
   return "unknown";
 }
 
-export type PredictionDiagnosticClassification =
-  | "runtime-shape-anomaly"
-  | "mock"
-  | "unknown-source"
-  | "official"
-  | "user";
-
-// P5-D v1: 実在するprediction docを管理診断用に分類する。
-//
-// mainの非文字列・空文字を最初に弾くことで、後段の
-// getPredictionSource / isOfficialPrediction内の
-// .trim()クラッシュを回避する局所安全ガードとする。
-//
-// source判定はgetPredictionSource(既存SoT)へ委譲し、
-// official/user/unknownの判定ロジックをここで重複実装しない。
-//
-// 引数はpredictionのみ。resultWinnerや候補一覧は渡さない
-// (hit/miss判定・候補driftはfindDriftedPredictionsの責務であり、本関数の対象外)。
-export function classifyPredictionForDiagnostics(
-  prediction: KompariPrediction
-): PredictionDiagnosticClassification {
-  // TypeScript型は KompariPredictionDoc.main を string 必須としているが、
-  // それはコンパイル時の主張にすぎず、Firestoreのruntime値がstringである
-  // 保証にはならない。この typeof チェックは型上冗長に見えても削除しない。
-  if (typeof prediction.main !== "string" || prediction.main.trim() === "") {
-    return "runtime-shape-anomaly";
-  }
-
-  if (prediction.isMock === true || prediction.predictionSource === "mock") {
-    return "mock";
-  }
-
-  const source = getPredictionSource(prediction);
-
-  if (source === "unknown") {
-    return "unknown-source";
-  }
-
-  return source;
-}
-
 // 集計可否のSoT。公式は official-ai 厳格判定、My AI は従来の集計可能性判定。
 // 分類は呼び出し側で一度だけ行い、その結果を source として受け取る(二重分類を避ける)。
 // unknown は常に false(official/user/all いずれの集計にも入れない)。
 export function isCountableForSource(
-  prediction: KompariPrediction,
+  prediction: ParsedPredictionDocV1,
   source: PredictionSourceKind
 ): boolean {
   if (source === "official") return isOfficialPrediction(prediction);

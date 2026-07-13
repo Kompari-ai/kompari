@@ -239,11 +239,38 @@ export function isNonBlankString(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
 
+// P6-3: shape validation parser(lib/prediction-read.ts)の成功値、
+// source classifier(lib/prediction-diagnostics.ts)の入力、および
+// 既存source判定SoT(下記isOfficialPrediction/isCountablePrediction、
+// lib/stats.tsのhasValidUserMarker/getPredictionSource/isCountableForSource)の
+// 一般化パラメータとして共有する単一SoT型。
+//
+// main/ai: runtime検証済みの非空string。
+// isMock/predictionSource: 未設定を許容。存在する場合のみ型検証済み。
+// source/myAiId: P6-3 v1では未検証。classifier側が型ガードして読むため
+//   unknownのまま透過する(parserはこれらの値の正しさを一切主張しない)。
+//
+// KompariPredictionは本型が要求する全フィールドを満たすため、
+// 既存呼び出し元は無変更でこの型を受け取る関数へそのまま渡せる。
+export type ParsedPredictionDocV1 = {
+  main: string;
+  ai: string;
+  isMock?: boolean;
+  predictionSource?:
+    | "official-ai"
+    | "my-ai"
+    | "custom-ai"
+    | "mock"
+    | "manual";
+  source?: unknown;
+  myAiId?: unknown;
+};
+
 // ランキング集計の分母に入れてよい予測かを判定する。
 // 明示的に mock と分かるものだけ除外する。
 // isMock/predictionSource が missing(undefined)の旧公式AIデータは除外しない。
 // source filter（My AI除外）は別軸なので、この helper には含めない。
-export function isCountablePrediction(prediction: KompariPrediction): boolean {
+export function isCountablePrediction(prediction: ParsedPredictionDocV1): boolean {
   if (prediction.isMock === true) return false;
   if (prediction.predictionSource === "mock") return false;
 
@@ -271,7 +298,7 @@ export function isCountablePrediction(prediction: KompariPrediction): boolean {
 //
 // isCountablePrediction(ranking/results等の集計SoT)は今回変更しない。
 // この関数は表示専用であり、集計側の判定とは独立している。
-export function isOfficialPrediction(prediction: KompariPrediction): boolean {
+export function isOfficialPrediction(prediction: ParsedPredictionDocV1): boolean {
   if (prediction.predictionSource !== "official-ai") return false;
   if (prediction.isMock === true) return false;
   if (prediction.source === "user" || prediction.myAiId) return false;

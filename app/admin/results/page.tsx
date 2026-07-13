@@ -27,7 +27,7 @@ import {
   type KompariEventDoc,
   type KompariPredictionDoc,
 } from "@/lib/events";
-import { classifyPredictionForDiagnostics } from "@/lib/stats";
+import { classifyPredictionForDiagnostics } from "@/lib/prediction-diagnostics";
 
 type StatusFilter = "all" | "open" | "finished";
 
