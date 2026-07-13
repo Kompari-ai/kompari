@@ -2525,8 +2525,27 @@ P5-A2では、この状態遷移の1点のみを修正した。
 - 検証: `npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。初期AI別・AI別→ブランド別・ブランド別→AI別・AI別→モデル別・モデル別→AI別の5状態遷移について、AI別へ戻った際に`sourceFilter="official"`となることをコード上で確認した
 - mainへのpush後、HEADとorigin/mainの一致を確認済み。本番でのタブ切り替え目視確認は別途実施する
 
-## 残タスク: P5-D(unknown / 異常prediction docの可視化)
+## 異常prediction docの可視化(P5-D v1完了)
 
-P5-Aで導入した`unknown`分類は、現時点では集計から除外するのみで、observability(誰が・どれだけ・どのようなunknown docを持っているか)は未整備。P5-Dとして、公開UIへunknownを出すのではなく、管理画面またはログで異常docを把握できる観測経路を検討する。
+P5-Aで導入した`unknown`分類は、集計から除外するのみでobservability(誰が・どれだけ・どのようなunknown docを持っているか)が未整備だった。P5-D v1では、公開UIへunknownを出すのではなく、`/admin/results`に診断専用のセクションを追加し、Firestoreに実在するprediction docのうちruntime shape異常・source分類不能なdocをevent単位で可視化した。
 
-P5-Dは今回実装しない。着手時期は未定。
+- commit: `d88b1c2` `feat: add prediction diagnostics to admin results`(full: `d88b1c21e5980a361e14b0af8c69cac678c9091e`)
+- 変更ファイル: `lib/stats.ts`、`app/admin/results/page.tsx`(2 files changed, 199 insertions(+), 0 deletions(-)。既存処理を変更しない純追加実装)
+- `lib/stats.ts`: `PredictionDiagnosticClassification`型(`"runtime-shape-anomaly" | "mock" | "unknown-source" | "official" | "user"`)と`classifyPredictionForDiagnostics`を追加した。判定順は、1. `typeof main !== "string"` または `main.trim() === ""` → `runtime-shape-anomaly`、2. `isMock === true` または `predictionSource === "mock"` → `mock`、3. `getPredictionSource(prediction) === "unknown"` → `unknown-source`、4. それ以外は`official`/`user`。mainのruntimeガードを必ず先頭に置き、後段の`getPredictionSource`/`isOfficialPrediction`内の`.trim()`呼び出しによる例外を回避する局所安全網とした。`KompariPredictionDoc.main`は型上`string`必須だが、Firestoreのruntime値は型アサーションされているだけで実値を保証しないため、`typeof`チェックは型上冗長に見えても削除しない前提とした
+- source判定(official/user/unknown)は既存SoTの`getPredictionSource`へ完全委譲し、admin側で条件を再実装していない。`resultWinner`・候補一覧は分類関数へ渡していない(hit/miss判定・候補driftは対象外。候補外mainの検出は既存`findDriftedPredictions`の責務のまま維持した)
+- `app/admin/results/page.tsx`: 独立した診断セクションを追加した。全体件数(要確認prediction = `runtime-shape-anomaly` + `unknown-source`の合計、データ形式異常件数、source分類不能件数、mock(集計対象外)参考件数)を表示する。内部enum名はUIへ出さず、「データ形式異常」「source分類不能」「mock(集計対象外)」という日本語ラベルのみを使用した
+- event単位一覧は`events`配列ではなく`predsMap`の全key(eventId)起点で集約し、親event docが欠損している孤児predictionも取り逃さない。要確認件数が0のevent、mockのみのeventは一覧に表示しない。通常eventはevent名・件数・`/admin/edit/[eventId]`への確認リンクを表示し、孤児predictionは「イベント情報なし」・eventId・件数のみを表示しリンクは出さない(対応するevent docが存在せず編集対象がないため)
+- 追加Firestore readはゼロ。既存の`predsMap`/`eventDocs`(admin/resultsが元々購読していたonSnapshot結果)のみを利用し、`collectionGroup`/`collection`/`getDocs`/`onSnapshot`を新規追加していない
+- 診断用`useMemo`は`predsMap`と`eventDocs`の両方がロードされるまで早期returnする(`if (!predsMap || !eventDocs) return null;`)ため、predictions側subscriptionがevents側より先に完了しても`eventDocs.map(...)`をnullに対して実行せず、events読み込み前に全predictionを一時的に孤児表示することもない
+- P5-D v1で完了した範囲: Firestoreに実在するprediction docの管理診断(runtime shape異常・source分類不能の可視化)。未完了/別スコープ(今回は対応していない): prediction docが存在しない未生成/API失敗によるdoc欠損の検出(Failure / Omission Handling、別フェーズ)、`status`/`errorReason`フィールド追加、Firestore読み取り側の全面runtime validation(P5-B)、Firestore migration・データ修復、admin認証・firestore.rules変更、公開UI変更
+- 検証: `npx tsc --noEmit -p tsconfig.json`成功、`npm run build`成功。テストランナーは未導入のため一時検証スクリプトを使用し、main非文字列・main空文字・main欠損・main空白のみ・isMock・predictionSource:"mock"・official/user marker矛盾・非公式AIかつmarkerなし・正常official・正常userを含む12ケースを全件PASSで確認した。一時検証スクリプトはcommit前に削除済み
+- mainへのpush後、HEADとorigin/mainの一致を確認済み。本番でのUI目視確認は別途実施する
+
+## 残タスク: P5-D v1後の関連タスク
+
+P5-Dのうち、既に実在するprediction docの診断はP5-D v1として完了した(前節参照)。以下は今回のP5-D v1に含まれず、着手時期は未定。
+
+- Failure / Omission Handling: 期待公式AI集合(`OFFICIAL_AI_NAMES`等)と実在prediction doc集合の差分による、doc欠損(未生成・API失敗で保存されなかったAI)の観測
+- P5-B: Firestore読み取り側のruntime validation(Zod read schemaなど)と、異常docの除外理由の伝播。不正docを静かにskipしてP5-Dから観測不能にしない設計が必要
+- 別タスク候補: `admin/edit`内のローカル`isOfficialPrediction`命名衝突の整理
+- 別タスク候補: `collectionGroup("predictions")`の重複購読の共通化
