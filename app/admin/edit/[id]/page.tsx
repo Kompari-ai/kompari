@@ -16,6 +16,7 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { eventCategories } from "@/lib/categories";
 import {
+  isNonBlankString,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -97,8 +98,8 @@ function findDriftedPredictions(
     if (prediction.isMock === true) continue;
     if (prediction.predictionSource === "mock") continue;
 
-    const main = (prediction.main || "").trim();
-    if (!main) continue;
+    if (!isNonBlankString(prediction.main)) continue;
+    const main = prediction.main.trim();
 
     if (newCandidatesSet.has(main)) continue;
 

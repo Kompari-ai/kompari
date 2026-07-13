@@ -230,6 +230,15 @@ export function isPublicEvent(event: Pick<KompariEvent, "source">): boolean {
   return event.source !== "manual-fixture";
 }
 
+// prediction.main のruntime安全ガード。
+// KompariPrediction.main は型上 string 必須だが、Firestoreのruntime値は
+// 型アサーションされているだけで実値がstringである保証にはならない。
+// truthyな非文字列(数値・true・object・array等)は `x || ""` では弾けず、
+// 後続の .trim() が例外を投げるため、typeof を先頭でチェックする。
+export function isNonBlankString(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
 // ランキング集計の分母に入れてよい予測かを判定する。
 // 明示的に mock と分かるものだけ除外する。
 // isMock/predictionSource が missing(undefined)の旧公式AIデータは除外しない。
@@ -238,8 +247,7 @@ export function isCountablePrediction(prediction: KompariPrediction): boolean {
   if (prediction.isMock === true) return false;
   if (prediction.predictionSource === "mock") return false;
 
-  const pick = (prediction.main || "").trim();
-  if (!pick) return false;
+  if (!isNonBlankString(prediction.main)) return false;
 
   // 将来: status が "failed" | "skipped" | "omitted" の場合も除外する。
   // 現時点では status 未導入のため未実装。
@@ -269,8 +277,7 @@ export function isOfficialPrediction(prediction: KompariPrediction): boolean {
   if (prediction.source === "user" || prediction.myAiId) return false;
   if (!isOfficialAiName(prediction.ai)) return false;
 
-  const pick = (prediction.main || "").trim();
-  if (!pick) return false;
+  if (!isNonBlankString(prediction.main)) return false;
 
   return true;
 }
@@ -288,7 +295,9 @@ export function getPredictionStatus(
   prediction: KompariPrediction,
   resultWinner: string
 ): PredictionStatus {
-  const pick = (prediction.main || "").trim();
+  // 非文字列mainは既存の空main相当として扱う(安全な分岐へ落とすのみ。
+  // 新しい戻り値は追加しない)。
+  const pick = isNonBlankString(prediction.main) ? prediction.main.trim() : "";
   const winner = (resultWinner || "").trim();
 
   if (!winner) return "pending";
