@@ -68,7 +68,7 @@ function defaultCandidateText(category: string) {
   return "1番人気馬\n先行馬\n差し馬";
 }
 
-function isOfficialPrediction(prediction: KompariPrediction, aiName: string) {
+function isPredictionForOfficialAiSlot(prediction: KompariPrediction, aiName: string) {
   return (
     prediction.ai === aiName &&
     prediction.source !== "user" &&
@@ -750,7 +750,7 @@ export default function AdminEditPage({
           <div className="grid grid-cols-2 gap-3">
             {OFFICIAL_AI_NAMES.map((aiName) => {
               const exists = currentPredictions.some((prediction) =>
-                isOfficialPrediction(prediction, aiName)
+                isPredictionForOfficialAiSlot(prediction, aiName)
               );
 
               return (
