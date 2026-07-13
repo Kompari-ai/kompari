@@ -27,7 +27,12 @@ import {
   type KompariEventDoc,
   type KompariPredictionDoc,
 } from "@/lib/events";
-import { classifyPredictionForDiagnostics } from "@/lib/prediction-diagnostics";
+import { classifyPredictionSourceForDiagnostics } from "@/lib/prediction-diagnostics";
+import {
+  parsePredictionBatch,
+  type ParsePredictionBatchResult,
+  type RawPredictionDocInput,
+} from "@/lib/prediction-read";
 
 type StatusFilter = "all" | "open" | "finished";
 
@@ -71,6 +76,9 @@ function getConsensus(event: KompariEvent) {
 export default function AdminResultsPage() {
   const [eventDocs, setEventDocs] = useState<KompariEventDoc[] | null>(null);
   const [predsMap, setPredsMap] = useState<Map<string, KompariPredictionDoc[]> | null>(null);
+  // P6-4a: 診断用のshape parse結果(event別)。predsMapとは別に、同一snapshot
+  // callback内で構築する。rawは保持せず、parsePredictionBatchの戻り値のみ保存する。
+  const [parsedPredsMap, setParsedPredsMap] = useState<Map<string, ParsePredictionBatchResult> | null>(null);
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -81,11 +89,11 @@ export default function AdminResultsPage() {
     return eventDocs.map((d) => normalizeEventDocToEvent(d, predsMap.get(d.id) ?? []));
   }, [eventDocs, predsMap]);
 
-  // P5-D v1: 既に取得済みの predsMap のみを診断分類する(追加Firestore readなし)。
-  // 孤児prediction(event docが存在しないeventId)も拾えるよう、events配列ではなく
-  // predsMap の全key起点で集約する。
+  // P6-4a: parsedPredsMap(event別のparsePredictionBatch結果)を診断分類する
+  // (追加Firestore readなし)。孤児prediction(event docが存在しないeventId)も
+  // 拾えるよう、events配列ではなくparsedPredsMapの全key起点で集約する。
   const diagnostics = useMemo(() => {
-    if (!predsMap || !eventDocs) return null;
+    if (!parsedPredsMap || !eventDocs) return null;
 
     const eventDocsById = new Map(eventDocs.map((d) => [d.id, d]));
 
@@ -103,19 +111,17 @@ export default function AdminResultsPage() {
       hasEventDoc: boolean;
     }[] = [];
 
-    for (const [eventId, preds] of predsMap.entries()) {
-      let evAnomaly = 0;
+    for (const [eventId, batchResult] of parsedPredsMap.entries()) {
+      const evAnomaly = batchResult.shapeDiagnostics.length;
       let evUnknownSource = 0;
       let evMock = 0;
 
-      for (const prediction of preds) {
-        const classification = classifyPredictionForDiagnostics(prediction);
+      for (const prediction of batchResult.validPredictions) {
+        const sourceDiagnostic = classifyPredictionSourceForDiagnostics(prediction);
 
-        if (classification === "runtime-shape-anomaly") {
-          evAnomaly += 1;
-        } else if (classification === "unknown-source") {
+        if (sourceDiagnostic.kind === "unknown-source") {
           evUnknownSource += 1;
-        } else if (classification === "mock") {
+        } else if (sourceDiagnostic.kind === "mock") {
           evMock += 1;
         }
       }
@@ -147,7 +153,7 @@ export default function AdminResultsPage() {
       mockCount,
       perEvent,
     };
-  }, [predsMap, eventDocs]);
+  }, [parsedPredsMap, eventDocs]);
 
   useEffect(() => {
     const eventsUnsub = onSnapshot(
@@ -162,14 +168,33 @@ export default function AdminResultsPage() {
       collectionGroup(db, "predictions"),
       (snap) => {
         const map = new Map<string, KompariPredictionDoc[]>();
+        // P6-4a: 診断用のevent別raw入力。rawはこのコールバック内のローカル変数
+        // としてのみ存在し、Reactのstateへは一切保存しない。
+        const rawInputsByEvent = new Map<string, RawPredictionDocInput[]>();
+
         for (const d of snap.docs) {
-          const pred = d.data() as KompariPredictionDoc;
+          const raw = d.data();
+          const pred = raw as KompariPredictionDoc;
           const eventId = pred.eventId || d.ref.parent.parent?.id;
           if (!eventId) continue;
+
           if (!map.has(eventId)) map.set(eventId, []);
           map.get(eventId)!.push(pred);
+
+          if (!rawInputsByEvent.has(eventId)) rawInputsByEvent.set(eventId, []);
+          rawInputsByEvent.get(eventId)!.push({
+            raw,
+            context: { eventId, predictionId: d.id },
+          });
         }
+
         setPredsMap(map);
+
+        const parsedMap = new Map<string, ParsePredictionBatchResult>();
+        for (const [eventId, inputs] of rawInputsByEvent.entries()) {
+          parsedMap.set(eventId, parsePredictionBatch(inputs));
+        }
+        setParsedPredsMap(parsedMap);
       }
     );
     return () => { eventsUnsub(); predsUnsub(); };
