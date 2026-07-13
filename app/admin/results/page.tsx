@@ -27,6 +27,7 @@ import {
   type KompariEventDoc,
   type KompariPredictionDoc,
 } from "@/lib/events";
+import { classifyPredictionForDiagnostics } from "@/lib/stats";
 
 type StatusFilter = "all" | "open" | "finished";
 
@@ -79,6 +80,74 @@ export default function AdminResultsPage() {
     if (!eventDocs || !predsMap) return null;
     return eventDocs.map((d) => normalizeEventDocToEvent(d, predsMap.get(d.id) ?? []));
   }, [eventDocs, predsMap]);
+
+  // P5-D v1: 既に取得済みの predsMap のみを診断分類する(追加Firestore readなし)。
+  // 孤児prediction(event docが存在しないeventId)も拾えるよう、events配列ではなく
+  // predsMap の全key起点で集約する。
+  const diagnostics = useMemo(() => {
+    if (!predsMap || !eventDocs) return null;
+
+    const eventDocsById = new Map(eventDocs.map((d) => [d.id, d]));
+
+    let anomalyCount = 0;
+    let unknownSourceCount = 0;
+    let mockCount = 0;
+
+    const perEvent: {
+      eventId: string;
+      title: string | null;
+      anomaly: number;
+      unknownSource: number;
+      mock: number;
+      needsReview: number;
+      hasEventDoc: boolean;
+    }[] = [];
+
+    for (const [eventId, preds] of predsMap.entries()) {
+      let evAnomaly = 0;
+      let evUnknownSource = 0;
+      let evMock = 0;
+
+      for (const prediction of preds) {
+        const classification = classifyPredictionForDiagnostics(prediction);
+
+        if (classification === "runtime-shape-anomaly") {
+          evAnomaly += 1;
+        } else if (classification === "unknown-source") {
+          evUnknownSource += 1;
+        } else if (classification === "mock") {
+          evMock += 1;
+        }
+      }
+
+      anomalyCount += evAnomaly;
+      unknownSourceCount += evUnknownSource;
+      mockCount += evMock;
+
+      const needsReview = evAnomaly + evUnknownSource;
+      if (needsReview === 0) continue;
+
+      const eventDoc = eventDocsById.get(eventId);
+
+      perEvent.push({
+        eventId,
+        title: eventDoc?.title ?? null,
+        anomaly: evAnomaly,
+        unknownSource: evUnknownSource,
+        mock: evMock,
+        needsReview,
+        hasEventDoc: !!eventDoc,
+      });
+    }
+
+    return {
+      needsReviewCount: anomalyCount + unknownSourceCount,
+      anomalyCount,
+      unknownSourceCount,
+      mockCount,
+      perEvent,
+    };
+  }, [predsMap, eventDocs]);
 
   useEffect(() => {
     const eventsUnsub = onSnapshot(
@@ -258,6 +327,95 @@ export default function AdminResultsPage() {
             </div>
           </div>
         </section>
+
+        {diagnostics && (
+          <section className="mb-5 rounded-[26px] bg-white p-4 shadow-sm">
+            <div className="mb-3 text-sm font-extrabold text-gray-700">
+              要確認prediction（診断）
+            </div>
+
+            <div className="mb-3 grid grid-cols-2 gap-3 text-center">
+              <div className="rounded-2xl bg-red-50 p-3">
+                <div className="text-[11px] font-bold text-red-600">
+                  要確認prediction
+                </div>
+                <div className="mt-1 text-2xl font-extrabold text-red-700">
+                  {diagnostics.needsReviewCount}件
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-gray-50 p-3">
+                <div className="text-[11px] font-bold text-gray-400">
+                  参考: mock（集計対象外）
+                </div>
+                <div className="mt-1 text-2xl font-extrabold text-gray-700">
+                  {diagnostics.mockCount}件
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-4 grid grid-cols-2 gap-3 text-center">
+              <div className="rounded-2xl bg-gray-50 p-3">
+                <div className="text-[11px] font-bold text-gray-400">
+                  データ形式異常
+                </div>
+                <div className="mt-1 text-lg font-extrabold text-gray-900">
+                  {diagnostics.anomalyCount}件
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-gray-50 p-3">
+                <div className="text-[11px] font-bold text-gray-400">
+                  source分類不能
+                </div>
+                <div className="mt-1 text-lg font-extrabold text-gray-900">
+                  {diagnostics.unknownSourceCount}件
+                </div>
+              </div>
+            </div>
+
+            {diagnostics.perEvent.length === 0 ? (
+              <p className="text-xs font-bold leading-5 text-gray-400">
+                要確認predictionはありません。
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {diagnostics.perEvent.map((row) => (
+                  <div
+                    key={row.eventId}
+                    className="rounded-2xl bg-gray-50 p-3"
+                  >
+                    <div className="mb-1 text-sm font-extrabold">
+                      {row.hasEventDoc ? row.title : "イベント情報なし"}
+                    </div>
+
+                    {!row.hasEventDoc && (
+                      <div className="mb-1 text-[11px] font-bold text-gray-400">
+                        eventId: {row.eventId}
+                      </div>
+                    )}
+
+                    <div className="text-xs font-bold text-gray-500">
+                      要確認 {row.needsReview}件 / データ形式異常 {row.anomaly}
+                      件 / source分類不能 {row.unknownSource}件 / mock{" "}
+                      {row.mock}件
+                    </div>
+
+                    {row.hasEventDoc && (
+                      <button
+                        type="button"
+                        onClick={() => goTo(`/admin/edit/${row.eventId}`)}
+                        className="mt-2 w-full rounded-2xl border border-gray-200 bg-white py-3 text-center text-xs font-extrabold text-gray-700"
+                      >
+                        確認する →
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="mb-5 rounded-[26px] bg-white p-4 shadow-sm">
           <div className="mb-3 text-sm font-extrabold text-gray-700">

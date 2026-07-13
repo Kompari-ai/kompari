@@ -99,6 +99,47 @@ export function getPredictionSource(prediction: KompariPrediction): PredictionSo
   return "unknown";
 }
 
+export type PredictionDiagnosticClassification =
+  | "runtime-shape-anomaly"
+  | "mock"
+  | "unknown-source"
+  | "official"
+  | "user";
+
+// P5-D v1: 実在するprediction docを管理診断用に分類する。
+//
+// mainの非文字列・空文字を最初に弾くことで、後段の
+// getPredictionSource / isOfficialPrediction内の
+// .trim()クラッシュを回避する局所安全ガードとする。
+//
+// source判定はgetPredictionSource(既存SoT)へ委譲し、
+// official/user/unknownの判定ロジックをここで重複実装しない。
+//
+// 引数はpredictionのみ。resultWinnerや候補一覧は渡さない
+// (hit/miss判定・候補driftはfindDriftedPredictionsの責務であり、本関数の対象外)。
+export function classifyPredictionForDiagnostics(
+  prediction: KompariPrediction
+): PredictionDiagnosticClassification {
+  // TypeScript型は KompariPredictionDoc.main を string 必須としているが、
+  // それはコンパイル時の主張にすぎず、Firestoreのruntime値がstringである
+  // 保証にはならない。この typeof チェックは型上冗長に見えても削除しない。
+  if (typeof prediction.main !== "string" || prediction.main.trim() === "") {
+    return "runtime-shape-anomaly";
+  }
+
+  if (prediction.isMock === true || prediction.predictionSource === "mock") {
+    return "mock";
+  }
+
+  const source = getPredictionSource(prediction);
+
+  if (source === "unknown") {
+    return "unknown-source";
+  }
+
+  return source;
+}
+
 // 集計可否のSoT。公式は official-ai 厳格判定、My AI は従来の集計可能性判定。
 // 分類は呼び出し側で一度だけ行い、その結果を source として受け取る(二重分類を避ける)。
 // unknown は常に false(official/user/all いずれの集計にも入れない)。
