@@ -23,6 +23,10 @@ import {
   type KompariEventDoc,
   type KompariPredictionDoc,
 } from "@/lib/events";
+import {
+  parsePredictionBatch,
+  type RawPredictionDocInput,
+} from "@/lib/prediction-read";
 
 type StatusFilter = "all" | "open" | "finished";
 
@@ -213,14 +217,51 @@ export default function RacesPage() {
     const predsUnsub = onSnapshot(
       collectionGroup(db, "predictions"),
       (snap) => {
-        const map = new Map<string, KompariPredictionDoc[]>();
+        // P6-5c: 同一snapshotから、shape validation用のraw入力(event別)と、
+        // 既存の結果入力UI用の完全doc(event別、Firestoreの実doc IDを docId として付帯)を
+        // 同時に構築する。rawはこのコールバック内のローカル変数としてのみ存在し、
+        // Reactのstateへは一切保存しない。eventId解決式は既存どおりfallbackを追加しない
+        // (pred.eventIdのみ)。
+        const rawInputsByEvent = new Map<string, RawPredictionDocInput[]>();
+        const fullDocsByEvent = new Map<
+          string,
+          Array<{ docId: string; prediction: KompariPredictionDoc }>
+        >();
+
         for (const d of snap.docs) {
-          const pred = d.data() as KompariPredictionDoc;
+          const raw = d.data();
+          const pred = raw as KompariPredictionDoc;
           const eid = pred.eventId;
           if (!eid) continue;
-          if (!map.has(eid)) map.set(eid, []);
-          map.get(eid)!.push(pred);
+
+          if (!rawInputsByEvent.has(eid)) rawInputsByEvent.set(eid, []);
+          rawInputsByEvent.get(eid)!.push({
+            raw,
+            context: { eventId: eid, predictionId: d.id },
+          });
+
+          if (!fullDocsByEvent.has(eid)) fullDocsByEvent.set(eid, []);
+          fullDocsByEvent.get(eid)!.push({ docId: d.id, prediction: pred });
         }
+
+        // event単位でparsePredictionBatchを呼び、shapeDiagnosticsのpredictionId
+        // (= 呼び出し時にcontext.predictionIdへ渡したd.id)を、そのeventのinvalid ID集合とする。
+        // 保存済みprediction.predictionIdフィールドには一切依存しない。
+        const map = new Map<string, KompariPredictionDoc[]>();
+        for (const [eid, inputs] of rawInputsByEvent.entries()) {
+          const batchResult = parsePredictionBatch(inputs);
+
+          const invalidIds = new Set(
+            batchResult.shapeDiagnostics.map((diagnostic) => diagnostic.predictionId)
+          );
+
+          const validDocs = (fullDocsByEvent.get(eid) ?? [])
+            .filter((entry) => !invalidIds.has(entry.docId))
+            .map((entry) => entry.prediction);
+
+          map.set(eid, validDocs);
+        }
+
         setPredsMap(map);
       }
     );
