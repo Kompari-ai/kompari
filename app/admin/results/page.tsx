@@ -36,6 +36,21 @@ import {
 
 type StatusFilter = "all" | "open" | "finished";
 
+// P6-4b: event行のreason簡易内訳を安定表示するための固定順序。
+// Firestore snapshot/Mapの挿入順に依存させないため、field順(main→ai→isMock→predictionSource)
+// →同一field内はreason markerの昇順、という静的な順序をハードコードする。
+const REASON_DISPLAY_ORDER = [
+  "main-blank",
+  "main-missing",
+  "main-non-string",
+  "ai-blank",
+  "ai-missing",
+  "ai-non-string",
+  "isMock-non-boolean",
+  "mock-source-conflict",
+  "predictionSource-invalid",
+] as const;
+
 function goTo(path: string) {
   window.location.assign(path);
 }
@@ -100,6 +115,8 @@ export default function AdminResultsPage() {
     let anomalyCount = 0;
     let unknownSourceCount = 0;
     let mockCount = 0;
+    // P6-4b: shapeDiagnostics全体のfield別件数(全event横断)。
+    const fieldCounts = { main: 0, ai: 0, isMock: 0, predictionSource: 0 };
 
     const perEvent: {
       eventId: string;
@@ -109,12 +126,20 @@ export default function AdminResultsPage() {
       mock: number;
       needsReview: number;
       hasEventDoc: boolean;
+      // P6-4b: そのeventのshapeDiagnosticsだけから集計したreason別件数。
+      reasonCounts: Record<string, number>;
     }[] = [];
 
     for (const [eventId, batchResult] of parsedPredsMap.entries()) {
       const evAnomaly = batchResult.shapeDiagnostics.length;
       let evUnknownSource = 0;
       let evMock = 0;
+      const evReasonCounts: Record<string, number> = {};
+
+      for (const diagnostic of batchResult.shapeDiagnostics) {
+        fieldCounts[diagnostic.field] += 1;
+        evReasonCounts[diagnostic.reason] = (evReasonCounts[diagnostic.reason] || 0) + 1;
+      }
 
       for (const prediction of batchResult.validPredictions) {
         const sourceDiagnostic = classifyPredictionSourceForDiagnostics(prediction);
@@ -143,6 +168,7 @@ export default function AdminResultsPage() {
         mock: evMock,
         needsReview,
         hasEventDoc: !!eventDoc,
+        reasonCounts: evReasonCounts,
       });
     }
 
@@ -151,6 +177,7 @@ export default function AdminResultsPage() {
       anomalyCount,
       unknownSourceCount,
       mockCount,
+      fieldCounts,
       perEvent,
     };
   }, [parsedPredsMap, eventDocs]);
@@ -387,6 +414,14 @@ export default function AdminResultsPage() {
                 <div className="mt-1 text-lg font-extrabold text-gray-900">
                   {diagnostics.anomalyCount}件
                 </div>
+                {diagnostics.anomalyCount > 0 && (
+                  <div className="mt-1 text-[11px] font-bold text-gray-400">
+                    予測対象 {diagnostics.fieldCounts.main}件 / AI名{" "}
+                    {diagnostics.fieldCounts.ai}件 / mock判定{" "}
+                    {diagnostics.fieldCounts.isMock}件 / predictionSource{" "}
+                    {diagnostics.fieldCounts.predictionSource}件
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl bg-gray-50 p-3">
@@ -425,6 +460,16 @@ export default function AdminResultsPage() {
                       件 / source分類不能 {row.unknownSource}件 / mock{" "}
                       {row.mock}件
                     </div>
+
+                    {row.anomaly > 0 && (
+                      <div className="mt-1 text-[11px] font-bold text-gray-400">
+                        {REASON_DISPLAY_ORDER.filter(
+                          (reason) => (row.reasonCounts[reason] ?? 0) > 0
+                        )
+                          .map((reason) => `${reason} ×${row.reasonCounts[reason]}`)
+                          .join(" / ")}
+                      </div>
+                    )}
 
                     {row.hasEventDoc && (
                       <button
