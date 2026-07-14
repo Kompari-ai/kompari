@@ -22,6 +22,10 @@ import {
   type KompariPrediction,
   type KompariPredictionDoc,
 } from "@/lib/events";
+import {
+  parsePredictionBatch,
+  type RawPredictionDocInput,
+} from "@/lib/prediction-read";
 
 type MyAi = {
   id: string;
@@ -491,10 +495,36 @@ export default function RaceDetailPage({
     const unsubPredictions = onSnapshot(
       collection(db, "events", slug, "predictions"),
       (snapshot) => {
-        predictionsData = snapshot.docs.map((d) => ({
-          ...d.data(),
-          predictionId: d.id,
-        })) as KompariPredictionDoc[];
+        // P6-5e: 同一snapshotから、shape validation用のraw入力と、
+        // 既存表示用の完全doc(Firestoreの実doc IDを docId として付帯)を
+        // 同時に構築する。単一event購読のため event別Mapは使わず単一配列・単一batchで足りる。
+        // rawはこのコールバック内のローカル変数としてのみ存在し、Reactのstateへは一切保存しない。
+        const rawInputs: RawPredictionDocInput[] = [];
+        const fullDocs: Array<{ docId: string; prediction: KompariPredictionDoc }> = [];
+
+        for (const d of snapshot.docs) {
+          const raw = d.data();
+          const prediction = { ...raw, predictionId: d.id } as KompariPredictionDoc;
+
+          rawInputs.push({
+            raw,
+            context: { eventId: slug, predictionId: d.id },
+          });
+          fullDocs.push({ docId: d.id, prediction });
+        }
+
+        // shapeDiagnosticsのpredictionId(= 呼び出し時にcontext.predictionIdへ渡したd.id)を
+        // invalid ID集合とする。保存済みprediction.predictionIdフィールドには一切依存しない。
+        const { shapeDiagnostics } = parsePredictionBatch(rawInputs);
+
+        const invalidIds = new Set(
+          shapeDiagnostics.map((diagnostic) => diagnostic.predictionId)
+        );
+
+        predictionsData = fullDocs
+          .filter((entry) => !invalidIds.has(entry.docId))
+          .map((entry) => entry.prediction);
+
         tryNormalize();
       }
     );
