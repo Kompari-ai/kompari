@@ -18,6 +18,10 @@ import {
   type KompariPredictionDoc,
 } from "@/lib/events";
 import { aggregateByModel } from "@/lib/stats";
+import {
+  parsePredictionBatch,
+  type RawPredictionDocInput,
+} from "@/lib/prediction-read";
 
 type AiProfile = {
   name: string;
@@ -263,14 +267,51 @@ export default function AiProfilePage({
     const predsUnsub = onSnapshot(
       collectionGroup(db, "predictions"),
       (snap) => {
-        const map = new Map<string, KompariPredictionDoc[]>();
+        // P6-5f: 同一snapshotから、shape validation用のraw入力(event別)と、
+        // 既存の集計用の完全doc(event別、Firestoreの実doc IDを docId として付帯)を
+        // 同時に構築する。rawはこのコールバック内のローカル変数としてのみ存在し、
+        // Reactのstateへは一切保存しない。prediction doc IDはai名(またはmyAiId)由来のため
+        // event間で衝突し得る。全event単一batchは使わず、必ずevent別にparsePredictionBatchを呼ぶ。
+        const rawInputsByEvent = new Map<string, RawPredictionDocInput[]>();
+        const fullDocsByEvent = new Map<
+          string,
+          Array<{ docId: string; prediction: KompariPredictionDoc }>
+        >();
+
         for (const d of snap.docs) {
-          const pred = d.data() as KompariPredictionDoc;
+          const raw = d.data();
+          const pred = raw as KompariPredictionDoc;
           const eventId = pred.eventId || d.ref.parent.parent?.id;
           if (!eventId) continue;
-          if (!map.has(eventId)) map.set(eventId, []);
-          map.get(eventId)!.push(pred);
+
+          if (!rawInputsByEvent.has(eventId)) rawInputsByEvent.set(eventId, []);
+          rawInputsByEvent.get(eventId)!.push({
+            raw,
+            context: { eventId, predictionId: d.id },
+          });
+
+          if (!fullDocsByEvent.has(eventId)) fullDocsByEvent.set(eventId, []);
+          fullDocsByEvent.get(eventId)!.push({ docId: d.id, prediction: pred });
         }
+
+        // event単位でparsePredictionBatchを呼び、shapeDiagnosticsのpredictionId
+        // (= 呼び出し時にcontext.predictionIdへ渡したd.id)を、そのeventのinvalid ID集合とする。
+        // 保存済みprediction.predictionIdフィールドには一切依存しない。
+        const map = new Map<string, KompariPredictionDoc[]>();
+        for (const [eventId, inputs] of rawInputsByEvent.entries()) {
+          const { shapeDiagnostics } = parsePredictionBatch(inputs);
+
+          const invalidIds = new Set(
+            shapeDiagnostics.map((diagnostic) => diagnostic.predictionId)
+          );
+
+          const validDocs = (fullDocsByEvent.get(eventId) ?? [])
+            .filter(({ docId }) => !invalidIds.has(docId))
+            .map(({ prediction }) => prediction);
+
+          map.set(eventId, validDocs);
+        }
+
         setPredsMap(map);
       }
     );
