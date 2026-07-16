@@ -219,6 +219,15 @@ export function getResultWinner(event: KompariEvent): string {
   return (event.result?.winner || event.resultWinner || "").trim();
 }
 
+// write・prediction-generationからResult事実を保護する状態のSoT。
+// canonical winner(getResultWinner)が存在するか、winnerが無くてもsettledAtが
+// 存在すれば(防御的シグナル)保護対象とする。winnerベースの表示・集計専用の
+// 「finished」概念(例: app/admin/results/page.tsxのisFinished)とは別軸であり、
+// プロダクト全体の全ての finished/settled を統合するものではない。
+export function isResultSettled(event: KompariEvent): boolean {
+  return getResultWinner(event) !== "" || Boolean(event.result?.settledAt);
+}
+
 // Public-facing pages must not expose manual fixture/sample events.
 // source undefined is treated as public so existing admin-created events remain visible.
 // Do not use creationSource === "importer" here because future real imports may also use importer.

@@ -17,6 +17,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { eventCategories } from "@/lib/categories";
 import {
   isNonBlankString,
+  isResultSettled,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -235,11 +236,8 @@ export default function AdminEditPage({
 
   const currentPredictions = event?.predictions || [];
 
-  // result.winner が確定判定のSoT。settledAt は防御的に確定済み扱いする補助シグナル
-  // (通常発生しない winnerなし・settledAtありの不整合状態も確定済み扱いする)。
-  const isResultSettled = Boolean(
-    event?.result?.winner || event?.result?.settledAt
-  );
+  // write・prediction-generation保護状態は共有SoT(lib/events.ts)のisResultSettledへ委譲する。
+  const resultIsSettled = event ? isResultSettled(event) : false;
 
   const saveEvent = async () => {
     if (!title.trim()) {
@@ -343,7 +341,7 @@ export default function AdminEditPage({
   ) => {
     if (!event) return;
 
-    if (isResultSettled) {
+    if (resultIsSettled) {
       if (!silent) {
         alert(
           "結果確定済みのイベントでは、予測を生成・再生成できません。予測は結果確定前のものだけを記録します。"
@@ -459,7 +457,7 @@ export default function AdminEditPage({
   };
 
   const generateAllPredictions = async () => {
-    if (isResultSettled) {
+    if (resultIsSettled) {
       alert("結果確定済みのイベントでは、予測を生成・再生成できません。");
       return;
     }
@@ -740,7 +738,7 @@ export default function AdminEditPage({
             <button
               type="button"
               onClick={generateAllPredictions}
-              disabled={!!generatingAi || saving || isResultSettled}
+              disabled={!!generatingAi || saving || resultIsSettled}
               className="rounded-full bg-blue-700 px-4 py-2 text-xs font-bold text-white disabled:bg-gray-300"
             >
               全AI再生成
@@ -760,7 +758,7 @@ export default function AdminEditPage({
                   onClick={() =>
                     generatePrediction(aiName, false, { allowMock: false })
                   }
-                  disabled={!!generatingAi || saving || isResultSettled}
+                  disabled={!!generatingAi || saving || resultIsSettled}
                   className={`rounded-2xl px-3 py-4 text-sm font-bold ${
                     exists
                       ? "bg-blue-50 text-blue-700"
@@ -777,7 +775,7 @@ export default function AdminEditPage({
             })}
           </div>
 
-          {isResultSettled ? (
+          {resultIsSettled ? (
             <p className="mt-3 text-xs font-bold leading-5 text-gray-400">
               結果確定済みのため、予測の生成・再生成はできません。
             </p>
