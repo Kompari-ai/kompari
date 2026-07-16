@@ -1,5 +1,10 @@
 import type { KompariEvent, KompariPrediction, ParsedPredictionDocV1 } from "@/lib/events";
-import { getResultWinner, isCountablePrediction, isOfficialPrediction } from "@/lib/events";
+import {
+  getPredictionStatus,
+  getResultWinner,
+  isCountablePrediction,
+  isOfficialPrediction,
+} from "@/lib/events";
 import type { EventCategory } from "@/lib/categories";
 
 export type StatsSourceFilter = "official" | "user" | "all";
@@ -194,7 +199,7 @@ export function aggregateByBrand(events: KompariEvent[], options?: StatsOptions)
       }
 
       const entry = map.get(key)!;
-      const hit = isFinished && pick === winner;
+      const hit = getPredictionStatus(prediction, winner) === "hit";
 
       entry.total += 1;
 
@@ -259,7 +264,7 @@ export function aggregateByModel(events: KompariEvent[], options?: StatsOptions)
       }
 
       const entry = map.get(key)!;
-      const hit = isFinished && pick === winner;
+      const hit = getPredictionStatus(prediction, winner) === "hit";
 
       entry.total += 1;
 

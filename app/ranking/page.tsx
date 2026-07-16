@@ -14,6 +14,7 @@ import {
 } from "@/lib/categories";
 import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
+  getPredictionStatus,
   getResultWinner,
   isPublicEvent,
   normalizeEventDocToEvent,
@@ -113,7 +114,7 @@ function buildRankings(events: KompariEvent[]) {
           history: [],
         } satisfies RankingRow);
 
-      const hit = pick === winner;
+      const hit = getPredictionStatus(prediction, winner) === "hit";
 
       current.total += 1;
       if (hit) current.hits += 1;
