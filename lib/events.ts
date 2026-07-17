@@ -42,6 +42,19 @@ export type KompariPrediction = {
   predictionSource?: "official-ai" | "my-ai" | "custom-ai" | "mock" | "manual";
 };
 
+// result.status として保存される値(additive、PR-2a)。pending は result 不在(または status
+// 未設定かつ winner/winners 空)で表現するため、この型自体には含めない。
+export type ResultStatus = "settled" | "voided" | "postponed";
+
+// 保存shapeから導出されるResult lifecycle status(評価・終端判定・再生成保護・UI・ランキングで使用)。
+// resolveResultStatus() が導出のSoT。PR-2aでは未配線(scaffoldingのみ)。
+export type ResolvedResultStatus =
+  | "pending"
+  | "postponed"
+  | "settled"
+  | "voided"
+  | "invalid";
+
 export type KompariEvent = {
   id: string;
   category: EventCategory;
@@ -56,6 +69,10 @@ export type KompariEvent = {
 
   result?: {
     winner?: string;
+    // canonical複数winner(additive、PR-2a)。未設定時はwinnerへのlegacy fallbackで解決する。
+    winners?: string[];
+    // 保存されるResult状態(additive、PR-2a)。未設定時はwinner/winnersの有無から導出する。
+    status?: ResultStatus;
     second?: string;
     third?: string;
     // そのeventに初めて result.winner が保存された時刻。winner修正時は更新しない。
@@ -109,6 +126,10 @@ export type KompariEventDoc = {
   startsAt?: string;
   result?: {
     winner?: string;
+    // canonical複数winner(additive、PR-2a)。未設定時はwinnerへのlegacy fallbackで解決する。
+    winners?: string[];
+    // 保存されるResult状態(additive、PR-2a)。未設定時はwinner/winnersの有無から導出する。
+    status?: ResultStatus;
     second?: string;
     third?: string;
     // そのeventに初めて result.winner が保存された時刻。winner修正時は更新しない。
@@ -217,6 +238,42 @@ export function normalizeRaceToEvent(race: LegacyRaceData): KompariEvent {
 
 export function getResultWinner(event: KompariEvent): string {
   return (event.result?.winner || event.resultWinner || "").trim();
+}
+
+// canonical複数winnerのread helper(additive、PR-2a)。PR-2a時点ではどのconsumerにも未配線。
+// winners が明示設定されている場合のみそれを返す(空配列を含む。コピーを返し、呼び出し側の
+// sort/push等でevent内部を破壊させない)。winners が undefined/null のときだけ、legacy
+// winner(getResultWinner)へfallbackする。winners=[] を legacy winner で黙って救済しない
+// (explicit emptyとundefinedを区別する。不整合shapeの扱いはresolveResultStatus側で行う)。
+export function getResultWinners(event: KompariEvent): string[] {
+  const winners = event.result?.winners;
+  if (winners !== undefined && winners !== null) {
+    return [...winners];
+  }
+  const winner = getResultWinner(event);
+  return winner ? [winner] : [];
+}
+
+// 保存shapeからResult lifecycle statusを導出するSoT(additive、PR-2a)。PR-2a時点では
+// どのconsumerにも未配線。status優先(明示されたstatusはwinners/winnerの内容と矛盾しても
+// 信頼する)。status未設定時のみ、winners(explicit empty含む)→legacy winnerの順でfallbackする。
+export function resolveResultStatus(event: KompariEvent): ResolvedResultStatus {
+  const status = event.result?.status;
+  const explicitWinners = event.result?.winners;
+  const resolvedWinners = getResultWinners(event);
+  const legacyWinner = getResultWinner(event);
+  const hasResolvedWinner = resolvedWinners.some((w) => w.trim() !== "");
+
+  if (status === "voided") return "voided";
+  if (status === "postponed") return "postponed";
+  if (status === "settled") return hasResolvedWinner ? "settled" : "invalid";
+
+  // status 未設定
+  if (explicitWinners !== undefined && explicitWinners !== null) {
+    if (hasResolvedWinner) return "settled"; // canonical winners 非空 → settled
+    return legacyWinner !== "" ? "invalid" : "pending"; // winners=[] だが legacy winner あり=不整合。explicit empty を legacy で救済しない
+  }
+  return legacyWinner !== "" ? "settled" : "pending"; // canonical winners 未設定のときだけ legacy fallback
 }
 
 // write・prediction-generationからResult事実を保護する状態のSoT。
