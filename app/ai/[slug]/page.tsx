@@ -8,11 +8,13 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { getCategoryEmoji, getCategoryLabel } from "@/lib/categories";
 import {
-  getPredictionStatus,
+  getPredictionStatusForResult,
   getResultWinner,
+  getResultWinners,
   isOfficialPrediction,
   isPublicEvent,
   normalizeEventDocToEvent,
+  resolveResultStatus,
   type KompariEvent,
   type KompariEventDoc,
   type KompariPredictionDoc,
@@ -140,8 +142,11 @@ function buildStats(events: KompariEvent[], aiName: string): AiStats {
     if (!prediction) return;
 
     const resultWinner = getResultWinner(event);
-    const status = getPredictionStatus(prediction, resultWinner);
-    const isFinished = status !== "pending";
+    const status = getPredictionStatusForResult(prediction, {
+      winners: getResultWinners(event),
+      status: resolveResultStatus(event),
+    });
+    const isFinished = status === "hit" || status === "miss";
     const hit = isFinished ? status === "hit" : null;
 
     stats.total += 1;

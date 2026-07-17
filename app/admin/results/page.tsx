@@ -22,7 +22,7 @@ import {
 import {
   getResultWinner,
   isOfficialPrediction,
-  isResultSettled,
+  isResultTerminal,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -268,7 +268,7 @@ export default function AdminResultsPage() {
     const trimmedWinner = winner.trim();
     const candidates = event.candidates ?? [];
     const originalWinner = getResultWinner(event);
-    const resultIsSettled = isResultSettled(event);
+    const resultIsSettled = isResultTerminal(event);
     const winnerChanged = trimmedWinner !== originalWinner;
 
     if (resultIsSettled && winnerChanged && trimmedWinner === "") {

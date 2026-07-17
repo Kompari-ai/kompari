@@ -12,15 +12,18 @@ import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
   formatStartsAt,
   getConsensusChip,
-  getPredictionStatus,
+  getPredictionStatusForResult,
   getResultWinner,
+  getResultWinners,
   isOfficialPrediction,
   isPublicEvent,
   normalizeEventDocToEvent,
+  resolveResultStatus,
   type KompariEvent,
   type KompariEventDoc,
   type KompariPrediction,
   type KompariPredictionDoc,
+  type ResolvedResultStatus,
 } from "@/lib/events";
 import {
   parsePredictionBatch,
@@ -161,22 +164,28 @@ function formatSettledAt(date: Date): string {
 
 // PredictionCard は isOfficialPrediction を満たす予測のみ受け取るため、
 // mock固有の「判定不可」(getPredictionDisplayStatus の unavailable)分岐は不要。
-// 3値判定の getPredictionStatus のみを使う。
+// PredictionStatus(pending/hit/miss/voided)をswitch+neverで網羅する
+// (voidedを「外れ」に誤表示しないための機構的保証、PR-2b)。
 function getPredictionResult(
   prediction: KompariPrediction,
-  resultWinner: string
+  result: { winners: readonly string[]; status: ResolvedResultStatus }
 ) {
-  const status = getPredictionStatus(prediction, resultWinner);
+  const status = getPredictionStatusForResult(prediction, result);
 
-  if (status === "pending") {
-    return { label: "判定待ち", className: "bg-blue-50 text-blue-700" };
+  switch (status) {
+    case "pending":
+      return { label: "判定待ち", className: "bg-blue-50 text-blue-700" };
+    case "hit":
+      return { label: "的中", className: "bg-green-50 text-green-700" };
+    case "miss":
+      return { label: "外れ", className: "bg-red-50 text-red-700" };
+    case "voided":
+      return { label: "無効", className: "bg-gray-100 text-gray-500" };
+    default: {
+      const exhaustive: never = status;
+      throw new Error(`unhandled PredictionStatus: ${exhaustive}`);
+    }
   }
-
-  if (status === "hit") {
-    return { label: "的中", className: "bg-green-50 text-green-700" };
-  }
-
-  return { label: "外れ", className: "bg-red-50 text-red-700" };
 }
 
 // コンセンサス答え合わせの表示専用ラベル判定。ランキング・判定・集計には使わない。
@@ -226,11 +235,15 @@ function PredictionCard({
   eventId,
   prediction,
   resultWinner,
+  resultWinners,
+  resultStatus,
   myAis,
 }: {
   eventId: string;
   prediction: KompariPrediction;
   resultWinner: string;
+  resultWinners: readonly string[];
+  resultStatus: ResolvedResultStatus;
   myAis: MyAi[];
 }) {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
@@ -246,7 +259,10 @@ function PredictionCard({
     : getAiColors(prediction.ai);
 
   const isMyAi = isMyAiPrediction(prediction, myAis);
-  const result = getPredictionResult(prediction, resultWinner);
+  const result = getPredictionResult(prediction, {
+    winners: resultWinners,
+    status: resultStatus,
+  });
 
   return (
     <article
@@ -556,6 +572,10 @@ export default function RaceDetailPage({
   }, [event]);
 
   const resultWinner = event ? getResultWinner(event) : "";
+  const resultWinners = event ? getResultWinners(event) : [];
+  const resultStatus: ResolvedResultStatus = event
+    ? resolveResultStatus(event)
+    : "pending";
 
   // 結果確定時刻の表示専用派生値。resultWinnerが確定判定のSoTである点は変えない。
   const settledAtDate = toSettledAtDate(event?.result?.settledAt);
@@ -896,6 +916,8 @@ export default function RaceDetailPage({
                 eventId={event.id}
                 prediction={prediction}
                 resultWinner={resultWinner}
+                resultWinners={resultWinners}
+                resultStatus={resultStatus}
                 myAis={myAis}
               />
             ))}

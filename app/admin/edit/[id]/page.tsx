@@ -18,7 +18,7 @@ import { eventCategories } from "@/lib/categories";
 import {
   getResultWinner,
   isNonBlankString,
-  isResultSettled,
+  isResultTerminal,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
@@ -241,8 +241,8 @@ export default function AdminEditPage({
 
   const currentPredictions = event?.predictions || [];
 
-  // write・prediction-generation保護状態は共有SoT(lib/events.ts)のisResultSettledへ委譲する。
-  const resultIsSettled = event ? isResultSettled(event) : false;
+  // write・prediction-generation保護状態は共有SoT(lib/events.ts)のisResultTerminalへ委譲する。
+  const resultIsSettled = event ? isResultTerminal(event) : false;
 
   const saveEvent = async () => {
     if (!title.trim()) {

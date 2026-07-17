@@ -14,10 +14,13 @@ import {
 } from "@/lib/categories";
 import { getAiColors, getAiInitial } from "@/lib/ai-colors";
 import {
-  getPredictionStatus,
+  getPredictionStatusForResult,
   getResultWinner,
+  getResultWinners,
   isPublicEvent,
+  isResultEvaluable,
   normalizeEventDocToEvent,
+  resolveResultStatus,
   type KompariEvent,
   type KompariEventDoc,
   type KompariPrediction,
@@ -89,8 +92,11 @@ function buildRankings(events: KompariEvent[]) {
   const map = new Map<string, RankingRow>();
 
   events.forEach((event) => {
+    if (!isResultEvaluable(event)) return;
+
     const winner = getResultWinner(event);
-    if (!winner) return;
+    const status = resolveResultStatus(event);
+    const winners = getResultWinners(event);
 
     event.predictions.forEach((prediction) => {
       const source = getPredictionSource(prediction);
@@ -114,7 +120,7 @@ function buildRankings(events: KompariEvent[]) {
           history: [],
         } satisfies RankingRow);
 
-      const hit = getPredictionStatus(prediction, winner) === "hit";
+      const hit = getPredictionStatusForResult(prediction, { winners, status }) === "hit";
 
       current.total += 1;
       if (hit) current.hits += 1;

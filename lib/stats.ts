@@ -1,9 +1,12 @@
 import type { KompariEvent, KompariPrediction, ParsedPredictionDocV1 } from "@/lib/events";
 import {
-  getPredictionStatus,
+  getPredictionStatusForResult,
   getResultWinner,
+  getResultWinners,
   isCountablePrediction,
   isOfficialPrediction,
+  isResultEvaluable,
+  resolveResultStatus,
 } from "@/lib/events";
 import type { EventCategory } from "@/lib/categories";
 
@@ -175,7 +178,9 @@ export function aggregateByBrand(events: KompariEvent[], options?: StatsOptions)
 
   for (const event of events) {
     const winner = getResultWinner(event);
-    const isFinished = !!winner;
+    const isFinished = isResultEvaluable(event);
+    const status = resolveResultStatus(event);
+    const winners = getResultWinners(event);
 
     for (const prediction of event.predictions) {
       const source = getPredictionSource(prediction);
@@ -199,7 +204,7 @@ export function aggregateByBrand(events: KompariEvent[], options?: StatsOptions)
       }
 
       const entry = map.get(key)!;
-      const hit = getPredictionStatus(prediction, winner) === "hit";
+      const hit = getPredictionStatusForResult(prediction, { winners, status }) === "hit";
 
       entry.total += 1;
 
@@ -236,7 +241,9 @@ export function aggregateByModel(events: KompariEvent[], options?: StatsOptions)
 
   for (const event of events) {
     const winner = getResultWinner(event);
-    const isFinished = !!winner;
+    const isFinished = isResultEvaluable(event);
+    const status = resolveResultStatus(event);
+    const winners = getResultWinners(event);
 
     for (const prediction of event.predictions) {
       const source = getPredictionSource(prediction);
@@ -264,7 +271,7 @@ export function aggregateByModel(events: KompariEvent[], options?: StatsOptions)
       }
 
       const entry = map.get(key)!;
-      const hit = getPredictionStatus(prediction, winner) === "hit";
+      const hit = getPredictionStatusForResult(prediction, { winners, status }) === "hit";
 
       entry.total += 1;
 

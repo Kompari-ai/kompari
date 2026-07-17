@@ -21,9 +21,10 @@ import {
   getCategoryLabel,
 } from "@/lib/categories";
 import {
-  getPredictionStatus,
-  getResultWinner,
+  getPredictionStatusForResult,
+  getResultWinners,
   normalizeRaceToEvent,
+  resolveResultStatus,
   type KompariEvent,
   type KompariPrediction,
   type LegacyRaceData,
@@ -72,17 +73,20 @@ function buildMyAiStats(events: KompariEvent[], myAi: MyAi): MyAiStats {
 
     if (!prediction) return;
 
-    const resultWinner = getResultWinner(event);
-    const status = getPredictionStatus(prediction, resultWinner);
+    const status = getPredictionStatusForResult(prediction, {
+      winners: getResultWinners(event),
+      status: resolveResultStatus(event),
+    });
 
     stats.total += 1;
 
     if (status === "pending") {
       stats.pending += 1;
-    } else {
+    } else if (status === "hit" || status === "miss") {
       stats.finished += 1;
       if (status === "hit") stats.hit += 1;
     }
+    // voided: どちらのカウンタにも加算しない(finishedにもpendingにも含めない)。
   });
 
   stats.hitRate =

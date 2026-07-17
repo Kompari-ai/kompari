@@ -276,13 +276,36 @@ export function resolveResultStatus(event: KompariEvent): ResolvedResultStatus {
   return legacyWinner !== "" ? "settled" : "pending"; // canonical winners 未設定のときだけ legacy fallback
 }
 
+// 的中率の分子分母に入れられるかのSoT(PR-2b)。resolveResultStatusが"settled"のときのみtrue。
+// voided/postponed/invalid/pendingはいずれもfalse(voidedはterminalだがevaluableではない、
+// という2.1の区別を体現する)。
+export function isResultEvaluable(event: KompariEvent): boolean {
+  return resolveResultStatus(event) === "settled";
+}
+
+// write・prediction-generationからResult事実を保護する状態のcanonical SoT(PR-2b)。
+// settled/voided/invalid(status="settled"由来のinvalidも含め安全側でterminal)はtrue。
+// pending/postponedはsettledAtが存在する場合のみ防御的にtrue(resolveResultStatusでは
+// 判別できないlegacy防御シグナルのため、resolveResultStatusの結果だけでは判定しない)。
+export function isResultTerminal(event: KompariEvent): boolean {
+  const s = resolveResultStatus(event);
+  if (s === "settled" || s === "voided" || s === "invalid") return true;
+  return Boolean(event.result?.settledAt);
+}
+
 // write・prediction-generationからResult事実を保護する状態のSoT。
 // canonical winner(getResultWinner)が存在するか、winnerが無くてもsettledAtが
 // 存在すれば(防御的シグナル)保護対象とする。winnerベースの表示・集計専用の
 // 「finished」概念(例: app/admin/results/page.tsxのisFinished)とは別軸であり、
 // プロダクト全体の全ての finished/settled を統合するものではない。
+//
+// @deprecated PR-2bよりisResultTerminalへ委譲するlegacy互換wrapper。新規呼び出しは
+// isResultTerminalを使うこと。legacy baseline A/B/C(status/winners未設定)は不変。
+// 新規のcanonical winners-only settled・voided・settled由来のinvalidは、isResultTerminal
+// により新たに安全側の保護対象となる(意図した正しい変更。isResultSettledの旧定義では
+// これらの新shapeを保護できなかった)。
 export function isResultSettled(event: KompariEvent): boolean {
-  return getResultWinner(event) !== "" || Boolean(event.result?.settledAt);
+  return isResultTerminal(event);
 }
 
 // Public-facing pages must not expose manual fixture/sample events.
@@ -375,27 +398,56 @@ export function isOfficialPrediction(prediction: ParsedPredictionDocV1): boolean
   return true;
 }
 
-export type PredictionStatus = "hit" | "miss" | "pending";
+// 旧3値型。getPredictionStatus(互換wrapper)の戻り値型として固定する。
+export type LegacyPredictionStatus = "pending" | "hit" | "miss";
 
-// 表示用の3値判定。
+export type PredictionStatus = LegacyPredictionStatus | "voided";
+
+// 複数winner・lifecycle status対応の評価SoT(PR-2b)。canonical関数。
+// pick抽出・正規化ロジックはgetPredictionStatus(互換wrapper)と共有する(複製・変更しない)。
+// 「発生しないはず」の入力(settledなのに有効winnerゼロ等)でもmissを捏造せずpendingへ写像する
+// (防御的:上流のresolveResultStatus/getResultWinnersの不整合を、ここでmiss化して増幅しない)。
+export function getPredictionStatusForResult(
+  prediction: KompariPrediction,
+  result: { winners: readonly string[]; status: ResolvedResultStatus }
+): PredictionStatus {
+  if (result.status === "voided") return "voided";
+  if (result.status !== "settled") return "pending"; // pending/postponed/invalid
+
+  const winners = result.winners.map((w) => w.trim()).filter((w) => w !== "");
+  if (winners.length === 0) return "pending"; // settledでも有効winnerゼロならpending(missを捏造しない)
+
+  // 非文字列mainは既存の空main相当として扱う(安全な分岐へ落とすのみ。
+  // 新しい戻り値は追加しない)。
+  const pick = isNonBlankString(prediction.main) ? prediction.main.trim() : "";
+
+  return pick !== "" && winners.includes(pick) ? "hit" : "miss";
+}
+
+// 表示用の3値判定(pending/hit/miss)。
 // 結果未確定なら pending、結果確定済みなら hit / miss を返す。
 // Pattern A 動的計算を維持する。
 // prediction.main と resultWinner は保存時点で trim 済みだが、
 // helper 単体の安全性のため両側 trim で対称にする。
 // mock / main空 の除外は行わない。
 // ranking 分母用の isCountablePrediction() とは別役割。
+//
+// PR-2bよりgetPredictionStatusForResultへ委譲するcanonical互換wrapper。シグネチャ・戻り値型
+// (LegacyPredictionStatus、旧3値)とも不変。trim後にstatusを決めるため、resultWinner=""/"   "
+// →pending、" A "→"A"として評価、という旧契約をそのまま保つ。
+// 呼び出し元にwinner文字列(単一)しか渡していないため、getPredictionStatusForResultは
+// 型上・実行時ともvoidedを返し得ない(status: winner?"settled":"pending"のみを渡すため)が、
+// 型システムでは保証できないため、防御的にvoidedをpendingへ狭める。
 export function getPredictionStatus(
   prediction: KompariPrediction,
   resultWinner: string
-): PredictionStatus {
-  // 非文字列mainは既存の空main相当として扱う(安全な分岐へ落とすのみ。
-  // 新しい戻り値は追加しない)。
-  const pick = isNonBlankString(prediction.main) ? prediction.main.trim() : "";
+): LegacyPredictionStatus {
   const winner = (resultWinner || "").trim();
-
-  if (!winner) return "pending";
-  if (pick === winner) return "hit";
-  return "miss";
+  const status = getPredictionStatusForResult(prediction, {
+    winners: winner ? [winner] : [],
+    status: winner ? "settled" : "pending",
+  });
+  return status === "voided" ? "pending" : status;
 }
 
 export type PredictionDisplayStatus = PredictionStatus | "unavailable";
