@@ -17,6 +17,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { eventCategories } from "@/lib/categories";
 import {
   getResultWinner,
+  getResultWinners,
   isNonBlankString,
   isResultTerminal,
   normalizeEventDocToEvent,
@@ -27,8 +28,10 @@ import {
 } from "@/lib/events";
 import {
   areCandidateListsEqual,
+  findWinnersOutsideCandidates,
   isWinnerOutsideCandidates,
 } from "@/lib/result-write-guard";
+import { buildResultWriteUpdates } from "@/lib/result-write";
 import { OFFICIAL_AI_NAMES } from "@/lib/ai/official-ai";
 import {
   GeneratePredictionResponseSchema,
@@ -266,11 +269,6 @@ export default function AdminEditPage({
       nextCandidates
     );
     const winnerChanged = originalWinner !== nextWinner;
-    const beforeInvalid = isWinnerOutsideCandidates(
-      originalWinner,
-      originalCandidates
-    );
-    const afterInvalid = isWinnerOutsideCandidates(nextWinner, nextCandidates);
 
     if (resultIsSettled && winnerChanged && nextWinner === "") {
       alert(
@@ -286,12 +284,52 @@ export default function AdminEditPage({
       return;
     }
 
-    const preservesExistingLegacyInvalid =
-      beforeInvalid && afterInvalid && !candidatesChanged && !winnerChanged;
+    // 候補整合: result書込みの有無に依らず、有効なwinner全件(metadataなら既存winners全件、
+    // identity変更なら次winner1件)が新candidatesに含まれるかを検査する。
+    const effectiveWinners = winnerChanged
+      ? nextWinner
+        ? [nextWinner]
+        : []
+      : getResultWinners(event);
+    const outsideWinners = findWinnersOutsideCandidates(
+      effectiveWinners,
+      nextCandidates
+    );
 
-    if (afterInvalid && !preservesExistingLegacyInvalid) {
+    // PR-1b由来のlegacy invalid例外(HEAD時点のpreservesExistingLegacyInvalidを復元)。
+    // winner/candidatesとも無変更なら、既存の候補外winnerを保存し続けることを許可する。
+    // rawWinners==nullでlegacy shape(winnersフィールド未設定)のみに限定し、
+    // canonical winners配列を持つshapeへは例外を広げない。
+    const beforeInvalid = isWinnerOutsideCandidates(
+      originalWinner,
+      originalCandidates
+    );
+    const rawWinners = event.result?.winners;
+    const preservesExistingLegacyInvalid =
+      rawWinners == null && beforeInvalid && !candidatesChanged && !winnerChanged;
+
+    if (outsideWinners.length > 0 && !preservesExistingLegacyInvalid) {
       alert(
         "選択された結果は候補一覧に含まれていないため保存できません。候補一覧または結果を確認してください。"
+      );
+      return;
+    }
+
+    // 初回settlement条件: event.resultが文字通りnull/undefinedの場合のみ、新規winnerを
+    // 「初めての確定」として扱う。result={}やresult={winner:""}、winners/statusが明示された
+    // 非nullなshapeは、未知fieldを誤って上書きしないよう安全側でblockする。
+    const eventResult = event.result;
+    const initialSettlementConditionMet =
+      !resultIsSettled &&
+      originalWinner === "" &&
+      eventResult?.winners === undefined &&
+      eventResult?.status === undefined &&
+      !eventResult?.settledAt &&
+      (eventResult === null || eventResult === undefined);
+
+    if (winnerChanged && nextWinner !== "" && !initialSettlementConditionMet) {
+      alert(
+        "この結果の状態が想定外のため、この画面では変更できません。結果入力画面から確認してください。"
       );
       return;
     }
@@ -339,25 +377,17 @@ export default function AdminEditPage({
 
       const trimmedTitle = title.trim();
       const trimmedVenue = venue.trim();
-      const trimmedResultWinner = resultWinner.trim();
 
-      // settledAt = このeventに初めて result.winner が保存された時刻。
-      // winner修正時は既存 settledAt を保持する。
-      // legacy(winnerあり・settledAtなし)の再編集では settledAt を後付けしない。
-      let resultValue: { winner: string; settledAt?: unknown } | null = null;
-
-      if (trimmedResultWinner) {
-        const previousWinner = (event?.result?.winner || "").trim();
-        const previousSettledAt = event?.result?.settledAt;
-
-        resultValue = { winner: trimmedResultWinner };
-
-        if (previousSettledAt) {
-          resultValue.settledAt = previousSettledAt;
-        } else if (!previousWinner) {
-          resultValue.settledAt = serverTimestamp();
-        }
-      }
+      // winnerChanged===falseならmetadata({}、resultキー自体を書かず既存Resultを丸ごと保持)。
+      // winnerChanged===trueは、ここまでのguardにより初回settlement(event.resultがnull/undefined)
+      // のケースのみ到達する(settled中の変更・初回条件を満たさない変更は既にblock済み)。
+      const resultUpdates = winnerChanged
+        ? buildResultWriteUpdates({
+            kind: "initial-settlement",
+            winner: nextWinner,
+            settledAt: serverTimestamp(),
+          })
+        : buildResultWriteUpdates({ kind: "metadata" });
 
       const batch = writeBatch(db);
       batch.update(doc(db, "events", id), {
@@ -366,7 +396,7 @@ export default function AdminEditPage({
         venue: trimmedVenue,
         startsAt: startsAt || null,
         candidates,
-        result: resultValue,
+        ...resultUpdates,
         updatedAt: serverTimestamp(),
       });
       await batch.commit();

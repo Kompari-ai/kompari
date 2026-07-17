@@ -12,7 +12,8 @@ import {
   getCategoryEmoji,
   getCategoryLabel,
 } from "@/lib/categories";
-import { isWinnerOutsideCandidates } from "@/lib/result-write-guard";
+import { findWinnersOutsideCandidates } from "@/lib/result-write-guard";
+import { buildResultWriteUpdates } from "@/lib/result-write";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -38,10 +39,14 @@ export default function AdminPage() {
       return;
     }
 
-    const nextWinner = resultWinner.trim();
+    const trimmedWinner = resultWinner.trim();
     const plannedCandidates = candidates;
 
-    if (isWinnerOutsideCandidates(nextWinner, plannedCandidates)) {
+    const outsideWinners = trimmedWinner
+      ? findWinnersOutsideCandidates([trimmedWinner], plannedCandidates)
+      : [];
+
+    if (outsideWinners.length > 0) {
       alert(
         "選択された結果は候補一覧に含まれていないため保存できません。候補一覧または結果を確認してください。"
       );
@@ -56,6 +61,15 @@ export default function AdminPage() {
 
       const batch = writeBatch(db);
 
+      // createEventは新規作成なので既存resultが無く、winnerがあれば常に初回確定。
+      const resultUpdates = trimmedWinner
+        ? buildResultWriteUpdates({
+            kind: "initial-settlement",
+            winner: trimmedWinner,
+            settledAt: serverTimestamp(),
+          })
+        : { result: null };
+
       // events 本体
       batch.set(eventRef, {
         slug: eventId,
@@ -64,10 +78,7 @@ export default function AdminPage() {
         candidates,
         venue: venue.trim(),
         startsAt: startsAt || null,
-        // createEventは新規作成なので既存resultが無く、winnerがあれば常に初回確定。
-        result: resultWinner
-          ? { winner: resultWinner, settledAt: serverTimestamp() }
-          : null,
+        ...resultUpdates,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });

@@ -28,3 +28,15 @@ export function isWinnerOutsideCandidates(
 ): boolean {
   return winner !== "" && !candidates.includes(winner);
 }
+
+// 複数winner版の型adapter(PR-2c)。既存isWinnerOutsideCandidatesへ委譲するのみで、
+// 独自のtrim・空文字除外・dedupe・sortは一切行わない(呼出し側の責務)。
+// 入力順を維持した「候補外winnerの一覧」を返す(診断・block判定の両方に使える)。
+// 入力配列(winners/candidates)は変更しない。readonly→string[]への変換のみ。
+export function findWinnersOutsideCandidates(
+  winners: readonly string[],
+  candidates: readonly string[]
+): string[] {
+  const candidateList = [...candidates];
+  return winners.filter((winner) => isWinnerOutsideCandidates(winner, candidateList));
+}

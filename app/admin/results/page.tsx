@@ -24,11 +24,13 @@ import {
   isOfficialPrediction,
   isResultTerminal,
   normalizeEventDocToEvent,
+  resolveResultStatus,
   type KompariEvent,
   type KompariEventDoc,
   type KompariPredictionDoc,
 } from "@/lib/events";
-import { isWinnerOutsideCandidates } from "@/lib/result-write-guard";
+import { findWinnersOutsideCandidates } from "@/lib/result-write-guard";
+import { buildResultWriteUpdates } from "@/lib/result-write";
 import { classifyPredictionSourceForDiagnostics } from "@/lib/prediction-diagnostics";
 import {
   parsePredictionBatch,
@@ -278,19 +280,53 @@ export default function AdminResultsPage() {
       return;
     }
 
-    const beforeInvalid = isWinnerOutsideCandidates(originalWinner, candidates);
-    const afterInvalid = isWinnerOutsideCandidates(trimmedWinner, candidates);
-    const preservesExistingLegacyInvalid =
-      beforeInvalid && afterInvalid && !winnerChanged;
-
-    if (afterInvalid && !preservesExistingLegacyInvalid) {
-      alert(
-        "選択された結果は候補一覧に含まれていないため保存できません。候補一覧を確認してください。"
+    if (winnerChanged && trimmedWinner !== "") {
+      const outsideWinners = findWinnersOutsideCandidates(
+        [trimmedWinner],
+        candidates
       );
-      return;
+
+      if (outsideWinners.length > 0) {
+        alert(
+          "選択された結果は候補一覧に含まれていないため保存できません。候補一覧を確認してください。"
+        );
+        return;
+      }
     }
 
-    if (resultIsSettled && winnerChanged && trimmedWinner !== "") {
+    // 初回settlement条件: event.resultが文字通りnull/undefinedの場合のみ、新規winnerを
+    // 「初めての確定」として扱う(app/admin/edit/[id]/page.tsxのsaveEventと同一契約)。
+    const eventResult = event.result;
+    const initialSettlementConditionMet =
+      !resultIsSettled &&
+      originalWinner === "" &&
+      eventResult?.winners === undefined &&
+      eventResult?.status === undefined &&
+      !eventResult?.settledAt &&
+      (eventResult === null || eventResult === undefined);
+
+    // 訂正可能shape述語: legacy単一winner、またはcanonicalにwinners=[単一値]でlegacy winnerと
+    // 完全一致している場合のみ、settled状態からの単一winner訂正を許可する。
+    const legacyWinner = getResultWinner(event).trim();
+    const rawWinners = event.result?.winners;
+    const isLegacySingleWinner = rawWinners == null && legacyWinner !== "";
+    const isCanonicalSyncedSingleWinner =
+      Array.isArray(rawWinners) &&
+      rawWinners.length === 1 &&
+      typeof rawWinners[0] === "string" &&
+      rawWinners[0].trim() !== "" &&
+      rawWinners[0].trim() === legacyWinner;
+    const canCorrectSingleWinner =
+      resolveResultStatus(event) === "settled" &&
+      (isLegacySingleWinner || isCanonicalSyncedSingleWinner);
+
+    let intentKind: "metadata" | "initial-settlement" | "single-winner-correction";
+
+    if (!winnerChanged) {
+      intentKind = "metadata";
+    } else if (trimmedWinner !== "" && initialSettlementConditionMet) {
+      intentKind = "initial-settlement";
+    } else if (trimmedWinner !== "" && canCorrectSingleWinner) {
       const confirmed = window.confirm(
         `確定済みの結果を訂正します。\n\n` +
           `変更前: ${originalWinner || "未設定"}\n` +
@@ -302,32 +338,40 @@ export default function AdminResultsPage() {
       if (!confirmed) {
         return;
       }
+
+      intentKind = "single-winner-correction";
+    } else {
+      // trimmedWinner!=="" で initial-settlement/single-winner-correctionいずれの条件も
+      // 満たさない非標準shape(canonical winners-only・複数winner・winner↔winners不一致・
+      // winners=[]・voided・postponed・invalid・settledAt-only等)、または settled-clear guard
+      // で捕捉されなかった非標準shapeでのクリア試行(trimmedWinner==="")を、
+      // fall-throughさせず必ずblockする。新しいResult消去・訂正能力をここから開かない。
+      alert(
+        "この結果は現在の管理画面では変更できない形式です。開発者に確認してください。"
+      );
+      return;
     }
 
     try {
       setSavingId(event.id);
 
-      // settledAt = このeventに初めて result.winner が保存された時刻。
-      // winner修正時は既存 settledAt を保持する。
-      // legacy(winnerあり・settledAtなし)の再編集では settledAt を後付けしない。
-      let resultValue: { winner: string; settledAt?: unknown } | null = null;
-
-      if (trimmedWinner) {
-        const previousWinner = (event.result?.winner || "").trim();
-        const previousSettledAt = event.result?.settledAt;
-
-        resultValue = { winner: trimmedWinner };
-
-        if (previousSettledAt) {
-          resultValue.settledAt = previousSettledAt;
-        } else if (!previousWinner) {
-          resultValue.settledAt = serverTimestamp();
-        }
-      }
+      const resultUpdates =
+        intentKind === "metadata"
+          ? buildResultWriteUpdates({ kind: "metadata" })
+          : intentKind === "initial-settlement"
+          ? buildResultWriteUpdates({
+              kind: "initial-settlement",
+              winner: trimmedWinner,
+              settledAt: serverTimestamp(),
+            })
+          : buildResultWriteUpdates({
+              kind: "single-winner-correction",
+              winner: trimmedWinner,
+            });
 
       const batch = writeBatch(db);
       batch.update(doc(db, "events", event.id), {
-        result: resultValue,
+        ...resultUpdates,
         updatedAt: serverTimestamp(),
       });
       await batch.commit();
