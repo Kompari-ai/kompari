@@ -22,11 +22,13 @@ import {
 import {
   getResultWinner,
   isOfficialPrediction,
+  isResultSettled,
   normalizeEventDocToEvent,
   type KompariEvent,
   type KompariEventDoc,
   type KompariPredictionDoc,
 } from "@/lib/events";
+import { isWinnerOutsideCandidates } from "@/lib/result-write-guard";
 import { classifyPredictionSourceForDiagnostics } from "@/lib/prediction-diagnostics";
 import {
   parsePredictionBatch,
@@ -263,10 +265,47 @@ export default function AdminResultsPage() {
   const finishedCount = (events ?? []).filter((event) => isFinished(event)).length;
 
   const saveResult = async (event: KompariEvent, winner: string) => {
+    const trimmedWinner = winner.trim();
+    const candidates = event.candidates ?? [];
+    const originalWinner = getResultWinner(event);
+    const resultIsSettled = isResultSettled(event);
+    const winnerChanged = trimmedWinner !== originalWinner;
+
+    if (resultIsSettled && winnerChanged && trimmedWinner === "") {
+      alert(
+        "確定済みの結果は削除できません。訂正が必要な場合は、正しい候補を選択してください。"
+      );
+      return;
+    }
+
+    const beforeInvalid = isWinnerOutsideCandidates(originalWinner, candidates);
+    const afterInvalid = isWinnerOutsideCandidates(trimmedWinner, candidates);
+    const preservesExistingLegacyInvalid =
+      beforeInvalid && afterInvalid && !winnerChanged;
+
+    if (afterInvalid && !preservesExistingLegacyInvalid) {
+      alert(
+        "選択された結果は候補一覧に含まれていないため保存できません。候補一覧を確認してください。"
+      );
+      return;
+    }
+
+    if (resultIsSettled && winnerChanged && trimmedWinner !== "") {
+      const confirmed = window.confirm(
+        `確定済みの結果を訂正します。\n\n` +
+          `変更前: ${originalWinner || "未設定"}\n` +
+          `変更後: ${trimmedWinner}\n\n` +
+          `現時点では訂正履歴は保存されません。\n` +
+          `この変更を保存しますか？`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
     try {
       setSavingId(event.id);
-
-      const trimmedWinner = winner.trim();
 
       // settledAt = このeventに初めて result.winner が保存された時刻。
       // winner修正時は既存 settledAt を保持する。

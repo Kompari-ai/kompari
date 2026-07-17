@@ -12,6 +12,7 @@ import {
   getCategoryEmoji,
   getCategoryLabel,
 } from "@/lib/categories";
+import { isWinnerOutsideCandidates } from "@/lib/result-write-guard";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -34,6 +35,16 @@ export default function AdminPage() {
   const createEvent = async () => {
     if (!canCreate) {
       alert("イベント名と候補を2つ以上入力してください");
+      return;
+    }
+
+    const nextWinner = resultWinner.trim();
+    const plannedCandidates = candidates;
+
+    if (isWinnerOutsideCandidates(nextWinner, plannedCandidates)) {
+      alert(
+        "選択された結果は候補一覧に含まれていないため保存できません。候補一覧または結果を確認してください。"
+      );
       return;
     }
 

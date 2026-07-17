@@ -16,6 +16,7 @@ import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import { eventCategories } from "@/lib/categories";
 import {
+  getResultWinner,
   isNonBlankString,
   isResultSettled,
   normalizeEventDocToEvent,
@@ -24,6 +25,10 @@ import {
   type KompariPrediction,
   type KompariPredictionDoc,
 } from "@/lib/events";
+import {
+  areCandidateListsEqual,
+  isWinnerOutsideCandidates,
+} from "@/lib/result-write-guard";
 import { OFFICIAL_AI_NAMES } from "@/lib/ai/official-ai";
 import {
   GeneratePredictionResponseSchema,
@@ -247,6 +252,47 @@ export default function AdminEditPage({
 
     if (candidates.length < 2) {
       alert("候補リストを2つ以上入力してください");
+      return;
+    }
+
+    if (!event) return;
+
+    const originalCandidates = event.candidates ?? [];
+    const nextCandidates = candidates;
+    const originalWinner = getResultWinner(event);
+    const nextWinner = resultWinner.trim();
+    const candidatesChanged = !areCandidateListsEqual(
+      originalCandidates,
+      nextCandidates
+    );
+    const winnerChanged = originalWinner !== nextWinner;
+    const beforeInvalid = isWinnerOutsideCandidates(
+      originalWinner,
+      originalCandidates
+    );
+    const afterInvalid = isWinnerOutsideCandidates(nextWinner, nextCandidates);
+
+    if (resultIsSettled && winnerChanged && nextWinner === "") {
+      alert(
+        "確定済みの結果は削除できません。訂正が必要な場合は、正しい候補を選択してください。"
+      );
+      return;
+    }
+
+    if (resultIsSettled && (candidatesChanged || winnerChanged)) {
+      alert(
+        "結果確定済みのイベントでは、候補リストや結果を変更できません。結果を修正する場合は、結果入力画面から行ってください。"
+      );
+      return;
+    }
+
+    const preservesExistingLegacyInvalid =
+      beforeInvalid && afterInvalid && !candidatesChanged && !winnerChanged;
+
+    if (afterInvalid && !preservesExistingLegacyInvalid) {
+      alert(
+        "選択された結果は候補一覧に含まれていないため保存できません。候補一覧または結果を確認してください。"
+      );
       return;
     }
 
