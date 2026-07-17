@@ -78,6 +78,8 @@ export type KompariEvent = {
     // そのeventに初めて result.winner が保存された時刻。winner修正時は更新しない。
     // legacy(winnerあり・settledAtなし)には後付けしない(retroactive backfillしない)。
     settledAt?: unknown;
+    // revision追跡導入後の訂正連番(additive、PR-2d-1)。未設定(undefined)=0。初回settlementでは付与しない。
+    revision?: number;
   };
 
   venue?: string;
@@ -135,6 +137,8 @@ export type KompariEventDoc = {
     // そのeventに初めて result.winner が保存された時刻。winner修正時は更新しない。
     // legacy(winnerあり・settledAtなし)には後付けしない(retroactive backfillしない)。
     settledAt?: unknown;
+    // revision追跡導入後の訂正連番(additive、PR-2d-1)。未設定(undefined)=0。初回settlementでは付与しない。
+    revision?: number;
   };
   createdAt?: unknown;
   updatedAt?: unknown;
