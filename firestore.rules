@@ -50,11 +50,16 @@ service cloud.firestore {
 
       // Result correction audit records.
       // correctedBy may contain admin uid/email, so reads are admin-only.
-      // Revision records are immutable after creation.
+      // Revision records are immutable: update is always denied.
+      // delete is only allowed when the parent event is removed in the same
+      // operation (cascade delete) or already gone (orphan cleanup); a lone
+      // revision cannot be deleted while its parent event still exists.
       match /resultRevisions/{revisionId} {
         allow read: if isAdmin();
         allow create: if isAdmin();
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if isAdmin()
+          && !existsAfter(/databases/$(database)/documents/events/$(eventId));
       }
     }
 
