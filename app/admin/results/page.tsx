@@ -8,10 +8,11 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   writeBatch,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { TopBar } from "@/components/TopBar";
 import { BottomNav } from "@/components/BottomNav";
 import {
@@ -24,13 +25,20 @@ import {
   isOfficialPrediction,
   isResultTerminal,
   normalizeEventDocToEvent,
-  resolveResultStatus,
   type KompariEvent,
   type KompariEventDoc,
   type KompariPredictionDoc,
 } from "@/lib/events";
 import { findWinnersOutsideCandidates } from "@/lib/result-write-guard";
 import { buildResultWriteUpdates } from "@/lib/result-write";
+import {
+  ResultRevisionConflictError,
+  ResultRevisionValidationError,
+  buildResultRevisionEntry,
+  canCorrectSingleWinner,
+  planSingleWinnerCorrection,
+  resultRevisionDocId,
+} from "@/lib/result-revision";
 import { classifyPredictionSourceForDiagnostics } from "@/lib/prediction-diagnostics";
 import {
   parsePredictionBatch,
@@ -305,20 +313,9 @@ export default function AdminResultsPage() {
       !eventResult?.settledAt &&
       (eventResult === null || eventResult === undefined);
 
-    // 訂正可能shape述語: legacy単一winner、またはcanonicalにwinners=[単一値]でlegacy winnerと
-    // 完全一致している場合のみ、settled状態からの単一winner訂正を許可する。
-    const legacyWinner = getResultWinner(event).trim();
-    const rawWinners = event.result?.winners;
-    const isLegacySingleWinner = rawWinners == null && legacyWinner !== "";
-    const isCanonicalSyncedSingleWinner =
-      Array.isArray(rawWinners) &&
-      rawWinners.length === 1 &&
-      typeof rawWinners[0] === "string" &&
-      rawWinners[0].trim() !== "" &&
-      rawWinners[0].trim() === legacyWinner;
-    const canCorrectSingleWinner =
-      resolveResultStatus(event) === "settled" &&
-      (isLegacySingleWinner || isCanonicalSyncedSingleWinner);
+    // 訂正可能shape判定は lib/result-revision.ts の共有SoTへ委譲する
+    // (saveResult固有のinline判定は持たない、PR-2d-2b)。
+    const singleWinnerCorrectionAllowed = canCorrectSingleWinner(event);
 
     let intentKind: "metadata" | "initial-settlement" | "single-winner-correction";
 
@@ -326,12 +323,12 @@ export default function AdminResultsPage() {
       intentKind = "metadata";
     } else if (trimmedWinner !== "" && initialSettlementConditionMet) {
       intentKind = "initial-settlement";
-    } else if (trimmedWinner !== "" && canCorrectSingleWinner) {
+    } else if (trimmedWinner !== "" && singleWinnerCorrectionAllowed) {
       const confirmed = window.confirm(
         `確定済みの結果を訂正します。\n\n` +
           `変更前: ${originalWinner || "未設定"}\n` +
           `変更後: ${trimmedWinner}\n\n` +
-          `現時点では訂正履歴は保存されません。\n` +
+          `訂正内容は監査履歴として保存されます。\n` +
           `この変更を保存しますか？`
       );
 
@@ -352,34 +349,108 @@ export default function AdminResultsPage() {
       return;
     }
 
+    const eventRef = doc(db, "events", event.id);
+
     try {
       setSavingId(event.id);
 
-      const resultUpdates =
-        intentKind === "metadata"
-          ? buildResultWriteUpdates({ kind: "metadata" })
-          : intentKind === "initial-settlement"
-          ? buildResultWriteUpdates({
-              kind: "initial-settlement",
-              winner: trimmedWinner,
-              settledAt: serverTimestamp(),
-            })
-          : buildResultWriteUpdates({
-              kind: "single-winner-correction",
-              winner: trimmedWinner,
-            });
+      if (intentKind === "single-winner-correction") {
+        // correctedByはtransaction開始前に1回だけ取得する(callback内でAuth再取得しない。
+        // callbackは競合時にretryされうるため)。
+        const user = auth.currentUser;
+        const correctedBy = user ? { uid: user.uid, email: user.email } : undefined;
 
-      const batch = writeBatch(db);
-      batch.update(doc(db, "events", event.id), {
-        ...resultUpdates,
-        updatedAt: serverTimestamp(),
-      });
-      await batch.commit();
+        await runTransaction(db, async (transaction) => {
+          // 全readをwriteより先に行う(Firestore transactionの公式要件)。
+          const snapshot = await transaction.get(eventRef);
+
+          if (!snapshot.exists()) {
+            throw new ResultRevisionValidationError("Event not found");
+          }
+
+          // fresh docのidはdocument pathのIDをauthoritativeにするため後置でspreadする。
+          const freshEventDoc = {
+            ...snapshot.data(),
+            id: event.id,
+          } as KompariEventDoc;
+          // predictionsは訂正判定・訂正計画のいずれからも参照されないため空配列で足りる。
+          const freshEvent = normalizeEventDocToEvent(freshEventDoc, []);
+
+          const plan = planSingleWinnerCorrection({
+            freshEvent,
+            expectedOriginalWinner: originalWinner,
+            nextWinner: trimmedWinner,
+          });
+
+          const revisionRef = doc(
+            db,
+            "events",
+            event.id,
+            "resultRevisions",
+            resultRevisionDocId(plan.nextRevision)
+          );
+          const revisionSnap = await transaction.get(revisionRef);
+
+          if (revisionSnap.exists()) {
+            throw new ResultRevisionValidationError("Revision already exists");
+          }
+
+          // 親updateはresult.*のdot-pathのみ(+revision)。result whole-mapとは非混在、
+          // result.settledAtは書かない(既存値をFirestore側で自動的に保持させる)。
+          transaction.update(eventRef, {
+            "result.winner": plan.after.winner,
+            "result.winners": plan.after.winners,
+            "result.status": "settled",
+            "result.revision": plan.nextRevision,
+            updatedAt: serverTimestamp(),
+          });
+
+          transaction.set(
+            revisionRef,
+            buildResultRevisionEntry({
+              revision: plan.nextRevision,
+              eventId: event.id,
+              before: plan.before,
+              after: plan.after,
+              correctedAtSentinel: serverTimestamp(),
+              correctedBy,
+            })
+          );
+
+          return plan.nextRevision;
+        });
+      } else {
+        // intentKindはmetadataまたはinitial-settlementのみ。single-winner-correction用の
+        // buildResultWriteUpdates呼出しはここでは行わない(transaction経路と排他)。
+        const resultUpdates =
+          intentKind === "metadata"
+            ? buildResultWriteUpdates({ kind: "metadata" })
+            : buildResultWriteUpdates({
+                kind: "initial-settlement",
+                winner: trimmedWinner,
+                settledAt: serverTimestamp(),
+              });
+
+        const batch = writeBatch(db);
+        batch.update(eventRef, {
+          ...resultUpdates,
+          updatedAt: serverTimestamp(),
+        });
+        await batch.commit();
+      }
     } catch (error) {
-      console.error(error);
-      alert(
-        "結果の保存に失敗しました。Googleログイン中のメールアドレスとFirestoreルールを確認してください。"
-      );
+      if (error instanceof ResultRevisionConflictError) {
+        alert(
+          "他の変更と競合しました。最新の状態を確認して再度お試しください。"
+        );
+      } else if (error instanceof ResultRevisionValidationError) {
+        alert("結果の状態が想定外のため訂正できません。");
+      } else {
+        console.error(error);
+        alert(
+          "結果の保存に失敗しました。Googleログイン中のメールアドレスとFirestoreルールを確認してください。"
+        );
+      }
     } finally {
       setSavingId("");
     }

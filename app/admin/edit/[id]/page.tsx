@@ -552,10 +552,21 @@ export default function AdminEditPage({
 
     try {
       const predictionsRef = collection(db, "events", id, "predictions");
-      const predictionsSnapshot = await getDocs(predictionsRef);
+      const revisionsRef = collection(db, "events", id, "resultRevisions");
 
-      if (predictionsSnapshot.size > 450) {
-        alert("AI予測が多すぎるため、安全のため削除を中止しました。");
+      const [predictionsSnapshot, revisionsSnapshot] = await Promise.all([
+        getDocs(predictionsRef),
+        getDocs(revisionsRef),
+      ]);
+
+      // predictions単体ではなく、このEvent削除で発生する全write数(predictions+
+      // resultRevisions+event本体+race)を合算してFirestore batchの上限(500)への
+      // 安全マージンを検査する。
+      const totalWrites =
+        predictionsSnapshot.size + revisionsSnapshot.size + 1 /* event */ + 1 /* race */;
+
+      if (totalWrites > 450) {
+        alert("削除対象が多すぎるため、安全のため削除を中止しました。");
         setSaving(false);
         return;
       }
@@ -563,6 +574,7 @@ export default function AdminEditPage({
       const confirmed = confirm(
         `このイベントを完全削除します。\n\n` +
           `・AI予測 ${predictionsSnapshot.size} 件を削除します\n` +
+          `・結果訂正履歴 ${revisionsSnapshot.size} 件を削除します\n` +
           `・イベント本体を削除します\n` +
           `・旧 races データも削除します\n` +
           `・削除後は元に戻せません\n\n` +
@@ -574,10 +586,21 @@ export default function AdminEditPage({
         return;
       }
 
+      // event/race/predictions/resultRevisionsを必ず同一batchに含める。
+      // firestore.rules(PR-2d-2a2)のresultRevisions delete条件は
+      // 「同一操作完了後に親eventが存在しない(existsAfter=false)」ことを要求するため、
+      // event本体の削除と同一batchでなければresultRevisionsのdeleteが拒否される。
+      // 注意(best-effort cleanup): このgetDocs〜commitの間に別セッションが新たな
+      // 訂正を行いrevisionを追加した場合、その新規revisionは事前snapshotに含まれず
+      // 削除対象から漏れる(孤児化する)。完全に原子的な削除ではない。
       const batch = writeBatch(db);
 
       predictionsSnapshot.forEach((predictionDoc) => {
         batch.delete(predictionDoc.ref);
+      });
+
+      revisionsSnapshot.forEach((revisionDoc) => {
+        batch.delete(revisionDoc.ref);
       });
 
       batch.delete(doc(db, "events", id));
