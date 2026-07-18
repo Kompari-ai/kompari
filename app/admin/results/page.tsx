@@ -48,6 +48,37 @@ import {
 
 type StatusFilter = "all" | "open" | "finished";
 
+// saveResultが実際に呼出し元へ返す結果(PR-2e-0a、pure scaffolding)。
+// metadata/initial-settlementはrevisionを持たない(revisionを書かない・使わないため)。
+// single-winner-correctionのみ、transactionが採番した訂正後のrevision(nextRevision)を持つ。
+// 訂正前の基準revisionではないことに注意。
+type SaveResultOutcome =
+  | {
+      ok: true;
+      kind: "metadata";
+      winner: string;
+    }
+  | {
+      ok: true;
+      kind: "initial-settlement";
+      winner: string;
+    }
+  | {
+      ok: true;
+      kind: "single-winner-correction";
+      winner: string;
+      nextRevision: number;
+    }
+  | {
+      ok: false;
+      reason:
+        | "cancelled"
+        | "blocked"
+        | "conflict"
+        | "validation-error"
+        | "failed";
+    };
+
 // P6-4b: event行のreason簡易内訳を安定表示するための固定順序。
 // Firestore snapshot/Mapの挿入順に依存させないため、field順(main→ai→isMock→predictionSource)
 // →同一field内はreason markerの昇順、という静的な順序をハードコードする。
@@ -274,7 +305,10 @@ export default function AdminResultsPage() {
   const openCount = (events ?? []).filter((event) => !isFinished(event)).length;
   const finishedCount = (events ?? []).filter((event) => isFinished(event)).length;
 
-  const saveResult = async (event: KompariEvent, winner: string) => {
+  const saveResult = async (
+    event: KompariEvent,
+    winner: string
+  ): Promise<SaveResultOutcome> => {
     const trimmedWinner = winner.trim();
     const candidates = event.candidates ?? [];
     const originalWinner = getResultWinner(event);
@@ -285,7 +319,7 @@ export default function AdminResultsPage() {
       alert(
         "確定済みの結果は削除できません。訂正が必要な場合は、正しい候補を選択してください。"
       );
-      return;
+      return { ok: false, reason: "blocked" };
     }
 
     if (winnerChanged && trimmedWinner !== "") {
@@ -298,7 +332,7 @@ export default function AdminResultsPage() {
         alert(
           "選択された結果は候補一覧に含まれていないため保存できません。候補一覧を確認してください。"
         );
-        return;
+        return { ok: false, reason: "blocked" };
       }
     }
 
@@ -333,7 +367,7 @@ export default function AdminResultsPage() {
       );
 
       if (!confirmed) {
-        return;
+        return { ok: false, reason: "cancelled" };
       }
 
       intentKind = "single-winner-correction";
@@ -346,7 +380,7 @@ export default function AdminResultsPage() {
       alert(
         "この結果は現在の管理画面では変更できない形式です。開発者に確認してください。"
       );
-      return;
+      return { ok: false, reason: "blocked" };
     }
 
     const eventRef = doc(db, "events", event.id);
@@ -360,7 +394,7 @@ export default function AdminResultsPage() {
         const user = auth.currentUser;
         const correctedBy = user ? { uid: user.uid, email: user.email } : undefined;
 
-        await runTransaction(db, async (transaction) => {
+        const nextRevision = await runTransaction(db, async (transaction) => {
           // 全readをwriteより先に行う(Firestore transactionの公式要件)。
           const snapshot = await transaction.get(eventRef);
 
@@ -419,6 +453,13 @@ export default function AdminResultsPage() {
 
           return plan.nextRevision;
         });
+
+        return {
+          ok: true,
+          kind: "single-winner-correction",
+          winner: trimmedWinner,
+          nextRevision,
+        };
       } else {
         // intentKindはmetadataまたはinitial-settlementのみ。single-winner-correction用の
         // buildResultWriteUpdates呼出しはここでは行わない(transaction経路と排他)。
@@ -437,19 +478,26 @@ export default function AdminResultsPage() {
           updatedAt: serverTimestamp(),
         });
         await batch.commit();
+
+        return intentKind === "metadata"
+          ? { ok: true, kind: "metadata", winner: trimmedWinner }
+          : { ok: true, kind: "initial-settlement", winner: trimmedWinner };
       }
     } catch (error) {
       if (error instanceof ResultRevisionConflictError) {
         alert(
           "他の変更と競合しました。最新の状態を確認して再度お試しください。"
         );
+        return { ok: false, reason: "conflict" };
       } else if (error instanceof ResultRevisionValidationError) {
         alert("結果の状態が想定外のため訂正できません。");
+        return { ok: false, reason: "validation-error" };
       } else {
         console.error(error);
         alert(
           "結果の保存に失敗しました。Googleログイン中のメールアドレスとFirestoreルールを確認してください。"
         );
+        return { ok: false, reason: "failed" };
       }
     } finally {
       setSavingId("");
