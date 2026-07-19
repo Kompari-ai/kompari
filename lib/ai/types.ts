@@ -18,12 +18,13 @@ export type PredictionOutput = {
   factorKeys?: string[];
 };
 
-// ===== PR-3a: prediction provenance (pure scaffolding, unwired) =====
+// ===== PR-3: prediction provenance =====
 //
 // これらの型はJSON parse後のparsed.mainが、候補集合との突合・fallback適用前に
 // どのようなraw値だったかを表す契約である。canonical mainそのものではない。
-// PR-3a時点ではPredictionOutput/parsePredictionOutput/provider adapter/route/
-// Firestore write/read/diagnosticsのいずれにも未接続(scaffoldingのみ)。
+// PR-3aで型契約を追加し、PR-3b-2でprovenance-aware parser wrapperへ接続、
+// PR-3cでreal provider adapter・route response validation・client validation・
+// Firestore保存へ接続した。read parser・diagnostics・UI表示は未接続。
 
 // JSON parse後のparsed.mainのraw値契約。
 // stringだった場合だけproviderRawMainを保持する(providers document がpublic readのため、

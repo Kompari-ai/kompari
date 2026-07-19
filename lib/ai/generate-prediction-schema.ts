@@ -41,13 +41,13 @@ const predictionFactorSchema = z.object({
 
 // ===== prediction provenance schemas =====
 //
-// PR-3aで独立schemaとして追加された。PR-3cでGenerationProvenanceSchemaだけを
-// active response schema(GeneratePredictionResponseSchema)へ接続する。
-// RawMainProvenanceSchema / PredictionAttemptProvenanceSchema /
-// InitialMissingFieldsSchemaはGenerationProvenanceSchemaを通して間接的に
-// 使用される(active schemaから直接参照されるのはGenerationProvenanceSchemaのみ)。
-// active schemaより前に定義する: GenerationProvenanceSchemaはこの後で定義される
-// GeneratePredictionResponseSchemaから参照されるため、前方参照(TDZ)を避ける。
+// PR-3aで独立schemaとして追加し、PR-3cでGenerationProvenanceSchemaを
+// active response schema(GeneratePredictionResponseSchema)へ接続した。
+// PredictionAttemptProvenanceSchemaとInitialMissingFieldsSchemaは
+// GenerationProvenanceSchemaを通して間接的に使用される。
+// RawMainProvenanceSchemaは独立exportのままで、PredictionAttemptProvenanceSchemaや
+// GenerationProvenanceSchemaへ合成されていない。
+// active schemaより前に定義し、後定義constへの直接参照によるTDZを避ける。
 
 const rawMainProvenanceStringBranch = z
   .object({

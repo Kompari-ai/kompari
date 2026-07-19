@@ -11,7 +11,8 @@ import {
 } from "@/lib/factors";
 
 // PR-3b-1: pickCandidateの内部判定結果契約(module-private、未export)。
-// PredictionAttemptProvenance/GenerationProvenanceへは未接続(この値はここでは消費しない)。
+// PR-3b-2でPredictionAttemptProvenance構築へ接続し、PR-3cでreal provider経路から
+// Firestore保存まで接続した。second/thirdの判定理由はprovenance対象外。
 type CandidateNonStringRawType =
   | "null"
   | "number"
@@ -173,8 +174,8 @@ function parsePredictionOutputCore(
 }
 
 // PR-3b-2: parsePredictionOutputCoreの結果からPredictionAttemptProvenanceを
-// 組み立てる。既存本番経路(parsePredictionOutput)からは呼ばれない
-// (parsePredictionOutputWithProvenance専用)。
+// 組み立てる。parsePredictionOutputWithProvenance専用であり、PR-3c以降は
+// real provider adapterが同wrapperを使用してrouteへattempt provenanceを返す。
 function buildAttemptProvenance(
   core: ParsedPredictionCoreResult
 ): PredictionAttemptProvenance {
@@ -245,7 +246,8 @@ function buildAttemptProvenance(
 }
 
 // PR-3b-2: 既存exportの互換wrapper。signature・戻り値とも無変更。
-// provider adapterは引き続きこの関数を経由し、共有coreのoutputだけを受け取る。
+// 現在のreal provider adapterはprovenance-aware wrapperを使うが、既存契約を
+// 削除せず、outputだけが必要な呼出し向けの互換exportとして維持する。
 export function parsePredictionOutput(
   raw: string,
   candidates: string[],
@@ -254,8 +256,9 @@ export function parsePredictionOutput(
   return parsePredictionOutputCore(raw, candidates, category).output;
 }
 
-// PR-3b-2: 新規export。PR-3b-2時点では既存provider adapter/route/clientの
-// いずれからも呼ばれない未配線の公開関数。
+// PR-3b-2: provenance-aware parser wrapperとして追加。
+// PR-3c以降はreal provider adapterから呼ばれ、outputとattemptProvenanceを
+// routeへ返す。routeがGenerationProvenanceへ統合して成功responseへ載せる。
 export function parsePredictionOutputWithProvenance(
   raw: string,
   candidates: string[],

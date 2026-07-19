@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-07-19（PR-2e-0a/0b 本番受入れ完了）
+最終更新: 2026-07-20（PR-3 provenance 本番受入れ完了）
 
 ## 完了フェーズ
 
@@ -2884,3 +2884,238 @@ revisionは無条件のimmutableではありません。正確には、連番訂
   initial-settlement 分岐である
 * 同じくレビュー中に「transaction は winner + revision を判定する」旨の記述が
   複数回あったが誤り。transaction が比較するのは expectedOriginalWinner のみである
+
+## PR-3(A3 semantic provenance)本番受入れ完了
+
+予測生成時にしか観測できず、後から復元できない情報をprediction documentへ
+記録する。対象は「AIが返した本命を、parserがどう解釈してcanonical mainを
+決めたか」である。
+
+### commit / deployment
+
+- PR-3a: `bc0b651` `feat(ai): define prediction provenance contract as unwired types`
+  - Vercel: `dpl_2H6DbK2itqdF2wCrnWSRsW8J4mdf`(READY)
+- PR-3b-1: `9fefc80` `refactor(ai): classify candidate pick failures without changing results`
+  - Vercel: `dpl_2kbgZqVHYEhs6UU6aS2XmQqR8r7s`(READY)
+- PR-3b-2: `61f8019` `feat(ai): build isolated prediction attempt provenance`
+  - Vercel: `dpl_9nnZo7QWNMPybCbNhRfnkZJinT5C`(READY)
+- PR-3c: `4e37db2` `feat(ai): persist validated generation provenance`
+  - Vercel: `dpl_CecLHDwxaXQDkX47KSh9WeQDt5y8`(READY、production、commit一致、aliasErrorなし)
+
+### データフロー
+
+```text
+provider SDK response
+  → parsePredictionOutputWithProvenance(lib/ai/parse.ts)
+  → { output, attemptProvenance }
+  → callRealApiの明示的nested result(route.ts)
+  → GenerationProvenance構築(初回count:1 / retry count:2)
+  → GeneratePredictionResponseSchemaで検証(server)
+  → 同一schemaで再検証(client)
+  → KompariPredictionDoc
+  → Firestore full-replace保存
+```
+
+### 記録される内容
+
+`generationProvenance`(official-aiのみ。mockには付けない)
+
+| 経路 | count | 内容 |
+|---|---:|---|
+| 実AI初回成功 | 1 | finalAttemptのみ |
+| 実AI retry成功 | 2 | initialMissingFields + initialAttempt + finalAttempt |
+| mock | — | generationProvenanceを付けない |
+
+`PredictionAttemptProvenance`は6 branchの判別可能unionで、矛盾した組合せを
+型で構築できない。判定優先順位は以下で固定する。
+
+```text
+1. JSON.parse失敗         → json-parse-failed / rawMainType: unavailable
+2. main propertyなし      → main-missing / rawMainType: missing
+3. mainがstring以外       → main-non-string / rawMainType: 実際の型
+4. mainが候補と完全一致   → canonical / providerRawMainあり / fallbackReasonなし
+5. mainが空文字・空白のみ → main-blank / providerRawMainあり
+6. mainが候補と不一致     → main-not-in-candidates / providerRawMainあり
+```
+
+候補完全一致の判定はblank判定より前である。空文字列または空白文字列そのものが
+候補集合に存在する場合、既存挙動どおりcanonicalとして採用するためである。
+現在のrouteは候補をtrimし、空文字を除外してからparserへ渡すため、
+通常の生成API経路で空文字候補は作られないが、parser単体の判定順は維持する。
+
+### providerRawMainの定義(取り違え注意)
+
+- **JSON parse後・候補突合前の`parsed.main`**を指す。providerの生レスポンス
+  全文でも、code fence除去後のJSON全文でも、fallback後のcanonical mainでもない
+- **stringだった場合のみ保存する**。canonical / main-blank /
+  main-not-in-candidatesの3 branchのみが保持し、main-missing /
+  main-non-string / json-parse-failedはrawMainTypeだけを記録する
+- 理由: `events/{eventId}/predictions/{predictionId}`はFirestore Rulesで
+  public read可能である。生レスポンス全文を保存すると、プロンプトインジェクション等を
+  含む任意のprovider出力全体が公開される。非文字列を`String()`で文字列化すると
+  元の型情報が失われ、nullと文字列`"null"`を区別できなくなる
+
+### 防御の所在(取り違え注意)
+
+| 対象 | 保証の種類 | 実装箇所 |
+|---|---|---|
+| attempt provenanceの組合せ矛盾 | 型 + runtime | `lib/ai/types.ts`の判別可能union + `PredictionAttemptProvenanceSchema` |
+| GenerationProvenanceの構造 | 型 + runtime | `GenerationProvenance` union + strict `GenerationProvenanceSchema` |
+| official-aiにprovenance必須 | **runtimeのみ(inferred型ではoptional)** | `GeneratePredictionResponseSchema`の`superRefine` |
+| mockにprovenance禁止 | **runtimeのみ** | 同上 |
+| wrapper fieldのtop-level混入 | runtime + 構造 | `z.never().optional()` + 明示payload構築 |
+
+`generationProvenance`はactive response schemaのobject shape上
+`.optional()`であり、official-aiでの必須性は`superRefine`のcustom issueで
+担保する。したがって`GeneratePredictionResponse`のinferred型ではoptionalのままで、
+official-aiなのにprovenanceを持たない値を型として構築できる。
+
+`predictionSource`を判別軸とするunionにすれば、型レベルの相関保証も可能だった。
+今回は既存active schemaのshape・passthrough互換性を維持し、
+PR-3cをproviderからFirestoreまでの原子的な接続に限定するため、
+optional field + superRefineによるruntime保証を採用した。
+
+PR-3a以降の「矛盾状態を型で作れなくする」という原則に対し、
+active API responseの`predictionSource`と`generationProvenance`の相関だけは、
+意図的にruntime境界へ残している。
+
+### wrapper漏洩の防止(二重)
+
+`callRealApi`はprovider結果をspreadせず、
+`{ output, attemptProvenance, aiProvider, aiModel, aiModelId }`を明示構築する。
+routeは`...realResult.output`または`...retryResult.output`だけを展開し、
+wrapper全体をsuccess responseへspreadしない。
+
+これが第一防御である。
+
+第二防御としてresponse schemaがtop-levelの`output`と
+`attemptProvenance`を`z.never().optional()`で拒否する。
+将来wrapper全体のspreadが誤って再導入されても、JSONで表現可能な値を持つ
+両fieldはruntime validationで停止する。
+
+`z.never()`を追加しなかった場合、schemaは`.passthrough()`であるため、
+`output`と`attemptProvenance`は未知fieldとして`parsed.data`へ残り、
+clientの`predDoc` spreadを経てFirestoreへ到達し得た。
+現在はこの2fieldだけは明示拒否される。
+
+ただし、それ以外の未知fieldは依然として`.passthrough()`を通過し得る。
+
+`z.never().optional()`はobject / null / string / number / array等、
+JSONで表現可能な値を拒否する。JavaScript上の明示的なundefinedはoptional
+semantics上許容され得るが、undefinedはJSONへ出力されず、
+Firestore保存前にも`removeUndefinedFields`で除去されるため、
+今回のwrapper漏洩防止対象ではない。
+
+### 新しい502経路(挙動変更)
+
+retry対象の欠損fieldが、
+
+```text
+["reason"]
+["evidence"]
+["reason", "evidence"]
+```
+
+以外だった場合、2回目のprovider呼出しの**前**に502で停止する。
+
+現在のrouteは`normalizeCandidates`で候補を文字列化・trimし、
+空文字を除外したうえで、2件以上の非空候補またはdefault candidatesを
+parserへ渡す。parserは`mainPick.value ?? candidates[0] ?? "未定"`で
+mainを必ず非空値へfallbackする。
+
+したがって現在の実provider経路では、`["main"]`等は到達不能である。
+これはparser単独ではなく、routeの候補正規化とparser fallbackの
+組合せによる保証である。
+
+通常経路の挙動は変わらないが、これは「完全な挙動不変」ではない。
+将来この前提が崩れた場合に、unsafe castや虚偽のprovenanceを作らず
+停止するための、**到達不能経路に対する意図的なfail-closed追加**である。
+
+### schema宣言順
+
+`GenerationProvenanceSchema`をactive response schemaから参照するため、
+`GeneratePredictionResponseSchema`・そのinferred型・
+`assertPredictionCandidates`をprovenance schema群の後ろへ移動した。
+
+後定義constを初期化前に直接参照すると、TDZによりmodule load時に
+`ReferenceError`となる危険がある。
+最終実装では依存されるprovenance schema群を先に定義し、
+
+```text
+npx tsc --noEmit
+npm run build
+build済みroute moduleの直接load
+```
+
+が成功することを確認した。
+
+`z.lazy`は使用していない。
+`GenerationProvenanceSchema`は`GeneratePredictionResponseSchema`を
+参照しないため、真の循環依存ではない。
+
+### RawMainProvenanceSchemaの位置づけ
+
+`RawMainProvenance`型と`RawMainProvenanceSchema`は、
+PR-3aでraw main単体の契約として追加した。
+
+ただし現在の`PredictionAttemptProvenance`は許可された6 branchを
+個別の判別可能unionとして直接表現しており、
+`RawMainProvenanceSchema`とのintersectionや合成を使用していない。
+
+したがって`RawMainProvenanceSchema`は独立したexportのままで、
+`PredictionAttemptProvenanceSchema`または
+`GenerationProvenanceSchema`から参照されていない。
+
+### 本番受入れで確認済み(削除済みfixtureで実施)
+
+- 実AI(ChatGPT)初回成功。HTTP 200、Firestore保存成功
+- `generationProvenance`: version 1 / generationAttemptCount 1 /
+  finalAttemptあり / initialAttemptなし / initialMissingFieldsなし
+- `finalAttempt`: parseStatus parsed / semanticStatus canonical /
+  rawMainType string / providerRawMain `"テスト候補A"` /
+  fallbackReasonなし
+- `providerRawMain === prediction.main === "テスト候補A"`
+- prediction documentのtop-levelに`output` /
+  `attemptProvenance`が存在しない
+- 既存field(main / second / third / reason / evidence /
+  usedFactors / factorKeys / aiProvider / aiModel / aiModelId)が
+  従来どおり保存される
+- `predictionSource: "official-ai"` / `isMock: false`
+- テストfixture削除後、Firestoreのeventsは既存2件へ戻り、
+  管理画面も未入力0件 / 入力済み2件 / 総数2件へ原状復帰した
+
+### 未検証・既知境界
+
+1. **retry(generationAttemptCount: 2)は手動未実測**。
+   promptがreason / evidenceを必須と明示しており、
+   欠損を安全かつ決定的に発生させる方法がない。
+   型・strict schema・コードレビューからの受入れ
+2. **mockのFirestore保存は未実測**。
+   管理画面の単体・全AI生成は`allowMock: false`固定であり、
+   mock responseは通常のFirestore保存経路へ到達しない。
+   API契約とfull-replaceコードからの論理確認
+3. **semantic-fallback branchは本番未実測**。
+   受入れテストではAIが候補どおりに回答し、canonicalのみ観測した。
+   fallback系5 branchは実装・型・strict schemaのレビューで契約確認した
+4. **negative matrixは実schema moduleをimportしたテストではない**。
+   TypeScript test runnerが未導入のため、同じZodを使ってschemaロジックを
+   独立再現し、14ケースを確認した
+5. `RawMainProvenanceSchema`と`RawMainProvenance`は、
+   PR-3a以降もattempt / generation schemaへ合成されておらず、
+   独立したexportのままである
+6. `.passthrough()`は維持されている。
+   `output`と`attemptProvenance`は明示拒否されるが、
+   それ以外の未知fieldは依然として通過し保存され得る
+
+### 後続課題
+
+- `.passthrough()`の撤廃またはstrict化
+  - 型に現れない未知fieldがFirestoreへ到達し得る既存の危険を閉じる
+- parser / schemaのunit test基盤導入
+  - 現状test runnerがなく、検証のたびにロジックを独立再現している
+- read parser / diagnosticsでの`generationProvenance`検証
+- provenanceのUI表示
+- legacy predictionへのbackfillは行わない
+  - 生成時の事実は事後に復元できず、推定値を入れることは捏造にあたる
+- PR-2f: transactionへの`expectedRevision`追加
+  - PR-2e-0からの継続課題
