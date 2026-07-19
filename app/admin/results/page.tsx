@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collection,
   collectionGroup,
@@ -37,6 +37,7 @@ import {
   buildResultRevisionEntry,
   canCorrectSingleWinner,
   planSingleWinnerCorrection,
+  resolveCurrentRevision,
   resultRevisionDocId,
 } from "@/lib/result-revision";
 import { classifyPredictionSourceForDiagnostics } from "@/lib/prediction-diagnostics";
@@ -77,6 +78,31 @@ type SaveResultOutcome =
         | "conflict"
         | "validation-error"
         | "failed";
+    };
+
+// PR-2e-0b: select変更はローカルdraftのみを更新し(Firestore writeなし)、
+// 「結果を保存」ボタン押下時にのみsaveResultを起動する契約のための型。
+type DraftResult = {
+  selected: string;
+  baseWinner: string;
+  baseRevision: number;
+  version: number;
+};
+
+// saveResult成功後、snapshotで反映されるまでの間、連続保存を止めるための
+// 未ack保存結果。nextRevisionはsingle-winner-correctionのtransactionが実際に
+// 採番した訂正後revisionで、draft.baseRevision(訂正前の基準revision)とは別物。
+type PendingResultSave =
+  | {
+      kind: "initial-settlement";
+      winner: string;
+      version: number;
+    }
+  | {
+      kind: "single-winner-correction";
+      winner: string;
+      nextRevision: number;
+      version: number;
     };
 
 // P6-4b: event行のreason簡易内訳を安定表示するための固定順序。
@@ -141,6 +167,30 @@ export default function AdminResultsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [savingId, setSavingId] = useState("");
+
+  // PR-2e-0b: select変更中のローカルdraftと、保存後snapshot ackを待っている
+  // pending保存結果。Event ID(string)をkeyにしたMap。
+  const [draftMap, setDraftMap] = useState<Map<string, DraftResult>>(
+    () => new Map()
+  );
+
+  const [pendingMap, setPendingMap] =
+    useState<Map<string, PendingResultSave>>(
+      () => new Map()
+    );
+
+  // Event単位のdraft世代カウンタ。draft/pendingが削除されても値は保持し、
+  // 同じEventでversionを1へ戻さない。
+  const draftVersionCountersRef =
+    useRef<Map<string, number>>(new Map());
+
+  function nextDraftVersion(eventId: string): number {
+    const next =
+      (draftVersionCountersRef.current.get(eventId) ?? 0) + 1;
+
+    draftVersionCountersRef.current.set(eventId, next);
+    return next;
+  }
 
   const events = useMemo<KompariEvent[] | null>(() => {
     if (!eventDocs || !predsMap) return null;
@@ -269,6 +319,82 @@ export default function AdminResultsPage() {
     );
     return () => { eventsUnsub(); predsUnsub(); };
   }, []);
+
+  // PR-2e-0b: snapshot acknowledgment専用effect。pendingがあるEventだけを対象に、
+  // 最新snapshotがその保存結果を反映済みかを確認し、ack成立分だけpending/draftを
+  // 選択的に削除する。全draftをsnapshot値で上書きする全面同期は行わない。
+  useEffect(() => {
+    if (!events) return;
+    if (pendingMap.size === 0) return;
+
+    const eventsById = new Map(events.map((e) => [e.id, e]));
+    const acknowledgedEntries: Array<[string, PendingResultSave]> = [];
+
+    for (const [eventId, pending] of pendingMap.entries()) {
+      const event = eventsById.get(eventId);
+      if (!event) continue;
+
+      const persistedWinner = getResultWinner(event);
+
+      let persistedRevision: number | null = null;
+      try {
+        persistedRevision = resolveCurrentRevision(event.result?.revision);
+      } catch (error) {
+        console.error(error);
+        continue;
+      }
+
+      let acknowledged: boolean;
+
+      if (pending.kind === "single-winner-correction") {
+        acknowledged =
+          persistedRevision > pending.nextRevision ||
+          (persistedRevision === pending.nextRevision &&
+            persistedWinner === pending.winner);
+      } else {
+        acknowledged =
+          persistedWinner === pending.winner || persistedRevision >= 1;
+      }
+
+      if (acknowledged) {
+        acknowledgedEntries.push([eventId, pending]);
+      }
+    }
+
+    if (acknowledgedEntries.length === 0) return;
+
+    setPendingMap((current) => {
+      let changed = false;
+      const next = new Map(current);
+
+      for (const [eventId, acknowledgedPending] of acknowledgedEntries) {
+        const currentPending = next.get(eventId);
+
+        if (currentPending?.version === acknowledgedPending.version) {
+          next.delete(eventId);
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+
+    setDraftMap((current) => {
+      let changed = false;
+      const next = new Map(current);
+
+      for (const [eventId, acknowledgedPending] of acknowledgedEntries) {
+        const draft = next.get(eventId);
+
+        if (draft?.version === acknowledgedPending.version) {
+          next.delete(eventId);
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [events, pendingMap]);
 
   const filteredEvents = useMemo(() => {
     if (!events) return [];
@@ -504,8 +630,163 @@ export default function AdminResultsPage() {
     }
   };
 
-  const clearResult = async (event: KompariEvent) => {
-    await saveResult(event, "");
+  // PR-2e-0b: select変更はローカルdraft更新のみ(Firestore writeなし・confirmなし)。
+  // pending分岐をdraft不在分岐より先に判定する(pending中の再編集は新draft世代とする)。
+  function handleResultSelectChange(event: KompariEvent, nextSelected: string) {
+    const pending = pendingMap.get(event.id);
+    const persistedWinner = getResultWinner(event);
+
+    let nextDraft: DraftResult;
+
+    if (pending) {
+      const version = nextDraftVersion(event.id);
+
+      nextDraft =
+        pending.kind === "single-winner-correction"
+          ? {
+              selected: nextSelected,
+              baseWinner: pending.winner,
+              baseRevision: pending.nextRevision,
+              version,
+            }
+          : {
+              selected: nextSelected,
+              baseWinner: pending.winner,
+              baseRevision: 0,
+              version,
+            };
+    } else {
+      const existingDraft = draftMap.get(event.id);
+
+      if (!existingDraft) {
+        let baseRevision: number;
+
+        try {
+          baseRevision = resolveCurrentRevision(event.result?.revision);
+        } catch (error) {
+          console.error(error);
+          alert(
+            "この結果は状態が想定外のため編集できません。開発者に確認してください。"
+          );
+          return;
+        }
+
+        nextDraft = {
+          selected: nextSelected,
+          baseWinner: persistedWinner,
+          baseRevision,
+          version: nextDraftVersion(event.id),
+        };
+      } else {
+        nextDraft = {
+          ...existingDraft,
+          selected: nextSelected,
+        };
+      }
+    }
+
+    if (
+      nextDraft.selected === persistedWinner &&
+      nextDraft.baseWinner === persistedWinner
+    ) {
+      setDraftMap((current) => {
+        if (!current.has(event.id)) return current;
+        const next = new Map(current);
+        next.delete(event.id);
+        return next;
+      });
+      return;
+    }
+
+    setDraftMap((current) => {
+      const next = new Map(current);
+      next.set(event.id, nextDraft);
+      return next;
+    });
+  }
+
+  // PR-2e-0b: 「結果を保存」ボタンからだけsaveResultへ到達する経路。
+  const handleSaveClick = async (event: KompariEvent) => {
+    const draft = draftMap.get(event.id);
+    if (!draft) return;
+
+    const persistedWinner = getResultWinner(event);
+
+    let persistedRevision: number;
+    try {
+      persistedRevision = resolveCurrentRevision(event.result?.revision);
+    } catch (error) {
+      console.error(error);
+      alert(
+        "この結果は状態が想定外のため編集できません。開発者に確認してください。"
+      );
+      return;
+    }
+
+    // 非atomicな早期警告。既存transactionのexpectedOriginalWinner比較を代替しない。
+    if (
+      draft.baseWinner !== persistedWinner ||
+      draft.baseRevision !== persistedRevision
+    ) {
+      alert(
+        "他の端末で結果が変更されました。画面を再読み込みしてから操作してください。"
+      );
+      return;
+    }
+
+    const outcome = await saveResult(event, draft.selected);
+
+    if (!outcome.ok) {
+      return;
+    }
+
+    if (outcome.kind === "metadata") {
+      setDraftMap((current) => {
+        if (!current.has(event.id)) return current;
+        const next = new Map(current);
+        next.delete(event.id);
+        return next;
+      });
+      return;
+    }
+
+    const pendingSave: PendingResultSave =
+      outcome.kind === "initial-settlement"
+        ? {
+            kind: "initial-settlement",
+            winner: outcome.winner,
+            version: draft.version,
+          }
+        : {
+            kind: "single-winner-correction",
+            winner: outcome.winner,
+            nextRevision: outcome.nextRevision,
+            version: draft.version,
+          };
+
+    setPendingMap((current) => {
+      const next = new Map(current);
+      next.set(event.id, pendingSave);
+      return next;
+    });
+  };
+
+  // PR-2e-0b: クリアはローカルstateの削除のみ(Firestore writeなし・confirmなし)。
+  // saveResult(event, "")呼出しは廃止する。
+  const handleClearClick = (event: KompariEvent) => {
+    setDraftMap((current) => {
+      if (!current.has(event.id)) return current;
+      const next = new Map(current);
+      next.delete(event.id);
+      return next;
+    });
+
+    setPendingMap((current) => {
+      if (!current.has(event.id)) return current;
+      const next = new Map(current);
+      next.delete(event.id);
+      return next;
+    });
   };
 
   if (events === null) {
@@ -821,6 +1102,11 @@ export default function AdminResultsPage() {
               event.predictions.filter(isOfficialPrediction);
             const consensus = getConsensus(event);
             const saving = savingId === event.id;
+            const draft = draftMap.get(event.id);
+            const pending = pendingMap.get(event.id);
+            const selectedResult = draft?.selected ?? resultWinner;
+            const hasUnsavedChange =
+              draft !== undefined && draft.selected !== resultWinner;
 
             return (
               <article
@@ -908,8 +1194,10 @@ export default function AdminResultsPage() {
                   </span>
 
                   <select
-                    value={resultWinner}
-                    onChange={(e) => saveResult(event, e.target.value)}
+                    value={selectedResult}
+                    onChange={(e) =>
+                      handleResultSelectChange(event, e.target.value)
+                    }
                     disabled={saving}
                     className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-sm font-bold outline-none disabled:bg-gray-100"
                   >
@@ -937,11 +1225,17 @@ export default function AdminResultsPage() {
                   </div>
                 )}
 
+                {hasUnsavedChange && (
+                  <div className="mt-2 rounded-2xl bg-amber-50 p-3 text-center text-xs font-extrabold text-amber-700">
+                    未保存の変更があります
+                  </div>
+                )}
+
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => saveResult(event, resultWinner)}
-                    disabled={saving}
+                    onClick={() => handleSaveClick(event)}
+                    disabled={saving || pending !== undefined || !hasUnsavedChange}
                     className="rounded-2xl bg-blue-700 py-4 text-sm font-extrabold text-white disabled:bg-gray-300"
                   >
                     {saving ? "保存中..." : "結果を保存"}
@@ -949,8 +1243,10 @@ export default function AdminResultsPage() {
 
                   <button
                     type="button"
-                    onClick={() => clearResult(event)}
-                    disabled={saving}
+                    onClick={() => handleClearClick(event)}
+                    disabled={
+                      saving || (draft === undefined && pending === undefined)
+                    }
                     className="rounded-2xl bg-gray-100 py-4 text-sm font-extrabold text-gray-700 disabled:bg-gray-200"
                   >
                     クリア
