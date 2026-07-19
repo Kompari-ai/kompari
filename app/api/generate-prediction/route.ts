@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getAiConfigByDisplayName, resolveModelId, resolveApiKey } from "@/lib/ai/ai-config";
-import type { PredictionInput } from "@/lib/ai/types";
+import type {
+  GenerationProvenance,
+  InitialMissingFields,
+  ParsedPredictionOutputWithProvenance,
+  PredictionInput,
+} from "@/lib/ai/types";
 import { callOpenAiCompatible } from "@/lib/ai/providers/openai-compatible";
 import { callGemini } from "@/lib/ai/providers/gemini";
 import { callAnthropic } from "@/lib/ai/providers/anthropic";
@@ -291,21 +296,34 @@ function getMissingCoreFields(result: {
   return missing;
 }
 
+// PR-3c: getMissingCoreFieldsの戻り値(string[])を、InitialMissingFieldsが
+// 許容する3パターンだけへ安全にnarrowするtype guard。castは使わない。
+function isInitialMissingFields(
+  fields: readonly string[]
+): fields is InitialMissingFields {
+  return (
+    (fields.length === 1 &&
+      (fields[0] === "reason" || fields[0] === "evidence")) ||
+    (fields.length === 2 &&
+      fields[0] === "reason" &&
+      fields[1] === "evidence")
+  );
+}
+
+// PR-3c: provider adapterの戻り値(output/attemptProvenance)にaiProvider/aiModel/
+// aiModelIdを加えた、callRealApi専用のmodule-private型。lib/ai/types.tsへは追加しない
+// (route.ts外から参照される共有契約ではないため)。
+type RealPredictionResult = ParsedPredictionOutputWithProvenance & {
+  aiProvider: string;
+  aiModel: string;
+  aiModelId: string;
+};
+
 // 実API呼び出し。キー未設定またはエラー時は null を返してモックに委ねる。
 async function callRealApi(
   aiName: string,
   input: PredictionInput
-): Promise<{
-  main: string;
-  second?: string;
-  third?: string;
-  confidence?: string;
-  reason?: string;
-  evidence?: string;
-  aiProvider: string;
-  aiModel: string;
-  aiModelId: string;
-} | null> {
+): Promise<RealPredictionResult | null> {
   const config = getAiConfigByDisplayName(aiName);
   if (!config) return null;
 
@@ -326,7 +344,8 @@ async function callRealApi(
     }
 
     return {
-      ...result,
+      output: result.output,
+      attemptProvenance: result.attemptProvenance,
       aiProvider: config.provider,
       aiModel: config.model,
       aiModelId: resolveModelId(config),
@@ -373,12 +392,33 @@ export async function POST(req: Request) {
     const realResult = await callRealApi(aiName, predictionInput);
 
     if (realResult) {
-      const missingFields = getMissingCoreFields(realResult);
+      const missingFields = getMissingCoreFields(realResult.output);
 
       if (missingFields.length > 0) {
         console.warn(
           `[${aiName}] core fields missing (${missingFields.join(", ")}), retrying once`
         );
+
+        // main欠損は現parserのfallbackにより実provider経路では到達不能なため、
+        // 通常はここで挙動は変わらない。ただし将来前提が崩れて["main"]等が
+        // 発生した場合に、unsafe castや虚偽provenanceを作らずretry前に停止する、
+        // 意図的なfail-closed追加(到達不能経路に対する新設の502)。
+        if (!isInitialMissingFields(missingFields)) {
+          console.error(
+            `[${aiName}] unexpected initial missing fields: ${missingFields.join(", ")}`
+          );
+
+          return NextResponse.json(
+            {
+              error: "AI response missing unsupported core fields",
+              aiName,
+              missingFields,
+            },
+            { status: 502 }
+          );
+        }
+
+        const initialMissingFields = missingFields;
 
         const retryResult = await callRealApi(aiName, predictionInput);
 
@@ -396,7 +436,7 @@ export async function POST(req: Request) {
           );
         }
 
-        const missingAfterRetry = getMissingCoreFields(retryResult);
+        const missingAfterRetry = getMissingCoreFields(retryResult.output);
 
         if (missingAfterRetry.length > 0) {
           console.error(
@@ -412,19 +452,41 @@ export async function POST(req: Request) {
           );
         }
 
+        const generationProvenance: GenerationProvenance = {
+          version: 1,
+          generationAttemptCount: 2,
+          initialMissingFields,
+          initialAttempt: realResult.attemptProvenance,
+          finalAttempt: retryResult.attemptProvenance,
+        };
+
         return createValidatedPredictionResponse({
           ai: aiName,
-          ...retryResult,
+          ...retryResult.output,
+          aiProvider: retryResult.aiProvider,
+          aiModel: retryResult.aiModel,
+          aiModelId: retryResult.aiModelId,
           isMock: false,
           predictionSource: "official-ai",
+          generationProvenance,
         });
       }
 
+      const generationProvenance: GenerationProvenance = {
+        version: 1,
+        generationAttemptCount: 1,
+        finalAttempt: realResult.attemptProvenance,
+      };
+
       return createValidatedPredictionResponse({
         ai: aiName,
-        ...realResult,
+        ...realResult.output,
+        aiProvider: realResult.aiProvider,
+        aiModel: realResult.aiModel,
+        aiModelId: realResult.aiModelId,
         isMock: false,
         predictionSource: "official-ai",
+        generationProvenance,
       });
     }
 

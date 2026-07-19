@@ -2,13 +2,16 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { AiConfig } from "@/lib/ai/ai-config";
 import { resolveModelId, resolveApiKey } from "@/lib/ai/ai-config";
 import { buildPredictionPrompt } from "@/lib/ai/prompt";
-import { parsePredictionOutput } from "@/lib/ai/parse";
-import type { PredictionInput, PredictionOutput } from "@/lib/ai/types";
+import { parsePredictionOutputWithProvenance } from "@/lib/ai/parse";
+import type {
+  ParsedPredictionOutputWithProvenance,
+  PredictionInput,
+} from "@/lib/ai/types";
 
 export async function callAnthropic(
   config: AiConfig,
   input: PredictionInput
-): Promise<PredictionOutput> {
+): Promise<ParsedPredictionOutputWithProvenance> {
   const apiKey = resolveApiKey(config.apiKeyEnv);
   const modelId = resolveModelId(config);
   const { system, user } = buildPredictionPrompt(input);
@@ -32,5 +35,5 @@ export async function callAnthropic(
     .replace(/\n?```\s*$/, "")
     .trim();
 
-  return parsePredictionOutput(cleaned || "{}", input.candidates, input.category);
+  return parsePredictionOutputWithProvenance(cleaned || "{}", input.candidates, input.category);
 }

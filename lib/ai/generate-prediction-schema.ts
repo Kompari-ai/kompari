@@ -39,86 +39,15 @@ const predictionFactorSchema = z.object({
   weight: z.number().optional(),
 });
 
-// 未知フィールドは.passthroughで保持する。検証成功後の利用は必ずparsed.dataとし、
-// 元のinput objectは使わない(呼び出し側の責務)。
-export const GeneratePredictionResponseSchema = z
-  .object({
-    ai: nonBlankString,
-    main: nonBlankString,
-    predictionSource: generatePredictionSourceSchema,
-    isMock: z.boolean(),
-
-    second: z.string().optional(),
-    third: z.string().optional(),
-    confidence: z.string().optional(),
-    reason: z.string().optional(),
-    evidence: z.string().optional(),
-    aiProvider: z.string().optional(),
-    aiModel: z.string().optional(),
-    aiModelId: z.string().optional(),
-    usedFactors: z.array(predictionFactorSchema).optional(),
-    factorKeys: z.array(z.string()).optional(),
-  })
-  .passthrough()
-  .superRefine((data, ctx) => {
-    // predictionSource と isMock の対応を双方向に保証する。
-    // official-ai + isMock:true、mock + isMock:false はいずれも矛盾データとして失敗させる。
-    if (data.predictionSource === "mock" && data.isMock !== true) {
-      ctx.addIssue({
-        code: "custom",
-        message: 'predictionSource "mock" requires isMock === true',
-        path: ["isMock"],
-      });
-    }
-
-    if (data.predictionSource === "official-ai" && data.isMock !== false) {
-      ctx.addIssue({
-        code: "custom",
-        message: 'predictionSource "official-ai" requires isMock === false',
-        path: ["isMock"],
-      });
-    }
-  });
-
-export type GeneratePredictionResponse = z.infer<
-  typeof GeneratePredictionResponseSchema
->;
-
-// 構造schemaとは別関数として、候補集合とのドメイン整合性を検証する。
-// main/second/thirdは候補集合と完全一致する場合のみ許可する
-// (trim・表記変換・部分一致・近似一致・先頭候補へのfallbackは行わない)。
-// 候補集合が空の場合はmainを正当化できないため必ず失敗する。
-export function assertPredictionCandidates(
-  data: GeneratePredictionResponse,
-  candidates: readonly string[]
-): void {
-  const candidateSet = new Set(candidates);
-
-  if (!candidateSet.has(data.main)) {
-    throw new Error(
-      `main "${data.main}" is not in the candidate set`
-    );
-  }
-
-  if (data.second !== undefined && !candidateSet.has(data.second)) {
-    throw new Error(
-      `second "${data.second}" is not in the candidate set`
-    );
-  }
-
-  if (data.third !== undefined && !candidateSet.has(data.third)) {
-    throw new Error(
-      `third "${data.third}" is not in the candidate set`
-    );
-  }
-}
-
-// ===== PR-3a: prediction provenance schemas (pure scaffolding, unwired) =====
+// ===== prediction provenance schemas =====
 //
-// GeneratePredictionResponseSchema(active schema)とは独立したschema群。
-// 現routeはまだprovenanceを返さないため、ここでは一切接続しない(接続はPR-3cの担当)。
-// 各schemaはlib/ai/types.tsの対応する判別可能unionと矛盾なく一致させる
-// (型注釈で静的に拘束し、二重SoTを避ける)。
+// PR-3aで独立schemaとして追加された。PR-3cでGenerationProvenanceSchemaだけを
+// active response schema(GeneratePredictionResponseSchema)へ接続する。
+// RawMainProvenanceSchema / PredictionAttemptProvenanceSchema /
+// InitialMissingFieldsSchemaはGenerationProvenanceSchemaを通して間接的に
+// 使用される(active schemaから直接参照されるのはGenerationProvenanceSchemaのみ)。
+// active schemaより前に定義する: GenerationProvenanceSchemaはこの後で定義される
+// GeneratePredictionResponseSchemaから参照されるため、前方参照(TDZ)を避ける。
 
 const rawMainProvenanceStringBranch = z
   .object({
@@ -249,3 +178,117 @@ export const GenerationProvenanceSchema: z.ZodType<GenerationProvenance> =
     generationProvenanceCountOneBranch,
     generationProvenanceCountTwoBranch,
   ]);
+
+// 未知フィールドは.passthroughで保持する。検証成功後の利用は必ずparsed.dataとし、
+// 元のinput objectは使わない(呼び出し側の責務)。
+export const GeneratePredictionResponseSchema = z
+  .object({
+    ai: nonBlankString,
+    main: nonBlankString,
+    predictionSource: generatePredictionSourceSchema,
+    isMock: z.boolean(),
+
+    second: z.string().optional(),
+    third: z.string().optional(),
+    confidence: z.string().optional(),
+    reason: z.string().optional(),
+    evidence: z.string().optional(),
+    aiProvider: z.string().optional(),
+    aiModel: z.string().optional(),
+    aiModelId: z.string().optional(),
+    usedFactors: z.array(predictionFactorSchema).optional(),
+    factorKeys: z.array(z.string()).optional(),
+
+    generationProvenance: GenerationProvenanceSchema.optional(),
+
+    // output / attemptProvenanceはprovider-parser内部wrapperのfield。
+    // API success responseのtop-levelには存在してはいけない。
+    // .passthrough()を維持する間も、この2つだけは明示的に拒否する。
+    //
+    // z.never().optional()の境界: object/null/string/number/array等の
+    // JSONで表現可能な値は拒否する。JavaScript上のundefinedはoptional
+    // semantics上許容され得るが、undefinedはJSONへ出ず、Firestore保存前にも
+    // (removeUndefinedFieldsで)除去されるため、今回のwrapper漏洩防止対象ではない。
+    output: z.never().optional(),
+    attemptProvenance: z.never().optional(),
+  })
+  .passthrough()
+  .superRefine((data, ctx) => {
+    // predictionSource と isMock の対応を双方向に保証する。
+    // official-ai + isMock:true、mock + isMock:false はいずれも矛盾データとして失敗させる。
+    if (data.predictionSource === "mock" && data.isMock !== true) {
+      ctx.addIssue({
+        code: "custom",
+        message: 'predictionSource "mock" requires isMock === true',
+        path: ["isMock"],
+      });
+    }
+
+    if (data.predictionSource === "official-ai" && data.isMock !== false) {
+      ctx.addIssue({
+        code: "custom",
+        message: 'predictionSource "official-ai" requires isMock === false',
+        path: ["isMock"],
+      });
+    }
+
+    // predictionSource と generationProvenance の対応を双方向に保証する。
+    // official-ai は実providerのattempt provenanceを必須とし、mockはcanonicalな
+    // provider attemptとして偽装しないよう、generationProvenanceの付与を禁止する。
+    if (
+      data.predictionSource === "official-ai" &&
+      data.generationProvenance === undefined
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          'predictionSource "official-ai" requires generationProvenance',
+        path: ["generationProvenance"],
+      });
+    }
+
+    if (
+      data.predictionSource === "mock" &&
+      data.generationProvenance !== undefined
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          'predictionSource "mock" must not include generationProvenance',
+        path: ["generationProvenance"],
+      });
+    }
+  });
+
+export type GeneratePredictionResponse = z.infer<
+  typeof GeneratePredictionResponseSchema
+>;
+
+// 構造schemaとは別関数として、候補集合とのドメイン整合性を検証する。
+// main/second/thirdは候補集合と完全一致する場合のみ許可する
+// (trim・表記変換・部分一致・近似一致・先頭候補へのfallbackは行わない)。
+// 候補集合が空の場合はmainを正当化できないため必ず失敗する。
+export function assertPredictionCandidates(
+  data: GeneratePredictionResponse,
+  candidates: readonly string[]
+): void {
+  const candidateSet = new Set(candidates);
+
+  if (!candidateSet.has(data.main)) {
+    throw new Error(
+      `main "${data.main}" is not in the candidate set`
+    );
+  }
+
+  if (data.second !== undefined && !candidateSet.has(data.second)) {
+    throw new Error(
+      `second "${data.second}" is not in the candidate set`
+    );
+  }
+
+  if (data.third !== undefined && !candidateSet.has(data.third)) {
+    throw new Error(
+      `third "${data.third}" is not in the candidate set`
+    );
+  }
+}
