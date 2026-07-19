@@ -114,3 +114,13 @@ export type GenerationProvenance =
       initialAttempt: PredictionAttemptProvenance;
       finalAttempt: PredictionAttemptProvenance;
     };
+
+// ===== PR-3b-2: parsePredictionOutputWithProvenance の戻り値契約 =====
+//
+// PredictionOutputそのものへのfield追加ではない。既存PredictionOutputの構造は
+// 一切変更せず、output(既存契約)とattemptProvenance(main決定の事実契約)を
+// 並べて返すための、独立した新しいexport型である。
+export type ParsedPredictionOutputWithProvenance = {
+  output: PredictionOutput;
+  attemptProvenance: PredictionAttemptProvenance;
+};

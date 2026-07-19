@@ -1,4 +1,8 @@
-import type { PredictionOutput } from "./types";
+import type {
+  ParsedPredictionOutputWithProvenance,
+  PredictionAttemptProvenance,
+  PredictionOutput,
+} from "./types";
 import {
   type PredictionFactor,
   isCustomFactorKey,
@@ -43,14 +47,34 @@ type CandidatePickResult =
       providerRawMain: string;
     };
 
-export function parsePredictionOutput(
+// PR-3b-2: parsePredictionOutputCoreの戻り値契約(module-private、未export)。
+// parseSucceeded:falseのbranchはmainPickを持たない。JSON parse失敗時に
+// mainPickへ誤ってアクセスすることを型レベルで防ぐ(main-missingとの二重記録を防ぐ)。
+type ParsedPredictionCoreResult =
+  | {
+      parseSucceeded: false;
+      output: PredictionOutput;
+    }
+  | {
+      parseSucceeded: true;
+      output: PredictionOutput;
+      mainPick: CandidatePickResult;
+    };
+
+// PR-3b-2: 既存parsePredictionOutputの本体をここへ移した共有core。
+// JSON.parseはここで1回だけ行う。provenance objectはここでは構築しない
+// (buildAttemptProvenanceの責務)。secondPick/thirdPickはoutput決定にのみ使い、
+// core resultへは含めない(PredictionAttemptProvenanceはmain決定のみを対象とするため)。
+function parsePredictionOutputCore(
   raw: string,
   candidates: string[],
   category?: string
-): PredictionOutput {
+): ParsedPredictionCoreResult {
   let parsed: Record<string, unknown> = {};
+  let parseSucceeded = false;
   try {
     parsed = JSON.parse(raw) as Record<string, unknown>;
+    parseSucceeded = true;
   } catch {
     // fall through with empty object
   }
@@ -97,10 +121,13 @@ export function parsePredictionOutput(
     };
   };
 
-  const main =
-    pickCandidate(parsed.main).value ?? candidates[0] ?? "未定";
-  const second = pickCandidate(parsed.second).value ?? candidates[1];
-  const third = pickCandidate(parsed.third).value ?? candidates[2];
+  const mainPick = pickCandidate(parsed.main);
+  const secondPick = pickCandidate(parsed.second);
+  const thirdPick = pickCandidate(parsed.third);
+
+  const main = mainPick.value ?? candidates[0] ?? "未定";
+  const second = secondPick.value ?? candidates[1];
+  const third = thirdPick.value ?? candidates[2];
   const confidence =
     typeof parsed.confidence === "string" ? parsed.confidence : undefined;
   const reason =
@@ -131,7 +158,115 @@ export function parsePredictionOutput(
     output.factorKeys = factorKeys;
   }
 
-  return output;
+  if (!parseSucceeded) {
+    return {
+      parseSucceeded: false,
+      output,
+    };
+  }
+
+  return {
+    parseSucceeded: true,
+    output,
+    mainPick,
+  };
+}
+
+// PR-3b-2: parsePredictionOutputCoreの結果からPredictionAttemptProvenanceを
+// 組み立てる。既存本番経路(parsePredictionOutput)からは呼ばれない
+// (parsePredictionOutputWithProvenance専用)。
+function buildAttemptProvenance(
+  core: ParsedPredictionCoreResult
+): PredictionAttemptProvenance {
+  if (!core.parseSucceeded) {
+    return {
+      parseStatus: "json-parse-failed",
+      semanticStatus: "semantic-fallback",
+      fallbackReason: "json-parse-failed",
+      rawMainType: "unavailable",
+    };
+  }
+
+  const { mainPick } = core;
+
+  // truthinessではなくundefinedとの比較を使う。空文字列・空白文字列も
+  // canonical候補になり得るため(candidates集合と完全一致していればcanonical)。
+  if (mainPick.value !== undefined) {
+    return {
+      parseStatus: "parsed",
+      semanticStatus: "canonical",
+      rawMainType: "string",
+      providerRawMain: mainPick.value,
+    };
+  }
+
+  if (mainPick.reason === "missing") {
+    return {
+      parseStatus: "parsed",
+      semanticStatus: "semantic-fallback",
+      fallbackReason: "main-missing",
+      rawMainType: "missing",
+    };
+  }
+
+  if (mainPick.reason === "non-string") {
+    return {
+      parseStatus: "parsed",
+      semanticStatus: "semantic-fallback",
+      fallbackReason: "main-non-string",
+      rawMainType: mainPick.rawType,
+    };
+  }
+
+  if (mainPick.reason === "blank") {
+    return {
+      parseStatus: "parsed",
+      semanticStatus: "semantic-fallback",
+      fallbackReason: "main-blank",
+      rawMainType: "string",
+      providerRawMain: mainPick.providerRawMain,
+    };
+  }
+
+  if (mainPick.reason === "not-in-candidates") {
+    return {
+      parseStatus: "parsed",
+      semanticStatus: "semantic-fallback",
+      fallbackReason: "main-not-in-candidates",
+      rawMainType: "string",
+      providerRawMain: mainPick.providerRawMain,
+    };
+  }
+
+  const exhaustiveCheck: never = mainPick;
+  throw new Error(
+    `Unhandled CandidatePickResult: ${JSON.stringify(exhaustiveCheck)}`
+  );
+}
+
+// PR-3b-2: 既存exportの互換wrapper。signature・戻り値とも無変更。
+// provider adapterは引き続きこの関数を経由し、共有coreのoutputだけを受け取る。
+export function parsePredictionOutput(
+  raw: string,
+  candidates: string[],
+  category?: string
+): PredictionOutput {
+  return parsePredictionOutputCore(raw, candidates, category).output;
+}
+
+// PR-3b-2: 新規export。PR-3b-2時点では既存provider adapter/route/clientの
+// いずれからも呼ばれない未配線の公開関数。
+export function parsePredictionOutputWithProvenance(
+  raw: string,
+  candidates: string[],
+  category?: string
+): ParsedPredictionOutputWithProvenance {
+  const core = parsePredictionOutputCore(raw, candidates, category);
+
+  return {
+    output: core.output,
+    attemptProvenance: buildAttemptProvenance(core),
+  };
 }
 
 const FACTOR_DIRECTIONS = new Set(["positive", "negative", "neutral"]);
