@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-07-20（PR-3 provenance 本番受入れ完了）
+最終更新: 2026-07-20（TEST-0 Vitest最小導入・production build受入れ完了）
 
 ## 完了フェーズ
 
@@ -3111,11 +3111,131 @@ PR-3aでraw main単体の契約として追加した。
 
 - `.passthrough()`の撤廃またはstrict化
   - 型に現れない未知fieldがFirestoreへ到達し得る既存の危険を閉じる
-- parser / schemaのunit test基盤導入
-  - 現状test runnerがなく、検証のたびにロジックを独立再現している
+- parser / schemaのunit test拡充(TEST-1)
+  - TEST-0でVitest runnerとcanonical経路のimport smoke testを導入済み
+  - PredictionAttemptProvenanceの6 branchとresponse schemaのnegative matrixは、
+    実moduleをimportするunit testとしては未実装
 - read parser / diagnosticsでの`generationProvenance`検証
 - provenanceのUI表示
 - legacy predictionへのbackfillは行わない
   - 生成時の事実は事後に復元できず、推定値を入れることは捏造にあたる
 - PR-2f: transactionへの`expectedRevision`追加
   - PR-2e-0からの継続課題
+
+## TEST-0(Vitest最小導入)完了
+
+### commit / deployment
+
+- commit:
+  `6b3d249833cf42fef77ee7beb52a8155f6e315b4`
+- subject:
+  `test: introduce Vitest runner with parser import smoke test`
+- Vercel deployment:
+  `dpl_4YmwF6EfgChadjk6at5XLWiwopk5`
+- target:
+  production
+- state:
+  READY
+- Next.js:
+  `16.2.6 (Turbopack)`
+
+deployment情報は、Vercel Dashboard / build logを人間が確認した受入れ証拠として記録する。
+
+### 導入内容
+
+- `package.json`へ`"test": "vitest run"`を追加
+- direct devDependencyは`vitest ^4.1.10`
+- `vite-tsconfig-paths`は最終commitに含まれない
+- `vitest.config.mts`はVite nativeの`resolve.tsconfigPaths: true`を使用
+- test environmentは`node`
+- `@/*` aliasで実parser moduleをimportするsmoke testを1件追加
+- canonical経路について、canonical mainと`semanticStatus: "canonical"`を確認
+- application runtime codeは変更していない
+- tests由来のNext.js route/pageは生成されていない
+
+### ローカル検証
+
+- Node `v24.16.0`
+- npm `11.13.0`
+- `npm test`
+  - test file 1件
+  - test 1件成功
+  - failed / skipped / todoなし
+  - alias関連warningなし
+- `npx tsc --noEmit`成功
+- `npm run build`成功
+- tests由来のroute/page混入なし
+
+### production deploymentで実測した事実
+
+- production deploymentはREADYへ到達
+- install logでは`added 32 packages, and changed 5 packages in 6s`が観測された
+- EBADENGINE warningは観測されなかった
+- TypeScript工程は成功し、型エラーは観測されなかった
+- 生成routeは既存17件のみで、tests由来のroute/page追加はなかった
+- 今回のdeploymentでは、devDependencyであるVitestを解決可能なinstall/build経路が成立した
+
+次の一般化は禁止する。
+
+- Vercelは常にdevDependenciesをinstallする
+- VercelのNodeは24系である
+- next buildがtests/内の全ファイルを確実に型検査した
+
+### 未実測・既知境界
+
+1. Vercel build logにはNode version自体は表示されていない。
+   EBADENGINEが発生しなかった事実からNode versionを推定しない
+2. `tests/ai/test-runner-smoke.test.ts`はtsconfigの`**/*.ts`にマッチするが、
+   Vercel logはTypeScriptが検査した個別ファイルを列挙しない。
+   「TypeScript工程が成功した」と「tests/はtsconfig include対象」を別の事実として扱う
+3. build cacheがrestoreされており、cold installは未実測
+4. install設定を将来production-onlyなどへ変更し、devDependenciesを除外した場合は、
+   `vitest.config.mts`やtests内のVitest型を解決できずbuildが失敗する可能性がある。
+   現在到達している失敗ではなく、設定変更時の条件付きリスクである
+5. Vitest 4.1.10のregistry上のNode要件は`>=24.0.0`。
+   ローカル検証はNode 24.16.0で実施しており、Node 24未満の環境は未検証
+6. `npm test`は手動実行のみ。
+   `npm run build`はtestを呼ばず、Vercel buildもtestを実行しない
+7. GitHub Actions、required status check、Vercel Deployment Checkは未導入
+8. `npm audit`は`vite-tsconfig-paths`削除後の最終依存グラフに対して
+   合計11件(moderate 10 / critical 1)を報告した。
+   TEST-0導入前の基準値がないため、TEST-0による増減は判定不能
+
+### docs drift
+
+- `CLAUDE.md`セクション1.1(`package.json で確認済み。`という前置きで
+  package.json全文を引用しているブロック)のdependenciesスナップショットは
+  `firebase` / `next` / `openai` / `react` / `react-dom`のみ、
+  devDependenciesは`@tailwindcss/postcss` / `@types/node` /
+  `@types/react` / `@types/react-dom` / `eslint` / `eslint-config-next` /
+  `tailwindcss` / `typescript`のみで、scriptsに`test`も記載されていない
+- 現行`package.json`にある`@anthropic-ai/sdk` / `@google/genai` / `zod`
+  (dependencies)、`firebase-admin` / `vitest`(devDependencies)、
+  および`"test": "vitest run"`は、このスナップショットに含まれていない
+- ただし`@anthropic-ai/sdk`と`@google/genai`自体はCLAUDE.md セクション1.7の
+  文中(`openai / @anthropic-ai/sdk / @google/genai パッケージ`)に別途言及がある。
+  差異は主にセクション1.1のpackage.jsonスナップショットが更新されていない点であり、
+  `@anthropic-ai/sdk`・`@google/genai`が文書全体から完全に欠落しているわけではない
+- `zod` / `firebase-admin` / `vitest`については、CLAUDE.md内に
+  dependency一覧としての言及が見つからない
+- TEST-0-docsでは`CLAUDE.md`を変更しない
+- 後続のdocs整合タスクで、推測ではなく`package.json`と照合して修正する
+
+### TEST-0の完了定義
+
+TEST-0で完了したもの:
+
+- ローカルtest runner導入
+- alias付き実module import成功
+- TypeScript/build非回帰
+- production deployment READY
+- alias関連warningなし
+- application runtime code無変更
+
+TEST-0の完了条件に含めないもの(TEST-1以降の課題):
+
+- 6 branch網羅
+- schema negative matrix
+- CI自動実行
+- deployment gate
+- coverage目標
