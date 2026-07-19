@@ -1,6 +1,7 @@
 import type { EventCategory } from "@/lib/categories";
 import type { PredictionFactor } from "@/lib/factors";
 import { isOfficialAiName } from "@/lib/ai/official-ai";
+import type { GenerationProvenance } from "@/lib/ai/types";
 
 export type KompariPrediction = {
   ai: string;
@@ -40,6 +41,14 @@ export type KompariPrediction = {
   //   mock:        API失敗時/開発用のモック予測。商用集計から除外・別扱い
   //   manual:      管理画面等から人間が手入力・補正した予測
   predictionSource?: "official-ai" | "my-ai" | "custom-ai" | "mock" | "manual";
+
+  // PR-3a: real provider responseのattempt provenance(main決定プロセスの事実契約)。
+  // - PR-3aでは型定義のみ
+  // - legacy predictionには未設定を許容
+  // - runtime生成・保存・read検証には未接続
+  // - real provider responseのattempt provenanceを表す
+  // - mockへの適用契約はPR-3cで決定
+  generationProvenance?: GenerationProvenance;
 };
 
 // result.status として保存される値(additive、PR-2a)。pending は result 不在(または status
@@ -184,6 +193,15 @@ export type KompariPredictionDoc = {
   myAiId?: string;
   usedFactors?: PredictionFactor[];
   factorKeys?: string[];
+
+  // PR-3a: real provider responseのattempt provenance(main決定プロセスの事実契約)。
+  // - PR-3aでは型定義のみ
+  // - legacy predictionには未設定を許容
+  // - runtime生成・保存・read検証には未接続
+  // - real provider responseのattempt provenanceを表す
+  // - mockへの適用契約はPR-3cで決定
+  generationProvenance?: GenerationProvenance;
+
   predictedAt?: unknown;
   evaluatedAt?: unknown;
   updatedAt?: unknown;

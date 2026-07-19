@@ -1,4 +1,10 @@
 import { z } from "zod";
+import type {
+  GenerationProvenance,
+  InitialMissingFields,
+  PredictionAttemptProvenance,
+  RawMainProvenance,
+} from "@/lib/ai/types";
 
 // /api/generate-prediction の成功レスポンス用共有schema。
 // route.ts(server, NextResponse.json直前)と app/admin/edit/[id]/page.tsx
@@ -106,3 +112,140 @@ export function assertPredictionCandidates(
     );
   }
 }
+
+// ===== PR-3a: prediction provenance schemas (pure scaffolding, unwired) =====
+//
+// GeneratePredictionResponseSchema(active schema)とは独立したschema群。
+// 現routeはまだprovenanceを返さないため、ここでは一切接続しない(接続はPR-3cの担当)。
+// 各schemaはlib/ai/types.tsの対応する判別可能unionと矛盾なく一致させる
+// (型注釈で静的に拘束し、二重SoTを避ける)。
+
+const rawMainProvenanceStringBranch = z
+  .object({
+    rawMainType: z.literal("string"),
+    // providerRawMainはJSON parse後・候補突合とfallback適用前のraw main文字列。
+    // nonBlankStringは使わない: 空文字列・空白のみの文字列もproviderが実際に
+    // 返した値であり、そのまま保持する契約とする(値をtrim・書き換えしない)。
+    providerRawMain: z.string(),
+  })
+  .strict();
+
+const rawMainProvenanceNonStringBranch = z
+  .object({
+    rawMainType: z.enum([
+      "missing",
+      "null",
+      "number",
+      "boolean",
+      "array",
+      "object",
+      "unavailable",
+    ]),
+  })
+  .strict();
+
+export const RawMainProvenanceSchema: z.ZodType<RawMainProvenance> = z.union([
+  rawMainProvenanceStringBranch,
+  rawMainProvenanceNonStringBranch,
+]);
+
+// RawMainProvenanceSchemaとの単純なintersectionにはしない。attempt全体として
+// 許可された6つの組合せだけを、それぞれstrict objectとして個別に表現する。
+const predictionAttemptJsonParseFailedBranch = z
+  .object({
+    parseStatus: z.literal("json-parse-failed"),
+    semanticStatus: z.literal("semantic-fallback"),
+    fallbackReason: z.literal("json-parse-failed"),
+    rawMainType: z.literal("unavailable"),
+  })
+  .strict();
+
+const predictionAttemptCanonicalBranch = z
+  .object({
+    parseStatus: z.literal("parsed"),
+    semanticStatus: z.literal("canonical"),
+    rawMainType: z.literal("string"),
+    providerRawMain: z.string(),
+  })
+  .strict();
+
+const predictionAttemptMainMissingBranch = z
+  .object({
+    parseStatus: z.literal("parsed"),
+    semanticStatus: z.literal("semantic-fallback"),
+    fallbackReason: z.literal("main-missing"),
+    rawMainType: z.literal("missing"),
+  })
+  .strict();
+
+const predictionAttemptMainNonStringBranch = z
+  .object({
+    parseStatus: z.literal("parsed"),
+    semanticStatus: z.literal("semantic-fallback"),
+    fallbackReason: z.literal("main-non-string"),
+    rawMainType: z.enum(["null", "number", "boolean", "array", "object"]),
+  })
+  .strict();
+
+const predictionAttemptMainBlankBranch = z
+  .object({
+    parseStatus: z.literal("parsed"),
+    semanticStatus: z.literal("semantic-fallback"),
+    fallbackReason: z.literal("main-blank"),
+    rawMainType: z.literal("string"),
+    providerRawMain: z.string(),
+  })
+  .strict();
+
+const predictionAttemptMainNotInCandidatesBranch = z
+  .object({
+    parseStatus: z.literal("parsed"),
+    semanticStatus: z.literal("semantic-fallback"),
+    fallbackReason: z.literal("main-not-in-candidates"),
+    rawMainType: z.literal("string"),
+    providerRawMain: z.string(),
+  })
+  .strict();
+
+export const PredictionAttemptProvenanceSchema: z.ZodType<PredictionAttemptProvenance> =
+  z.union([
+    predictionAttemptJsonParseFailedBranch,
+    predictionAttemptCanonicalBranch,
+    predictionAttemptMainMissingBranch,
+    predictionAttemptMainNonStringBranch,
+    predictionAttemptMainBlankBranch,
+    predictionAttemptMainNotInCandidatesBranch,
+  ]);
+
+// 空配列・重複・逆順(["evidence","reason"]等)を許容しないtuple union。
+// 現在の欠損検査順(reason→evidence)に固定する。
+export const InitialMissingFieldsSchema: z.ZodType<InitialMissingFields> =
+  z.union([
+    z.tuple([z.literal("reason")]),
+    z.tuple([z.literal("evidence")]),
+    z.tuple([z.literal("reason"), z.literal("evidence")]),
+  ]);
+
+const generationProvenanceCountOneBranch = z
+  .object({
+    version: z.literal(1),
+    generationAttemptCount: z.literal(1),
+    finalAttempt: PredictionAttemptProvenanceSchema,
+  })
+  .strict();
+
+const generationProvenanceCountTwoBranch = z
+  .object({
+    version: z.literal(1),
+    generationAttemptCount: z.literal(2),
+    initialMissingFields: InitialMissingFieldsSchema,
+    initialAttempt: PredictionAttemptProvenanceSchema,
+    finalAttempt: PredictionAttemptProvenanceSchema,
+  })
+  .strict();
+
+export const GenerationProvenanceSchema: z.ZodType<GenerationProvenance> =
+  z.discriminatedUnion("generationAttemptCount", [
+    generationProvenanceCountOneBranch,
+    generationProvenanceCountTwoBranch,
+  ]);
