@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-07-19（EVAL-2 A0/A1/A2 本番受入れ完了）
+最終更新: 2026-07-19（PR-2e-0a/0b 本番受入れ完了）
 
 ## 完了フェーズ
 
@@ -2762,3 +2762,125 @@ revisionは無条件のimmutableではありません。正確には、連番訂
 1. PR-2e-0(管理画面のselect変更と保存の分離)
 2. PR-3(A3 semantic provenance: `providerRawMain` / `fallbackApplied` / `fallbackReason` / `semanticStatus`)
 3. PR-2e残り(voided/postponed表示、複数winner表示、訂正履歴の公開範囲・redaction設計と表示)
+
+## PR-2e-0(管理画面の select と保存の分離)本番受入れ完了
+
+本節は、直前の EVAL-2 本番受入れ節に記録された
+「UI課題(PR-2e-0で対応予定)」および「次工程」第1項の PR-2e-0 について、
+完了後の状態を記録する後続節である。
+
+### commit / deployment
+
+* PR-2e-0a: 3c4d7d3 refactor(admin): return discriminated SaveResultOutcome from saveResult
+* PR-2e-0b: 68f1cf5 feat(admin): separate result select from save with local draft state
+* Vercel production deployment: dpl_EByZ4RQfYijS1uFowCG6T3N1qv46 (READY, 68f1cf5)
+
+### 変更の要点
+
+* select の onChange は Firestore write を起動しない。ローカル draft の更新のみ
+* saveResult への到達経路は「結果を保存」ボタンの onClick 1 箇所のみ
+* 保存ボタンは persisted との実差分がある場合のみ有効。これにより metadata
+  (updatedAt のみ)write が通常操作から到達不能になった
+* クリアは draft と pending の破棄のみで Firestore write を起動しない。
+  clearResult ラッパーは削除。saveResult 内の settled-clear guard は維持
+
+### 防御の所在(取り違え注意)
+
+| 対象                     | 比較しているもの                                               | 実装箇所                                                                                                        | atomic |
+| ---------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------ |
+| 単一winner訂正 transaction | fresh winner と expectedOriginalWinner                  | app/admin/results/page.tsx saveResult 内の runTransaction → lib/result-revision.ts planSingleWinnerCorrection | yes    |
+| 単一winner訂正 transaction | expectedRevision は比較していない                              | 未実装(PR-2f)                                                                                                  | no     |
+| UI 事前チェック              | draft.baseWinner / draft.baseRevision と現在の persisted 値 | app/admin/results/page.tsx handleSaveClick                                                                  | no     |
+
+* planSingleWinnerCorrection 自体は pure 関数であり単独では atomic ではない。
+  単一winner訂正の atomic 性は、Event の fresh read、その snapshot に対する
+  planSingleWinnerCorrection の実行、親 Event の更新、revision doc の作成を
+  同一の runTransaction callback 内で行うことで成立する
+* 単一winner訂正における winner 変更の競合は transaction が検出する
+  (expectedOriginalWinner による最終防衛線)
+* 初回settlement は writeBatch のままであり fresh read / compare-and-set を持たない
+* ABA(A→B→A)は winner 比較だけでは検出できず revision 比較を要する。
+  UI 側には baseRevision による非atomicな早期検出があるが、
+  transaction は expectedRevision を比較していないため、
+  **transaction 境界では ABA は未防御**
+* UI チェック後〜transaction 開始までの race は残る
+* expectedRevision を transaction へ渡す対応は PR-2f として分離管理する。
+  これは初回settlement の transaction 化とは解決する競合が異なる別問題である
+
+### 用語(混同禁止)
+
+* `draft.baseRevision` = 編集開始時点の基準 revision。stale / ABA 検出用。
+  将来 PR-2f で expectedRevision として transaction へ渡す候補
+* `pending.nextRevision` = 訂正 transaction が確定させた revision。
+  snapshot acknowledgment 用
+* 両者は別物。取り違えると ack の成立条件が早すぎる、または成立しないなどの
+  誤判定が生じ、新しい draft / pending の誤削除や残留につながる
+
+### snapshot acknowledgment 仕様
+
+* 訂正: `persistedRevision > nextRevision`、または
+  `persistedRevision === nextRevision && winner 一致`
+
+  * 同一 revision で winner 不一致は未 ack(想定外状態として残す)
+* 初回settlement: `winner 一致`、または `persistedRevision >= 1`
+  (initial-settlement は revision を書かないため大小比較ができない)
+* ack 成立時、pending は現在の pending と ack 対象 pending の version が
+  一致する場合に削除する
+* draft は現在の draft と ack 対象 pending の version が一致する場合にのみ削除する
+* 上記 2 つの version 条件により、古い ack が新しい pending または
+  新しい draft を削除することを防ぐ
+* pending 中の再編集は新しい draft 世代を発行する。version 発行元は
+  useRef の per-event counter で、draft 削除後も逆戻りしない
+* snapshot 値を draft へ全面同期する effect は存在しない(ack 専用 effect のみ)
+* ack を取りこぼした場合、同一画面セッション内で利用者が明示的に解除できる
+  UI 経路はクリア操作である。pending のみ残存時もクリアを有効にすること自体が
+  仕様要件である。なおページ再読込みまたは画面 remount でも
+  ローカル draft / pending は破棄される
+
+### 本番受入れで確認済み(削除済み fixture で実施)
+
+* 初回settlement(result: null → settled、revision 非書込み、resultRevisions 非作成、
+  ack 成立による draft 削除)
+* 単一 winner 訂正(rev-000001 作成、winner/winners 同期、settledAt 保持)
+* cross-tab stale 検出(draft 先行作成 → 他端末訂正 → 保存前 base チェックの
+  alert でブロック。updatedAt 不変かつ resultRevisions 増加なしを Firestore で確認)
+* confirm キャンセル時の draft 保持
+* クリアによる draft 破棄
+* metadata write 消滅(select / クリア / confirm キャンセル / ブロックされた保存の
+  いずれでも updatedAt が不変であることを Firestore 上で確認)
+
+### 未検証・既知境界
+
+1. superseded ack(`revision > nextRevision`)は手動再現できず、コードレビューからの
+   受入れ。手動検証済みとは記録しない
+2. pending 中の再編集は、今回の通常速度での手動受入れでは ack 窓が短く
+   再現できなかった。コードレビューからの受入れとする
+3. pending 中に select を pending.winner へ戻した場合、または外部更新後に
+   select を現在の persisted 値へ合わせても draft の base が古い場合、
+   ack 後または選択変更後に draft が内部へ残留することがある。
+   select 変更時の draft 自動削除条件が `selected === persistedWinner` と
+   `baseWinner === persistedWinner` の両方を要求するためである
+   (ack effect 側の削除条件は version 一致であり、これとは別である)。
+   hasUnsavedChange は false となるため保存ボタンは無効、未保存表示も出ず、
+   metadata write には到達しない。クリアまたは再読込みで解消する
+4. pending が存在しない通常の draft 新規生成時、および保存前 base チェック時に
+   revision 型崩れを検出した場合は fail-closed で停止する。
+   Event の確定状態にかかわらず適用する、PR-2e-0b で意図的に導入した
+   安全側の挙動である。「既存機能が減らない」ことを保証するものではない。
+   なお pending 中の再編集では persisted revision を再解析せず、
+   single-winner-correction は pending.winner / pending.nextRevision、
+   initial-settlement は pending.winner / 0 を base として
+   新しい draft 世代を生成する
+5. **初回settlement は writeBatch のままであり transaction ではない**。
+   2 ブラウザ同時の初回確定では後勝ち上書きが残る。訂正の stale 防止とは別問題
+6. revision 21 件以上の cascade 削除は未実測(既存境界。今回使用した fixture は
+   revision 0 件のため検証にならなかった)
+
+### レビュー過程の誤記訂正
+
+* レビュー中に「correction 分岐は writeBatch のみで compare-and-set 皆無」という
+  記述があったが誤り。correction は runTransaction である。
+  writeBatch のみで fresh read / compare-and-set を持たないのは
+  initial-settlement 分岐である
+* 同じくレビュー中に「transaction は winner + revision を判定する」旨の記述が
+  複数回あったが誤り。transaction が比較するのは expectedOriginalWinner のみである
