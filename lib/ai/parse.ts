@@ -6,6 +6,43 @@ import {
   getFactorKeysForCategory,
 } from "@/lib/factors";
 
+// PR-3b-1: pickCandidateの内部判定結果契約(module-private、未export)。
+// PredictionAttemptProvenance/GenerationProvenanceへは未接続(この値はここでは消費しない)。
+type CandidateNonStringRawType =
+  | "null"
+  | "number"
+  | "boolean"
+  | "array"
+  | "object";
+
+type CandidatePickResult =
+  | {
+      value: string;
+      rawType: "string";
+    }
+  | {
+      value: undefined;
+      reason: "missing";
+      rawType: "missing";
+    }
+  | {
+      value: undefined;
+      reason: "non-string";
+      rawType: CandidateNonStringRawType;
+    }
+  | {
+      value: undefined;
+      reason: "blank";
+      rawType: "string";
+      providerRawMain: string;
+    }
+  | {
+      value: undefined;
+      reason: "not-in-candidates";
+      rawType: "string";
+      providerRawMain: string;
+    };
+
 export function parsePredictionOutput(
   raw: string,
   candidates: string[],
@@ -18,14 +55,52 @@ export function parsePredictionOutput(
     // fall through with empty object
   }
 
-  const pickCandidate = (v: unknown): string | undefined => {
-    if (typeof v === "string" && candidates.includes(v)) return v;
-    return undefined;
+  const pickCandidate = (v: unknown): CandidatePickResult => {
+    if (v === undefined) {
+      return { value: undefined, reason: "missing", rawType: "missing" };
+    }
+
+    if (typeof v !== "string") {
+      let rawType: CandidateNonStringRawType;
+      if (v === null) {
+        rawType = "null";
+      } else if (Array.isArray(v)) {
+        rawType = "array";
+      } else if (typeof v === "number") {
+        rawType = "number";
+      } else if (typeof v === "boolean") {
+        rawType = "boolean";
+      } else {
+        rawType = "object";
+      }
+      return { value: undefined, reason: "non-string", rawType };
+    }
+
+    if (candidates.includes(v)) {
+      return { value: v, rawType: "string" };
+    }
+
+    if (v.trim() === "") {
+      return {
+        value: undefined,
+        reason: "blank",
+        rawType: "string",
+        providerRawMain: v,
+      };
+    }
+
+    return {
+      value: undefined,
+      reason: "not-in-candidates",
+      rawType: "string",
+      providerRawMain: v,
+    };
   };
 
-  const main = pickCandidate(parsed.main) ?? candidates[0] ?? "未定";
-  const second = pickCandidate(parsed.second) ?? candidates[1];
-  const third = pickCandidate(parsed.third) ?? candidates[2];
+  const main =
+    pickCandidate(parsed.main).value ?? candidates[0] ?? "未定";
+  const second = pickCandidate(parsed.second).value ?? candidates[1];
+  const third = pickCandidate(parsed.third).value ?? candidates[2];
   const confidence =
     typeof parsed.confidence === "string" ? parsed.confidence : undefined;
   const reason =
