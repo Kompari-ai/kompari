@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-07-20（AUDIT-0 / SEC-0 websocket-driver critical除去・production deployment受入れ完了）
+最終更新: 2026-07-20（TEST-1 provenance 6 branch unit test・production build受入れ完了）
 
 ## 完了フェーズ
 
@@ -3519,3 +3519,152 @@ websocket-driver 0.7.4
 - production buildはcache restored
 - cold installは未実測
 - hidden lockfileの不整合とdry-runの因果関係は単独再現していない
+
+## TEST-1(provenance 6 branch固定)完了
+
+### 対象commit・production deployment
+
+- commit:
+  `eb2b7877f66416717363a167fa2f58bc98ff3bbd`
+- subject:
+  `test: fix all six provenance branches with real module imports`
+- commit対象:
+  `tests/ai/parse-provenance.test.ts`の新規1件のみ
+- Git差分:
+  1 file changed, 265 insertions
+- `package.json`とlockfileは無変更
+- production code、既存test、docsは無変更
+- Vercel deployment:
+  `dpl_DwLofUT3emnNCCs5Pi49XPNbA3D3`
+- target:
+  production
+- state:
+  READY
+- dependency install logでは`up to date in 1s`を観測した
+- 依存無変更の根拠はinstall logではなくGit差分を正とする
+- TypeScript工程は成功し、型エラーは観測されなかった
+- 生成routeは既存17件で、tests由来のroute / page追加はなかった
+- Build Completedは28sだった
+- 処理時間は観測値であり、性能基準や将来deploymentの期待値として扱わない
+
+deployment情報は、Vercel Dashboardとbuild logを人間が確認した受入れ証拠として記録する。
+
+### 固定した契約
+
+- `PredictionAttemptProvenance`の6 branchすべてを固定した
+- `main-non-string`の`rawMainType`5種を固定した
+  - `null`
+  - `number`
+  - `boolean`
+  - `array`
+  - `object`
+- candidate完全一致がblank判定より先に評価されることを固定した
+- candidatesが空の場合の`output.main === "未定"`を固定した
+- 新規testは13件
+- 既存smoke testと合わせてtest file 2件 / test 14件
+
+### branch識別の構造
+
+- 6 branchは単一のdiscriminantフィールドだけでは識別できない
+- `parseStatus`は`"json-parse-failed"`と`"parsed"`の2値
+- `semanticStatus`は`"canonical"`と`"semantic-fallback"`の2値
+- canonical branchには`fallbackReason`フィールド自体が存在しない
+- canonical branchが`fallbackReason: undefined`を持つ契約ではない
+- 識別には`semanticStatus`と`fallbackReason`の値・存在有無の組合せが必要
+- `rawMainType`の全literalは次の8種
+  - `"string"`
+  - `"missing"`
+  - `"null"`
+  - `"number"`
+  - `"boolean"`
+  - `"array"`
+  - `"object"`
+  - `"unavailable"`
+- `"string"`はcanonical / main-blank / main-not-in-candidatesの3 branchで共有される
+- `providerRawMain`はcanonical / main-blank / main-not-in-candidatesの3 branchにのみ存在する
+
+### canonical-before-blankの実装根拠
+
+- 以下の行番号はcommit `eb2b7877f66416717363a167fa2f58bc98ff3bbd`時点の補助情報であり、
+  恒久的な識別根拠は関数名と式の原文とする
+
+- `lib/ai/parse.ts`の`pickCandidate`内では、
+  `candidates.includes(v)`(104行目)が`v.trim() === ""`(108行目)より先に評価される
+- そのため、空文字列または空白のみの文字列がcandidates集合に
+  完全一致する場合はmain-blankではなくcanonicalになる
+- candidates集合に含まれない空白のみの文字列はmain-blankになる
+- `buildAttemptProvenance`は`mainPick.value !== undefined`(195行目)で
+  canonicalを判定しており、truthinessを使わない
+- `parsePredictionOutputCore`は
+  `mainPick.value ?? candidates[0] ?? "未定"`(129行目)でmainを決定する
+- nullish coalescingを使うため、canonicalな空文字列はfallbackへ置き換わらない
+- provenance側の`!== undefined`とoutput側の`??`は、
+  空文字列をcanonicalとして保持する契約で一貫している
+- この一貫性をTEST-1のcanonical-before-blank 2件で固定した
+
+### テストのimport経路
+
+- `pickCandidate`は`parsePredictionOutputCore`内のlocal arrow functionで非export
+- `buildAttemptProvenance`と`parsePredictionOutputCore`も非export
+- `CandidatePickResult`と`ParsedPredictionCoreResult`も非export
+- TEST-1は公開wrapper`parsePredictionOutputWithProvenance`を実module importしている
+- 6 branchすべてを公開wrapper経由で観測した
+- 内部関数をtest用にexportするproduction code変更は行っていない
+- 期待値は`toStrictEqual`で完全一致検証している
+- 期待値objectは`satisfies PredictionAttemptProvenance`で型側からも固定している
+- `toStrictEqual`により、プロパティが`undefined`である場合と
+  プロパティ自体が存在しない場合を区別している
+
+「公開wrapperから6 branchすべてへ到達可能」は、13件のローカルtest成功に基づく実測事実として記録する。
+
+### ローカル・production両環境での検証
+
+- ローカル`npm test`:
+  test file 2件 / test 14件成功
+- failed / skipped / todoなし
+- ローカル`npx tsc --noEmit`成功、型エラーなし
+- ローカル`npm run build`成功
+- ローカルbuildの生成routeは17件
+- 既存smoke test
+  `tests/ai/test-runner-smoke.test.ts`
+  は無変更
+- 既存smoke test無変更は`git diff --quiet`のexit 0で確認した
+- production buildのTypeScript工程は成功し、型エラーは観測されなかった
+- `tests/ai/parse-provenance.test.ts`はtsconfigのinclude patternに一致する
+- ただしVercel build logはTypeScriptが検査した個別ファイルを列挙しない
+- production環境で13個の期待値objectが個別に型検査されたとは断定しない
+- 「production TypeScript工程の成功」と
+  「新規test fileがtsconfig include対象であること」を別の観測事実として扱う
+
+ローカル`npx tsc --noEmit`成功は、13個の`satisfies PredictionAttemptProvenance`がローカル型検査を通過した根拠として記録する。production環境について同じ断定はしない。
+
+### 完了範囲と既知境界
+
+#### 完了したもの
+
+- provenance 6 branchを実module importで固定
+- `main-non-string`の`rawMainType`5種を固定
+- canonical-before-blankを空白のみ文字列・空文字列の2件で固定
+- 空candidates時のplaceholder出力を固定
+- `toStrictEqual`によるruntime完全一致を固定
+- `satisfies PredictionAttemptProvenance`による型契約を固定
+- production code無変更
+- 既存smoke test無変更
+- production deployment受入れ完了
+
+#### 既知境界
+
+- response schemaを実module importするnegative matrix testは未導入
+  (TEST-2の対象)
+- `pickCandidate` / `buildAttemptProvenance` /
+  `parsePredictionOutputCore`は非exportであり、
+  公開wrapperを経由しない直接のunit testは行っていない
+- retryの`generationAttemptCount: 2`経路はTEST-1の対象外
+- mock predictionのFirestore保存経路はTEST-1の対象外
+- semantic-fallback branchのroute層での扱いは未実測
+- response schemaの`.passthrough()`は維持されており、
+  `output` / `attemptProvenance`以外の未知fieldは通過し得る
+- `npm test`は手動実行のみ
+- GitHub Actions、required status check、
+  Vercel Deployment Checkは未導入
+- deployment gateとしての自動test実行は未導入
