@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-07-20（TEST-0 Vitest最小導入・production build受入れ完了）
+最終更新: 2026-07-20（AUDIT-0 / SEC-0 websocket-driver critical除去・production deployment受入れ完了）
 
 ## 完了フェーズ
 
@@ -3239,3 +3239,283 @@ TEST-0の完了条件に含めないもの(TEST-1以降の課題):
 - CI自動実行
 - deployment gate
 - coverage目標
+
+## AUDIT-0 / SEC-0(websocket-driver critical除去)完了
+
+### 対象commit・production deployment
+
+- AUDIT-0はread-only調査のみで、commitなし
+- SEC-0 commit:
+  `494e6734bd5d647d4e5ff2251ab2f09cb19116a8`
+- subject:
+  `chore(deps): bump websocket-driver to 0.7.5 for CVE-2026-54466`
+- commit対象:
+  `package-lock.json`の1件のみ
+- Git差分:
+  3 insertions / 3 deletions
+- Vercel deployment:
+  `dpl_F2SfGB9nDYzkqeYzhXZHyf28cpNf`
+- target:
+  production
+- state:
+  READY
+
+deployment情報は、Vercel Dashboardとbuild logを人間が確認した受入れ証拠として記録する。
+
+### AUDIT-0の調査結果
+
+- TEST-0完了時点の依存グラフに対し、`npm audit`を実測した
+- 全依存グラフ:
+  moderate 10 / critical 1 / total 11
+- `npm audit --omit=dev`:
+  moderate 3 / critical 1 / total 4
+- vulnerable package entryは11件だった
+- unique advisory IDは6件だった
+- vulnerable package entry数とunique advisory ID数は一致しない別概念である
+- `metadata.vulnerabilities.total`をadvisory件数として扱わない
+- TEST-0-docsに記録された「合計11件(moderate 10 / critical 1)」は、当時の`npm audit`測定結果(vulnerable package entry数)として正確である
+- 過去のTEST-0記録は変更しない
+- この新セクションで、11がpackage entry数であり、unique advisory ID数(6件)とは異なることを補足する
+
+### advisoryと実依存経路
+
+- CVE:
+  `CVE-2026-54466`
+- GitHub Security Advisory:
+  `GHSA-xv26-6w52-cph6`
+- GitHub Advisory severity:
+  Critical
+- CVSS v4 score:
+  9.2
+- vector:
+  `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:H/VA:N/SC:N/SI:H/SA:N`
+- affected:
+  `<0.7.5`
+- patched:
+  `0.7.5`
+- 対象package:
+  `websocket-driver`
+- `websocket-driver`はdirect依存ではない
+- `package.json`に直接記載されていない
+- 実測した依存経路:
+
+```text
+firebase
+→ @firebase/database
+→ faye-websocket
+→ websocket-driver
+```
+
+- `faye-websocket`の要求rangeは`>=0.5.1`
+- `websocket-driver@0.7.5`はそのrange内
+- `--omit=dev`のauditにも残存していたため、production依存グラフ上にもcritical package entryが存在していた
+
+### Kompariでの到達性評価
+
+#### advisoryの内容として確認した事実
+
+- advisoryの脅威は、悪意あるpeerから受信したWebSocket frameのlength headerをparserが誤解釈し、message境界が破壊されるもの
+- 信頼できないクライアントを受け入れるサーバー側で典型的な曝露が生じる
+- parserはクライアント側の受信処理でも使われ得る
+
+#### Kompariの依存・コードについて確認した事実
+
+- `websocket-driver`は依存グラフ上、`@firebase/database`配下のクライアント側WebSocket実装として含まれていた
+- Kompariのtracked application codeで直接利用が確認されたFirebase機能はFirestoreとAuth
+- Realtime Databaseの直接import・直接利用は確認されていない
+- tracked fileに対する固定文字列検索では、`websocket-driver`への直接参照は見つからなかった
+- 該当依存経路がruntimeでロード・実行されることまでは確認していない
+- runtime bundleへの非混入も証明していない
+
+#### 評価としての推論
+
+- 以上からKompariにおける曝露は低いと評価した
+- ただしruntime非到達を証明したわけではない
+- 低曝露評価だけを理由に放置せず、修正版0.7.5がpatch updateとして利用可能だったためSEC-0で除去した
+
+### SEC-0の最小更新
+
+- `websocket-driver`を0.7.4から0.7.5へ更新した
+- SEC-0 commit `494e6734bd5d647d4e5ff2251ab2f09cb19116a8`で変更したのは`package-lock.json`の1ファイルだけ
+- 変更箇所は`node_modules/websocket-driver` entryの次の3項目だけ
+  - `version`
+  - `resolved`
+  - `integrity`
+- 差分は3 insertions / 3 deletions
+- `package.json`は無変更
+- `git hash-object`のbefore / after一致で`package.json`不変を確認した
+- SEC-0の依存更新commitではapplication code、設定ファイル、docsは無変更
+- overrides / resolutionsは追加していない
+- `npm audit fix`は使用していない
+- 更新後のintegrityは、事前にregistryから取得した0.7.5の`dist.integrity`と一致した
+- 今回のdocs commitでは`docs/MIGRATION_STATUS.md`だけを変更する
+
+### auditの更新前後比較
+
+全依存グラフ:
+
+```text
+更新前:
+moderate 10 / critical 1 / total 11
+
+更新後:
+moderate 10 / critical 0 / total 10
+```
+
+`--omit=dev`:
+
+```text
+更新前:
+moderate 3 / critical 1 / total 4
+
+更新後:
+moderate 3 / critical 0 / total 3
+```
+
+- `websocket-driver`は全依存グラフと`--omit=dev`の両方のpackage一覧から消滅した
+- criticalは両方とも1から0になった
+- moderate package entry数は不変
+- moderate package名一覧も不変
+- 減少したpackage entryは`websocket-driver`の1件だけ
+- SEC-0による別packageの脆弱性entry増減は観測されなかった(巻き込みゼロ。上記の具体的な実測内容のとおり)
+
+### ローカル非回帰検証
+
+- `npm test`
+  - Vitest v4.1.10
+  - test file 1件成功
+  - test 1件成功
+  - failed 0
+  - skipped 0
+  - todo 0
+- `npx tsc --noEmit`
+  - exit code 0
+  - 型エラーなし
+- `npm run build`
+  - exit code 0
+  - Next.js 16.2.6(Turbopack)
+  - build成功
+  - 生成routeは既存17件
+  - tests由来のroute / page追加なし
+- ROOT / hidden lockfile / actual packageの3者が、最終的にすべて`websocket-driver@0.7.5`で一致した
+
+### production deployment受入れ
+
+- deployment:
+  `dpl_F2SfGB9nDYzkqeYzhXZHyf28cpNf`
+- commit:
+  `494e6734bd5d647d4e5ff2251ab2f09cb19116a8`
+- target:
+  production
+- state:
+  READY
+- commit hash一致
+- dependency install成功
+- TypeScript工程成功
+- 型エラーなし
+- production build成功
+- 生成routeは17件
+- tests由来のroute追加なし
+- install logで次を観測:
+
+```text
+changed 1 package in 1s
+```
+
+- このinstall logは、ローカルで確認した単一package更新と整合した
+- ただし変更範囲そのものの証明はGit差分を正とする
+- build cacheは前deploymentから復元されていた
+- cold installは未実測
+- 次の処理時間を観測した
+  - Compiled: 14.4s
+  - TypeScript: 7.5s
+  - Build Completed: 26s
+- 処理時間は観測値であり、性能基準や将来deploymentの期待値として扱わない
+
+### npm公式仕様として確認した事項
+
+- `npm update`では`save` configの既定値がfalse
+- `save=false`は`package-lock.json`への書き込みも抑止する
+- `--package-lock-only`は、update時にnode_modulesを変更せずlockfileを対象にする指定
+- `npm ci`は既存node_modulesを削除し、tracked lockfileに基づいて依存を再構築する
+- `npm ci`はpackage.jsonやpackage-lock.jsonを書き換えず、不一致時には失敗する
+
+### npm 11.13.0環境で観測した挙動
+
+以下は今回のWindows / Git Bash / npm 11.13.0環境における観測である。npmの一般的・保証された挙動としては記録しない。
+
+- `npm update`が`up to date`と表示しても、root lockfileが無変更である証拠にはならなかった
+- `--save --package-lock-only`付きの実更新では、`up to date`表示のままroot `package-lock.json`の`websocket-driver` entryが0.7.4から0.7.5へ更新された
+- 今回の環境では、`npm ls`が表示したversionと、物理的な`node_modules/websocket-driver/package.json`のversionが一致しない状態を観測した
+- そのため、依存更新の確認では`npm ls`だけを根拠にしない
+- root `package-lock.json`、hidden lockfileである`node_modules/.package-lock.json`、実packageである`node_modules/<package>/package.json`を必要に応じて分離測定する
+- `npm update ... --dry-run --package-lock-only`実行後、次の状態を観測した
+
+```text
+tracked package-lock.json:
+websocket-driver 0.7.4
+
+node_modules/.package-lock.json:
+websocket-driver 0.7.5
+
+node_modules/websocket-driver/package.json:
+websocket-driver 0.7.4
+```
+
+- dry-runとの因果関係は単独再現していない
+- この観測をnpmの保証されたdry-run挙動としては扱わない
+- `npm ci`でtracked lockfileに基づいて再構築し、3者を0.7.4へ正常化してから実更新を再開した
+- 実更新後はroot lockfileだけを0.7.5へ更新し、差分レビュー後に`npm ci`でhidden lockfileと実packageも0.7.5へ同期した
+
+### 今後の依存監査ルール
+
+- severityは原典advisoryで確認する
+- 二次情報や検索結果の要約だけでseverityを確定しない
+- `npm audit` JSONの`cvss.score`は欠落し得る
+- 今回のaudit JSONでは次の値だった
+
+```text
+{score: 0, vectorString: null}
+```
+
+- 上記の0を、advisoryの公式CVSS scoreとして扱わない
+- 今回の公式CVSS v4 scoreはGitHub Advisory原典で9.2と確認した
+- `npm update`の表示文だけでlockfile変更の有無を判断しない
+- `npm ls`の表示だけで物理的なinstalled versionを判断しない
+- root lockfile / hidden lockfile / 実packageを必要に応じて分離測定する
+- `metadata.vulnerabilities.total`とunique advisory ID数を混同しない
+- vulnerable package entryとadvisoryを区別する
+- 観測事実、公式仕様、推論を区別して記録する
+- 確認していない事項を確定として書かない
+- production依存グラフへの残存とruntimeコード到達性を別問題として扱う
+
+### 完了範囲と既知境界
+
+#### 完了したもの
+
+- critical package entryの実体を原典advisoryまで確認
+- CVE / GHSA / severity / CVSS / affected range / patched versionを確認
+- lockfileとnode_modules上の実依存経路を確認
+- `--omit=dev`にもcriticalが残ることを実測
+- `websocket-driver`を0.7.4から0.7.5へ更新
+- root lockfileの変更を3行だけに限定
+- package.jsonとapplication codeを無変更に維持
+- audit全体でcritical 1から0
+- `--omit=dev`でもcritical 1から0
+- moderate entry数・名前一覧不変
+- test / tsc / build成功
+- 17 routes不変
+- production deployment受入れ完了
+
+#### 既知境界
+
+- moderateは全依存グラフで10件残存
+- `--omit=dev`ではmoderateが3件残存
+- moderate 10件の個別advisory内容は未調査
+- Realtime Databaseの直接import・直接利用は見つかっていない
+- ただし該当依存経路のruntimeロード・実行有無は確認していない
+- runtime bundleへの非混入までは証明していない
+- advisoryの曝露は低いと評価したが、非到達の形式的証明ではない
+- production buildはcache restored
+- cold installは未実測
+- hidden lockfileの不整合とdry-runの因果関係は単独再現していない
