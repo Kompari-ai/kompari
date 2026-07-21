@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-07-20（TEST-2 response schema contract matrix・production deployment受入れ完了）
+最終更新: 2026-07-22（TEST-3 candidate membership validator unit test・production deployment受入れ完了）
 
 ## 完了フェーズ
 
@@ -4026,3 +4026,181 @@ PATTERN_R_DERIVED_COUNT:20
 - production buildはcache restoredであり、
   cold installは未実測
 - TEST-2では自動test実行をdeployment gateとして導入していない
+
+## TEST-3(candidate membership validator固定)完了
+
+### 対象commit・production deployment
+
+- commit:
+  `b4bafb79034c605832cc94b19ac24e6f4dbf161d`
+- subject:
+  `test: add candidate membership validator contract coverage`
+- commit対象:
+  `tests/ai/assert-prediction-candidates.test.ts`の新規1件のみ
+- Git差分:
+  1 file changed, 129 insertions
+- committed Git blob SHA:
+  `fc71cadfc50440043957832f5921407ba1a68a46`
+- validation時のnormalized SHA-256:
+  `c0326bb43ae8e92ca58392d9a562b12efc8ac50d1a317213275aac5403b36261`
+- test fileは129行
+- production code、既存test 3件、docs、package、lockfile、configは
+  実装commitで無変更
+- local `npm test`:
+  test file 4件 / test 72件成功
+- local `npx tsc --noEmit`:
+  exit code 0、型エラーなし
+- local `npm run build`:
+  exit code 0
+- local build:
+  Next.js 16.2.6(Turbopack)、生成route 17件
+- Vercel deployment:
+  `dpl_5nAo6NJSbMVy2tbHSKTyJQHWd7Gp`
+- branch:
+  main
+- target:
+  production
+- state:
+  READY
+- source:
+  git
+- deploymentのcommit hashと実装commitは完全一致
+- production alias付与成功、alias errorなし
+- 以下のproduction deployment metadataとbuild log情報は、
+  ChatGPTがVercel MCPで該当deploymentを取得して確認した
+  外部受入れ証拠
+- Vercel build logではcommit `b4bafb7`のcloneを確認した
+- dependency installは`up to date in 986ms`
+- build cacheは前deployment
+  `dpl_A8Wbgc9QeREDZ8DL16Mufepipsht`
+  から復元された
+- Next.js 16.2.6を検出した
+- production compile成功
+- production TypeScript工程成功
+- static page 15 / 15生成成功
+- production routeは既存17件
+- tests由来のroute / page追加なし
+- Vercel build logでは`npm test`実行を観測しなかった
+- 次の処理時間を観測した
+  - Compiled: 14.7s
+  - TypeScript: 7.7s
+  - Build Completed: 27s
+- 処理時間は観測値であり、
+  性能基準や将来deploymentの期待値として扱わない
+
+### TEST-3がtestで固定した契約
+
+- mainは候補集合と完全一致する値をacceptする
+- mainが候補集合外ならfailureになる
+- 候補集合が空ならmainで必ずfailureになる
+- second / thirdは`undefined`のとき検査をスキップする
+- second / thirdに値があれば候補集合との完全一致を要求する
+- second / thirdが候補集合外ならfailureになる
+- 前後空白を自動trimしない代表例を固定した
+- 部分一致を許可しない代表例を固定した
+- 候補不一致は`Error`をthrowする
+- throw messageはfield名と引用符付き問題値を含む
+- message全文、句読点、語順は固定していない
+- test 12件を新規追加した
+- 既存3ファイルと合わせてtest file 4件 / test 72件となった
+
+### source実装とsource commentの確認
+
+- `assertPredictionCandidates`は候補集合から`Set`を作り、
+  main / second / thirdを生の`Set.has`で検査する
+- 関数直前のsource commentは、
+  完全一致だけを許可し、trim、表記変換、部分一致、
+  近似一致、先頭候補fallbackを行わない契約を主張している
+- TEST-3はこのうち主要なpositive / negative分岐、
+  no-trim代表例、no-partial-match代表例を
+  実module importするunit testへ変換した
+- 現在sourceにcase変換、Unicode normalization、
+  同義語変換、fuzzy matchingの処理は存在しない
+- ただしcase差、Unicode差、別表記などを個別に網羅する
+  regression testはTEST-3では追加していない
+- source commentの全語句を個別testで網羅固定したとは扱わない
+
+### TEST-2との継ぎ目
+
+- response schemaの`second`は
+  `nonBlankString`ではなく`z.string().optional()`
+- response schemaは`second: ""`をacceptする
+- validatorは`second !== undefined`のため、
+  候補集合との一致を要求する
+- candidatesに`""`がなければvalidatorはthrowする
+- schemaは通すがvalidatorは弾く値として
+  `second: ""`が成立することをTEST-3で固定した
+
+### 空文字列候補に関する現在挙動
+
+- pure validatorへ直接渡すcandidatesに`""`自体が含まれる場合、
+  `second: ""`は生の`Set.has`により通過する
+- TEST-3にはこのacceptを期待するtestを追加していない
+- したがってTEST-3が恒久契約として固定した挙動ではなく、
+  pure functionの現在実装として記録する
+- server routeの`normalizeCandidates`は、
+  request candidatesを文字列化してtrimし、
+  空文字列を除外する
+- 正規化後2件未満ならカテゴリ別default candidatesへ置換する
+- このroute前処理はcommit `b4bafb7`時点のsource review事実であり、
+  TEST-3のunit testによる保証ではない
+
+### server-side enforcement gap
+
+- admin client保存経路は、
+  response schema検証
+  → `assertPredictionCandidates`
+  → Firestore write
+  の順である
+- admin clientではvalidatorが
+  `batch.set`、`batch.update`、`batch.commit`より前に接続済み
+- server routeのsuccess response生成境界では
+  `GeneratePredictionResponseSchema`が接続済み
+- 同じserver route境界では
+  `assertPredictionCandidates`は未接続
+- TEST-3が固定する対象は
+  `assertPredictionCandidates`純関数の契約
+- TEST-3が固定しない対象は、
+  API routeがcandidate membershipを
+  server側のsuccess response境界で明示的に強制すること
+- routeの候補入力正規化と、
+  success responseに対するmembership enforcementは
+  別の責務として扱う
+- TEST-3はAPI route integration testではない
+
+### 完了範囲と既知境界
+
+#### 完了したもの
+
+- candidate membership validatorを実module importで検証
+- main / second / thirdのpositive / negative分岐を固定
+- second / thirdのundefined skipを固定
+- 空候補集合でのmain failureを固定
+- no-trim代表例を固定
+- no-partial-match代表例を固定
+- throwの型、field名、引用符付き問題値を固定
+- TEST-2との継ぎ目である`second: ""`を固定
+- production code無変更
+- 既存test無変更
+- local test / tsc / build成功
+- production deployment受入れ完了
+
+#### 既知境界
+
+- candidatesに`""`が含まれる場合の
+  `second: ""`通過はTEST-3の保証対象外
+- case差、Unicode normalization、別表記、
+  その他の近似一致を個別に検査するtestは追加していない
+- sourceは生の`Set.has`を使用するが、
+  source commentの全語句を個別testで網羅固定したわけではない
+- server routeのsuccess response生成境界に
+  `assertPredictionCandidates`は未接続
+- server routeの候補入力正規化はsource review済みだが、
+  TEST-3のunit testでは固定していない
+- `assertPredictionCandidates`をserver routeへ接続するかは
+  別PRの判断
+- API route integration testは未導入
+- `npm test`は手動実行のみ
+- Vercel build logでは`npm test`実行を観測していない
+- CI、required status check、
+  deployment test gateは未導入
