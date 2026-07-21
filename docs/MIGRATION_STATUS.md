@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-07-20（TEST-1 provenance 6 branch unit test・production build受入れ完了）
+最終更新: 2026-07-20（TEST-2 response schema contract matrix・production deployment受入れ完了）
 
 ## 完了フェーズ
 
@@ -3654,8 +3654,9 @@ deployment情報は、Vercel Dashboardとbuild logを人間が確認した受入
 
 #### 既知境界
 
-- response schemaを実module importするnegative matrix testは未導入
-  (TEST-2の対象)
+- TEST-1完了時点ではresponse schemaを実module importする
+  negative matrix testは未導入だった
+  (TEST-2で導入済み。後続のTEST-2記録を参照)
 - `pickCandidate` / `buildAttemptProvenance` /
   `parsePredictionOutputCore`は非exportであり、
   公開wrapperを経由しない直接のunit testは行っていない
@@ -3668,3 +3669,360 @@ deployment情報は、Vercel Dashboardとbuild logを人間が確認した受入
 - GitHub Actions、required status check、
   Vercel Deployment Checkは未導入
 - deployment gateとしての自動test実行は未導入
+
+## TEST-2(generate-prediction response schema contract matrix)完了
+
+### 対象commit・production deployment
+
+- commit:
+  `56f992418c8b3cad5505e8517c8774f3bdfe66bf`
+- subject:
+  `test: add generate-prediction response schema contract matrix`
+- commit対象:
+  `tests/ai/generate-prediction-schema.test.ts`の新規1件のみ
+- Git差分:
+  1 file changed, 796 insertions
+- committed Git blob SHA:
+  `d650fd080877240f6f360f7cf372a6c54bd626a0`
+- validation時のWindows working-tree SHA-256:
+  `263e997fd382502413ad0ae6211aa37be49a988f1c10a25403b4f7f970481b20`
+- production code、既存test、docs、`package.json`、lockfileは
+  実装commitで無変更
+- Vercel deployment:
+  `dpl_Hr7P7uDY3cjZaWDBaNG9xs48DrLD`
+- target:
+  production
+- state:
+  READY
+- branch:
+  main
+- deploymentのcommit hashと実装commitは完全一致
+- production alias:
+  `kompari.vercel.app`
+- alias errorなし
+
+### test構成
+
+- production moduleの
+  `GeneratePredictionResponseSchema`
+  を直接importして検証した
+- importは`vitest`とproduction schemaの2行だけ
+- flatな`test()` 46件で構成し、`describe()`は使用していない
+- 全46件が
+  `GeneratePredictionResponseSchema.safeParse(payload)`
+  を1回ずつ実行する
+- positive testは20件
+- reject testは26件
+- 既存のsmoke test 1件、
+  TEST-1 provenance test 13件と合わせて、
+  test file 3件 / test 60件
+- `assertPredictionCandidates`はimportも呼出しも行っていない
+- candidate-set validationはTEST-2の対象外とした
+
+### response schemaの確認範囲
+
+- source schemaでは`ai`と`main`がrequiredの`nonBlankString`
+- testでは次を固定した
+  - `ai`欠落をrejectする
+  - 空文字列と空白のみの`ai`をrejectする
+  - 空白のみの`main`をrejectする
+  - `ai`の前後空白をtrimせず保持する
+- `predictionSource`はsource上で次の2値だけ
+  - `"official-ai"`
+  - `"mock"`
+- testでは未知値`"human"`をrejectする
+- `predictionSource`、`isMock`、
+  `generationProvenance`の整合性をsuperRefine matrixで固定した
+- official-aiでは:
+  - `isMock: false`を要求する
+  - `generationProvenance`を要求する
+- mockでは:
+  - `isMock: true`を要求する
+  - `generationProvenance`を禁止する
+- `generationProvenance`はshape上ではoptionalであり、
+  official-aiでの必須性はsuperRefineが担う
+
+### superRefine matrix
+
+次の6ケースについて、rejectだけでなくissue件数とpath集合を固定した。
+
+1. official-ai / `isMock: false` / provenanceなし
+   - issue 1件
+   - path: `generationProvenance`
+2. official-ai / `isMock: true` / provenanceあり
+   - issue 1件
+   - path: `isMock`
+3. official-ai / `isMock: true` / provenanceなし
+   - issue 2件
+   - path: `isMock`
+   - path: `generationProvenance`
+4. mock / `isMock: true` / provenanceあり
+   - issue 1件
+   - path: `generationProvenance`
+5. mock / `isMock: false` / provenanceなし
+   - issue 1件
+   - path: `isMock`
+6. mock / `isMock: false` / provenanceあり
+   - issue 2件
+   - path: `isMock`
+   - path: `generationProvenance`
+
+- issue順序には依存しない
+- issueのcodeとmessageは固定しない
+- `arrayContaining(expectedPaths)`でpath集合を検証する
+- `toHaveLength(expectedPaths.length)`で
+  余分なissueがないことを固定する
+
+### provenance shape契約
+
+- `PredictionAttemptProvenanceSchema`の6 branchすべてを
+  response schema経由でacceptすることを固定した
+- `main-non-string`の`rawMainType`5種を固定した
+  - `"null"`
+  - `"number"`
+  - `"boolean"`
+  - `"array"`
+  - `"object"`
+- attempt branchについて次の代表的なrejectを固定した
+  - canonical branchへの`fallbackReason`混入
+  - main-missing branchへの`providerRawMain`混入
+  - canonical branch内の未知field
+  - contradictoryなattempt literal
+- count-1 provenanceへの`initialAttempt`混入をrejectする
+- count-2 provenanceでの
+  `initialMissingFields`欠落をrejectする
+- production schemaが`generationAttemptCount`のliteral 1 / 2を
+  discriminated unionとして定義することをsource reviewした
+- testではcount 1 / 2のacceptとcount 3のrejectを固定した
+- attempt branchの4 rejectは代表例であり、
+  全ての禁止field組合せを網羅したものではない
+
+### initialMissingFields契約
+
+acceptするtuple:
+
+```text
+["reason"]
+["evidence"]
+["reason", "evidence"]
+```
+
+rejectする例:
+
+```text
+[]
+["evidence", "reason"]
+["reason", "reason"]
+```
+
+- 順序も契約の一部
+- 空tuple、逆順、重複を許可しない
+
+### wrapper・unknown field境界
+
+- top-levelの`output`はsource上で
+  `z.never().optional()`
+- testでは`output`のobject / null / string / arrayをrejectする
+- top-levelの`attemptProvenance`もsource上で
+  `z.never().optional()`
+- testでは`attemptProvenance`のwrapper objectをrejectする
+- `output: undefined`はacceptする
+- explicit undefinedはJSONでは表現できないため、
+  これはwire-level payloadではなくJavaScript object上の
+  optional semantics境界として固定した
+- response schema top-levelの`.passthrough()`をsource reviewし、
+  unknown top-level field 1件の保持をtestで固定した
+- `usedFactors`内のfactor objectについて、
+  unknown field 1件をstripする現在の挙動を固定した
+- `second`はsource上で`z.string().optional()`
+- blank `second`のacceptをtestで固定した
+- `ai` / `main`と`second`の非対称性を
+  positive boundaryとして明示した
+
+### assertion policyと機械検査
+
+本記録ではreject testを次の2種類に分ける。
+
+#### Pattern S
+
+- superRefine由来の6件
+- `success === false`を固定する
+- issue件数を固定する
+- issue path集合を固定する
+- issue順序、code、messageは固定しない
+
+#### Pattern R
+
+- 残るreject 20件
+- required / `nonBlankString` refine / enum /
+  `z.never()` / strict / discriminatedUnion由来
+- `success === false`だけを固定する
+- Zod issueのpath、code、message、
+  reject理由までは固定しない
+- union不一致時のissue構造を推測で固定しない
+
+機械検査結果:
+
+```text
+TEST_BLOCK_COUNT:46
+TOTAL_SAFEPARSE_COUNT:46
+INVALID_SAFEPARSE_DISTRIBUTION_COUNT:0
+TOTAL_TRUE_ASSERTS:20
+TOTAL_FALSE_ASSERTS:26
+TOTAL_GUARD_NEG:3
+TOTAL_GUARD_POS:6
+INVALID_DISTRIBUTION_COUNT:0
+PATTERN_R_DERIVED_COUNT:20
+```
+
+- 全46 testにsafeParseがちょうど1件存在する
+- 全46 testにpositiveまたはrejectのassertが
+  ちょうど1件存在する
+- assert欠落、assert重複、
+  positive / reject混在はなかった
+- `if (!result.success) return;`は
+  result.dataを追加検証するpositive 3件だけ
+- `if (result.success) return;`は
+  superRefine 6件だけ
+- positive 20件のうちparsed dataを追加assertするのは3件
+- 残るpositive 17件はacceptされることだけを固定し、
+  parsed data全体の完全一致やfield保持までは固定しない
+
+### source reviewによる確認
+
+- reject matrix全26 payloadをsource reviewした
+- Pattern R 20 payloadでは、
+  有効な基準payloadに対する意図的な欠落・置換・追加が
+  1箇所だけとなるよう構成されていることを確認した
+- Pattern R 20 payloadでは、
+  検証対象外のsuperRefine矛盾が混入していないことを確認した
+- official-aiベースのPattern Rでは、
+  validな`generationProvenance`と
+  `isMock: false`を維持している
+- mockベースのPattern Rでは、
+  `predictionSource: "mock"`、
+  `isMock: true`、
+  provenanceなしを維持している
+- Pattern Sでは、matrixで指定した1つまたは2つの
+  superRefine矛盾だけを含むことを確認した
+- count-2 provenanceの必須field欠落testは、
+  valid objectをspreadして削除する方法ではなく、
+  欠落field以外を明示的に組み立てている
+- source reviewは現時点のpayloadに対する確認であり、
+  将来のtest編集後もreject理由を継続的に保証するものではない
+
+### ローカル検証
+
+- `npm test`
+  - Vitest v4.1.10
+  - test file 3件成功
+  - test 60件成功
+  - failed 0
+  - skipped 0
+  - todo 0
+- `npx tsc --noEmit`
+  - exit code 0
+  - 型エラーなし
+- `npm run build`
+  - exit code 0
+  - Next.js 16.2.6(Turbopack)
+  - build成功
+  - 生成routeは既存17件
+  - tests由来のroute / page追加なし
+- production codeと既存testは無変更
+- test fileは検証前後でworking-tree SHA-256不変
+- test fileは検証前後で796行不変
+
+### production deployment受入れ
+
+- VercelはGitHubのmain branchから
+  commit `56f992418c8b3cad5505e8517c8774f3bdfe66bf`
+  をcloneした
+- dependency installは`up to date in 1s`
+- build cacheは前deployment
+  `dpl_3zLeuQT8P7wubZvcbfraeXPKJUtp`
+  から復元された
+- Next.js 16.2.6を検出した
+- production compile成功
+- TypeScript工程成功
+- static page 15 / 15生成成功
+- routeは既存17件
+- tests由来のroute / page追加なし
+- deployment stateはREADY
+- production alias付与成功
+- alias errorなし
+- Vercel build logでは`npm test`の実行を観測しなかった
+- 次の処理時間を観測した
+  - Compiled: 16.8s
+  - TypeScript: 8.0s
+  - Build Completed: 29s
+- 処理時間は観測値であり、
+  性能基準や将来deploymentの期待値として扱わない
+
+### 完了範囲と既知境界
+
+#### 完了したもの
+
+- active response schemaを実module importで固定
+- positive 20件 / reject 26件のcontract matrixを固定
+- superRefine 6組合せのissue件数とpath集合を固定
+- provenance 6 branchのacceptをresponse schema経由で固定
+- `main-non-string` raw type 5種を固定
+- count 1 / 2のacceptとcount 3のrejectを固定
+- `initialMissingFields`のvalid / invalid tupleを固定
+- attempt branchの代表的なstrict / union違反4件を固定
+- `output`の代表値4種と
+  `attemptProvenance` objectのrejectを固定
+- explicit undefinedのoptional semantics境界を固定
+- unknown top-level field 1件の保持を固定
+- factor objectのunknown field 1件のstripを固定
+- blank `second`のacceptを固定
+- safeParse分布とassert分布の空振り・重複なしを機械確認
+- reject matrix全26 payloadをsource review
+- production code無変更
+- 既存test無変更
+- local test / tsc / build成功
+- production deployment受入れ完了
+
+#### 既知境界
+
+- Pattern Sはissue件数とpath集合を固定するが、
+  issue順序、code、messageは固定していない
+- Pattern R 20件は
+  `success === false`だけを固定している
+- Pattern RはZod issueのpath、code、message、
+  reject理由までは固定していない
+- Pattern Rのpayloadが意図した変更箇所だけを含むことは
+  今回のsource reviewで確認したが、
+  test自身による継続的保証ではない
+- Pattern R payloadを将来編集した場合は、
+  reject理由のsource reviewを再実施する必要がある
+- positive 20件のうちparsed dataの追加assertを持つのは3件
+- 残るpositive 17件はacceptのみを固定し、
+  parsed data全体の完全一致やfield保持までは固定していない
+- `ai`欠落、空・空白`ai`、空白`main`はtest済みだが、
+  `main`欠落と空文字列`main`は個別testを持たない
+- `assertPredictionCandidates`による候補集合検証は
+  TEST-2の対象外(TEST-3の対象)
+- 空の候補集合、候補外のmain / second / third、
+  trim・表記変換・部分一致を許可しない契約は、
+  `assertPredictionCandidates`のTEST-3で固定する
+- parser側の空candidates時のplaceholder出力と
+  canonical-before-blankはTEST-1で固定済み
+- TEST-2はresponse schemaのdirect import testであり、
+  API routeのintegration testではない
+- routeがschemaを呼び出す実経路自体を
+  TEST-2のtest runnerから実行していない
+- Firestore write、admin client、
+  provider adapterはTEST-2の対象外
+- explicit undefinedはJSON wireで表現できない
+- top-level `.passthrough()`は維持されており、
+  `output` / `attemptProvenance`以外の未知fieldは通過し得る
+- factor objectのunknown field stripは
+  現在のZod object挙動を固定したものであり、
+  explicitな`.strict()`契約ではない
+- Vercel build logでは`npm test`実行を観測していない
+- `npm test`は手動実行のみ
+- production buildはcache restoredであり、
+  cold installは未実測
+- TEST-2では自動test実行をdeployment gateとして導入していない
