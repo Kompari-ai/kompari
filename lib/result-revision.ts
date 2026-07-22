@@ -107,6 +107,7 @@ export type SingleWinnerCorrectionPlan = {
 export function planSingleWinnerCorrection(input: {
   freshEvent: KompariEvent;
   expectedOriginalWinner: string;
+  expectedRevision: number;
   nextWinner: string;
 }): SingleWinnerCorrectionPlan {
   const expectedWinner = input.expectedOriginalWinner.trim();
@@ -116,11 +117,23 @@ export function planSingleWinnerCorrection(input: {
     );
   }
 
+  assertNonNegativeSafeInteger(input.expectedRevision, "Expected revision");
+
   const freshWinner = getResultWinner(input.freshEvent).trim();
 
   if (freshWinner !== expectedWinner) {
     throw new ResultRevisionConflictError(
       "Result winner changed before correction"
+    );
+  }
+
+  const freshRevision = resolveCurrentRevision(
+    input.freshEvent.result?.revision
+  );
+
+  if (freshRevision !== input.expectedRevision) {
+    throw new ResultRevisionConflictError(
+      "Result revision changed before correction"
     );
   }
 
@@ -156,9 +169,7 @@ export function planSingleWinnerCorrection(input: {
     );
   }
 
-  const nextRevision = computeNextRevision(
-    resolveCurrentRevision(input.freshEvent.result?.revision)
-  );
+  const nextRevision = computeNextRevision(freshRevision);
 
   return {
     nextWinner,

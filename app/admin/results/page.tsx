@@ -89,6 +89,11 @@ type DraftResult = {
   version: number;
 };
 
+type ExpectedResultState = {
+  winner: string;
+  revision: number;
+};
+
 // saveResult成功後、snapshotで反映されるまでの間、連続保存を止めるための
 // 未ack保存結果。nextRevisionはsingle-winner-correctionのtransactionが実際に
 // 採番した訂正後revisionで、draft.baseRevision(訂正前の基準revision)とは別物。
@@ -433,7 +438,8 @@ export default function AdminResultsPage() {
 
   const saveResult = async (
     event: KompariEvent,
-    winner: string
+    winner: string,
+    expectedResult: ExpectedResultState
   ): Promise<SaveResultOutcome> => {
     const trimmedWinner = winner.trim();
     const candidates = event.candidates ?? [];
@@ -538,7 +544,8 @@ export default function AdminResultsPage() {
 
           const plan = planSingleWinnerCorrection({
             freshEvent,
-            expectedOriginalWinner: originalWinner,
+            expectedOriginalWinner: expectedResult.winner,
+            expectedRevision: expectedResult.revision,
             nextWinner: trimmedWinner,
           });
 
@@ -734,7 +741,10 @@ export default function AdminResultsPage() {
       return;
     }
 
-    const outcome = await saveResult(event, draft.selected);
+    const outcome = await saveResult(event, draft.selected, {
+      winner: draft.baseWinner,
+      revision: draft.baseRevision,
+    });
 
     if (!outcome.ok) {
       return;
