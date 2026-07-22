@@ -1,6 +1,6 @@
 # Kompari Migration Status
 
-最終更新: 2026-07-22（TEST-3 candidate membership validator unit test・production deployment受入れ完了）
+最終更新: 2026-07-22（PR-2f-1 correction expected revision CAS・production deployment受入れ完了）
 
 ## 完了フェーズ
 
@@ -4204,3 +4204,316 @@ PATTERN_R_DERIVED_COUNT:20
 - Vercel build logでは`npm test`実行を観測していない
 - CI、required status check、
   deployment test gateは未導入
+
+## PR-2f-1(single-winner correction expected revision CAS)本番受入れ完了
+
+PR-2e-0では、保存前のUI側で`draft.baseWinner` /
+`draft.baseRevision`と現在のpersisted値を比較する非atomicな早期警告を導入した。
+一方、correction transaction内ではfresh winnerと
+`expectedOriginalWinner`だけを比較し、expected revisionは比較していなかった。
+
+そのため、UIチェック通過後からtransactionのfresh readまでに
+winnerが`A → B → A`と戻るABAが完了した場合、winner比較だけでは
+変更を検出できない境界が残っていた。
+
+PR-2f-1では、draft作成時またはpending中再編集時に凍結された
+winner / revision pairをcorrection transactionまで運び、
+fresh revisionとのcompare-and-setを追加した。
+
+### 対象commit・production deployment
+
+- implementation commit:
+  `aa449e40b3e89b61dc3c5f4d8074c599dd222471`
+- subject:
+  `fix: enforce revision CAS for result corrections`
+- parent:
+  `9ca6bf1d29ac2525c972455de3cd32584ad69755`
+- commit対象:
+  - `app/admin/results/page.tsx`
+  - `lib/result-revision.ts`
+  - `tests/result/result-revision.test.ts`
+- Git差分:
+  3 files changed, 234 insertions, 7 deletions
+- Vercel production deployment:
+  `dpl_Bm2JNypFc29a76j2baqbnjsbEiJy`
+- deployment commit:
+  `aa449e40b3e89b61dc3c5f4d8074c599dd222471`
+- target:
+  production
+- state / readyState:
+  READY
+- source:
+  Git
+- production alias:
+  - `kompari.vercel.app`
+  - `kompari-tommycarter.vercel.app`
+  - `kompari-git-main-tommycarter.vercel.app`
+- aliasError:
+  なし
+
+GitHub mainへのcommit反映とVercel deploymentの確認は、
+ChatGPTのGitHub / Vercel connectorによる独立確認である。
+ローカル実装・検証結果はCodexの実測報告に基づく。
+
+### expected stateの契約
+
+transactionへ渡すexpected stateは次のdraft pairである。
+
+```text
+expectedOriginalWinner = draft.baseWinner
+expectedRevision       = draft.baseRevision
+```
+
+- save click時に再取得したpersisted winner / revisionを
+  expected stateとして渡さない
+- winnerだけsave時Event由来、revisionだけdraft由来とする
+  mixed pairを使用しない
+- `expectedRevision`は`planSingleWinnerCorrection`のrequired input
+- optional、default値、compatibility overloadは導入していない
+- `saveResult`のruntime call siteは
+  `handleSaveClick`の1箇所だけ
+- 現行early checkを通過した時点ではdraft pairと
+  save時snapshot pairは値として一致する
+- CASの意味は「利用者が訂正を開始した基準状態」とする
+
+### transaction内の検証順
+
+`planSingleWinnerCorrection`では次の順序を固定した。
+
+1. expected winnerのnon-blank validation
+2. expected revisionのnon-negative safe integer validation
+3. fresh winnerとexpected winnerの比較
+4. winner不一致を`ResultRevisionConflictError`
+5. fresh revisionの解決
+6. fresh revisionとexpected revisionの比較
+7. revision不一致を`ResultRevisionConflictError`
+8. settled status validation
+9. correctable single-winner shape validation
+10. next winnerのblank / no-op validation
+11. candidate membership validation
+12. fresh revisionからnext revisionを採番
+
+この順序により、次を固定する。
+
+- invalid expected revisionはwinner conflictより先にvalidationとなる
+- winner conflictはrevision conflictより先に判定する
+- revision conflictはstatus / shape / no-op /
+  candidate validationより先に判定する
+- fresh revisionはCAS比較とnext revision採番で共用する
+- next revisionはexpected revisionではなくfresh revisionから計算する
+
+revision不一致には既存の
+`ResultRevisionConflictError`を使用し、messageは
+`Result revision changed before correction`とする。
+callerでは既存の`reason: "conflict"`経路を使用し、
+新しいoutcome kindやalert分岐は追加していない。
+
+### 閉じたABA境界
+
+PR-2f-1以前には、次のsequenceがsource上で到達可能だった。
+
+```text
+Client A:
+draft base = winner A / revision r
+→ UI early check通過
+
+別client:
+A / r
+→ B / r+1
+→ A / r+2
+
+Client A transaction:
+expected winner A == fresh winner A
+→ winner比較だけでは変更を検出できない
+```
+
+PR-2f-1以後は、同じsequenceでtransaction内において次を比較する。
+
+```text
+expectedRevision = r
+freshRevision    = r+2
+```
+
+両者の不一致により`ResultRevisionConflictError`となり、
+Event parent updateとrevision entry作成へ進まない。
+
+これは、ABAを検出するtransaction契約がproductionへ配備され、
+pure unit test・local検証・production buildで受入れられたことを意味する。
+
+実Firestoreを使用した同時ABA競合の手動再現は実施していない。
+「production上でABA競合を手動再現済み」とは扱わない。
+
+### revision数値境界
+
+`expectedRevision`はnon-negative safe integerを要求する。
+
+次はexpected input validationとなる。
+
+- 負数
+- 小数
+- `NaN`
+- `Infinity`
+- runtime上のnumber以外
+- `Number.MAX_SAFE_INTEGER + 1`
+
+`Number.MAX_SAFE_INTEGER`自体はvalid safe integerであり、
+expected input validationでは拒否しない。
+
+expected revisionとfresh revisionがともに
+`Number.MAX_SAFE_INTEGER`の場合はCAS自体には一致する。
+その後、`computeNextRevision(freshRevision)`で安全にincrementできないため、
+overflow validationとなる。
+
+### unit testで固定した契約
+
+新規test:
+
+`tests/result/result-revision.test.ts`
+
+実測:
+
+- targeted test:
+  1 file / 20 tests passed
+- full test:
+  5 files / 92 tests passed
+- 既存test:
+  4 files / 72 tests
+- 新規test:
+  20 tests
+
+主な固定対象:
+
+- winner / revision一致時の正常訂正
+- legacy revision未設定を0として扱い、最初の訂正をrevision 1とする
+- winner conflict
+- winner一致・revision不一致のABA核心
+- winner / revision両方不一致時のwinner conflict優先
+- revision conflictのno-op / candidate / status validation優先
+- expected revisionのruntime input validation
+- invalid expected revisionのValidationがwinner conflictより優先
+- fresh revisionの既存runtime validation
+- MAX safe integer同士のCAS一致後overflow
+- revision CAS成功後の既存no-op / candidate / status validation
+
+testはproduction moduleを直接importし、
+mock moduleやproduction関数のコピーを使用していない。
+
+### local検証
+
+PowerShell execution policyは変更せず、
+Windowsの`npm.cmd` / `npx.cmd`を直接使用した。
+
+- `npm.cmd test -- tests/result/result-revision.test.ts`
+  - exit 0
+  - 1 file / 20 tests passed
+- `npm.cmd test`
+  - exit 0
+  - 5 files / 92 tests passed
+- `npx.cmd tsc --noEmit`
+  - exit 0
+- `npm.cmd run build`
+  - exit 0
+  - Next.js 16.2.6 (Turbopack)
+  - compile成功
+  - TypeScript成功
+  - static generation 15 / 15
+  - route 17件
+
+PowerShell execution policy、profile、registryは変更していない。
+
+### production build受入れ
+
+Vercel build logで次を確認した。
+
+- Git clone:
+  branch `main` / commit `aa449e4`
+- Next.js:
+  16.2.6 (Turbopack)
+- compile:
+  成功(16.8秒)
+- TypeScript:
+  成功(7.9秒)
+- static generation:
+  15 / 15成功
+- route:
+  17件
+- build:
+  完了
+- deployment:
+  完了
+
+Vercel build logでは`npm test`の実行を観測していない。
+production unit test成功とは扱わない。
+
+production buildのTypeScript工程はプロジェクト全体として成功したが、
+個別に`tests/result/result-revision.test.ts`を評価したファイル一覧は
+build logに表示されない。
+新規test fileの型正しさは、local
+`npx.cmd tsc --noEmit`成功を直接の受入れ根拠とする。
+
+### PR-2e契約の不変範囲
+
+PR-2f-1では次を変更していない。
+
+- `DraftResult`のshape
+- `PendingResultSave`のshape
+- UI側の非atomic early check
+- pending / snapshot acknowledgment条件
+- draft / pendingのversion付き削除
+- select / clearのno-write挙動
+- correction confirm
+- metadata write
+- correction transactionのparent update payload
+- revision entry payload
+- `settledAt`保持
+- `SaveResultOutcome`
+- initial settlement経路
+- Firestore rules
+
+`pending.nextRevision`は訂正後revisionであり、
+expected revisionとして使用していない。
+expected revisionには訂正前の`draft.baseRevision`を使用する。
+
+### 完了範囲
+
+PR-2f-1で完了したもの:
+
+- correction transactionへのrequired expected revision追加
+- draft winner / revision pairのtransactionへの配線
+- winner CASに加えrevision CASを追加
+- ABA winner-return sequenceの検出契約
+- Conflict / Validationの優先順位固定
+- revision数値境界の固定
+- pure unit test 20件
+- local full test / TypeScript / production build成功
+- Vercel production deployment受入れ
+
+過去のPR-2e節にある
+「expectedRevisionは比較していない」
+「transaction境界ではABA未防御」
+という記録は、PR-2e完了時点の歴史的事実である。
+
+現在は後続のPR-2f-1により、
+single-winner correction transactionについては解消済みである。
+
+### 未検証・既知境界
+
+1. 実Firestoreを使った同時ABA競合は手動再現していない。
+   pure unit testとsource reviewによりCAS契約を受け入れた
+2. Firestore Emulatorによるtransaction concurrency testは未導入
+3. transaction retry時のintegration testは未導入
+4. React component / admin results integration testは未導入
+5. Firestore rulesにexpected revision CASは追加していない。
+   現在の防御はclient `runTransaction`内のfresh read / compareである
+6. `npm test`は手動実行であり、CI / required status check /
+   deployment test gateは未導入
+7. **既存Eventの初回settlementは引き続きwriteBatchであり、
+   fresh read / compare-and-setを持たない**
+8. `app/admin/results/page.tsx`と
+   `app/admin/edit/[id]/page.tsx`の2経路、およびcross-screen競合で、
+   同時初回確定の後勝ち上書き防御は未実装
+9. 初回settlementのtransaction化はPR-2f-2で扱う
+10. `app/admin/page.tsx`のcreateEventは新規Event IDへのcreateであり、
+    既存同一Eventの初回確定競合とは性質が異なるため
+    PR-2f-2対象外とする
+11. Firestore rules強化はPR-2f-2とは別の将来PRとして扱う
