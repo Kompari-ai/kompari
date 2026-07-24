@@ -30,6 +30,11 @@ import {
   type KompariPredictionDoc,
 } from "@/lib/events";
 import { findWinnersOutsideCandidates } from "@/lib/result-write-guard";
+import {
+  InitialSettlementConflictError,
+  InitialSettlementValidationError,
+} from "@/lib/result-initial-settlement";
+import { runInitialSettlementTransaction } from "@/lib/result-initial-settlement-transaction";
 import { buildResultWriteUpdates } from "@/lib/result-write";
 import {
   ResultRevisionConflictError,
@@ -468,16 +473,13 @@ export default function AdminResultsPage() {
       }
     }
 
-    // 初回settlement条件: event.resultが文字通りnull/undefinedの場合のみ、新規winnerを
-    // 「初めての確定」として扱う(app/admin/edit/[id]/page.tsxのsaveEventと同一契約)。
-    const eventResult = event.result;
-    const initialSettlementConditionMet =
+    // UI snapshotでは操作intentだけを分類する。初回settlement可否のauthoritative判定は
+    // shared transaction内でfresh Eventに対して行う。
+    const initialSettlementRequested =
+      winnerChanged &&
+      trimmedWinner !== "" &&
       !resultIsSettled &&
-      originalWinner === "" &&
-      eventResult?.winners === undefined &&
-      eventResult?.status === undefined &&
-      !eventResult?.settledAt &&
-      (eventResult === null || eventResult === undefined);
+      originalWinner === "";
 
     // 訂正可能shape判定は lib/result-revision.ts の共有SoTへ委譲する
     // (saveResult固有のinline判定は持たない、PR-2d-2b)。
@@ -487,7 +489,7 @@ export default function AdminResultsPage() {
 
     if (!winnerChanged) {
       intentKind = "metadata";
-    } else if (trimmedWinner !== "" && initialSettlementConditionMet) {
+    } else if (initialSettlementRequested) {
       intentKind = "initial-settlement";
     } else if (trimmedWinner !== "" && singleWinnerCorrectionAllowed) {
       const confirmed = window.confirm(
@@ -593,17 +595,21 @@ export default function AdminResultsPage() {
           winner: trimmedWinner,
           nextRevision,
         };
+      } else if (intentKind === "initial-settlement") {
+        const plan = await runInitialSettlementTransaction({
+          source: "results",
+          eventRef,
+          nextWinner: trimmedWinner,
+        });
+
+        return {
+          ok: true,
+          kind: "initial-settlement",
+          winner: plan.winner,
+        };
       } else {
-        // intentKindはmetadataまたはinitial-settlementのみ。single-winner-correction用の
-        // buildResultWriteUpdates呼出しはここでは行わない(transaction経路と排他)。
-        const resultUpdates =
-          intentKind === "metadata"
-            ? buildResultWriteUpdates({ kind: "metadata" })
-            : buildResultWriteUpdates({
-                kind: "initial-settlement",
-                winner: trimmedWinner,
-                settledAt: serverTimestamp(),
-              });
+        // metadata-onlyは既存writeBatch経路を維持し、Result keyを書かない。
+        const resultUpdates = buildResultWriteUpdates({ kind: "metadata" });
 
         const batch = writeBatch(db);
         batch.update(eventRef, {
@@ -612,18 +618,22 @@ export default function AdminResultsPage() {
         });
         await batch.commit();
 
-        return intentKind === "metadata"
-          ? { ok: true, kind: "metadata", winner: trimmedWinner }
-          : { ok: true, kind: "initial-settlement", winner: trimmedWinner };
+        return { ok: true, kind: "metadata", winner: trimmedWinner };
       }
     } catch (error) {
-      if (error instanceof ResultRevisionConflictError) {
+      if (
+        error instanceof InitialSettlementConflictError ||
+        error instanceof ResultRevisionConflictError
+      ) {
         alert(
           "他の変更と競合しました。最新の状態を確認して再度お試しください。"
         );
         return { ok: false, reason: "conflict" };
-      } else if (error instanceof ResultRevisionValidationError) {
-        alert("結果の状態が想定外のため訂正できません。");
+      } else if (
+        error instanceof InitialSettlementValidationError ||
+        error instanceof ResultRevisionValidationError
+      ) {
+        alert("結果の状態または入力内容が想定外のため保存できません。");
         return { ok: false, reason: "validation-error" };
       } else {
         console.error(error);

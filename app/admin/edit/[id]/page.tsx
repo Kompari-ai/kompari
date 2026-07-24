@@ -31,6 +31,15 @@ import {
   findWinnersOutsideCandidates,
   isWinnerOutsideCandidates,
 } from "@/lib/result-write-guard";
+import {
+  InitialSettlementConflictError,
+  InitialSettlementValidationError,
+} from "@/lib/result-initial-settlement";
+import {
+  InitialSettlementCandidateChangeError,
+  runInitialSettlementTransaction,
+  type InitialSettlementEditMetadataUpdates,
+} from "@/lib/result-initial-settlement-transaction";
 import { buildResultWriteUpdates } from "@/lib/result-write";
 import { OFFICIAL_AI_NAMES } from "@/lib/ai/official-ai";
 import {
@@ -315,19 +324,22 @@ export default function AdminEditPage({
       return;
     }
 
-    // 初回settlement条件: event.resultが文字通りnull/undefinedの場合のみ、新規winnerを
-    // 「初めての確定」として扱う。result={}やresult={winner:""}、winners/statusが明示された
-    // 非nullなshapeは、未知fieldを誤って上書きしないよう安全側でblockする。
-    const eventResult = event.result;
-    const initialSettlementConditionMet =
+    // UI snapshotでは操作intentだけを分類する。初回settlement可否のauthoritative判定は
+    // shared transaction内でfresh Eventに対して行う。
+    const initialSettlementRequested =
+      winnerChanged &&
+      nextWinner !== "" &&
       !resultIsSettled &&
-      originalWinner === "" &&
-      eventResult?.winners === undefined &&
-      eventResult?.status === undefined &&
-      !eventResult?.settledAt &&
-      (eventResult === null || eventResult === undefined);
+      originalWinner === "";
 
-    if (winnerChanged && nextWinner !== "" && !initialSettlementConditionMet) {
+    if (initialSettlementRequested && candidatesChanged) {
+      alert(
+        "候補の変更と結果の確定は同時に保存できません。\n先に候補変更を保存してから、結果を確定してください。"
+      );
+      return;
+    }
+
+    if (winnerChanged && nextWinner !== "" && !initialSettlementRequested) {
       alert(
         "この結果の状態が想定外のため、この画面では変更できません。結果入力画面から確認してください。"
       );
@@ -377,34 +389,52 @@ export default function AdminEditPage({
 
       const trimmedTitle = title.trim();
       const trimmedVenue = venue.trim();
-
-      // winnerChanged===falseならmetadata({}、resultキー自体を書かず既存Resultを丸ごと保持)。
-      // winnerChanged===trueは、ここまでのguardにより初回settlement(event.resultがnull/undefined)
-      // のケースのみ到達する(settled中の変更・初回条件を満たさない変更は既にblock済み)。
-      const resultUpdates = winnerChanged
-        ? buildResultWriteUpdates({
-            kind: "initial-settlement",
-            winner: nextWinner,
-            settledAt: serverTimestamp(),
-          })
-        : buildResultWriteUpdates({ kind: "metadata" });
-
-      const batch = writeBatch(db);
-      batch.update(doc(db, "events", id), {
+      const metadataUpdates: InitialSettlementEditMetadataUpdates = {
         category,
         title: trimmedTitle,
         venue: trimmedVenue,
         startsAt: startsAt || null,
         candidates,
-        ...resultUpdates,
-        updatedAt: serverTimestamp(),
-      });
-      await batch.commit();
+      };
+      const eventRef = doc(db, "events", id);
+
+      if (initialSettlementRequested) {
+        await runInitialSettlementTransaction({
+          source: "edit",
+          eventRef,
+          nextWinner,
+          metadataUpdates,
+        });
+      } else {
+        // winnerChanged===falseのmetadata-onlyは既存writeBatch経路を維持する。
+        const resultUpdates = buildResultWriteUpdates({ kind: "metadata" });
+        const batch = writeBatch(db);
+        batch.update(eventRef, {
+          ...metadataUpdates,
+          ...resultUpdates,
+          updatedAt: serverTimestamp(),
+        });
+        await batch.commit();
+      }
 
       alert("イベントを更新しました");
     } catch (error) {
-      console.error(error);
-      alert("イベント更新に失敗しました");
+      if (error instanceof InitialSettlementCandidateChangeError) {
+        alert(
+          "候補の変更と結果の確定は同時に保存できません。\n先に候補変更を保存してから、結果を確定してください。"
+        );
+      } else if (error instanceof InitialSettlementConflictError) {
+        alert(
+          "別の操作で結果が更新されました。\n画面を再読み込みして、最新の状態を確認してください。"
+        );
+      } else if (error instanceof InitialSettlementValidationError) {
+        alert(
+          "選択された結果を保存できません。\n最新の候補一覧を確認してください。"
+        );
+      } else {
+        console.error(error);
+        alert("イベント更新に失敗しました");
+      }
     } finally {
       setSaving(false);
     }
